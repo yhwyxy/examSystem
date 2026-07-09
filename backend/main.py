@@ -57,6 +57,7 @@ async def require_admin(request: Request):
         raise HTTPException(status_code=401, detail={"code": "UNAUTHORIZED", "message": "请先登录"})
     
     token = auth[7:]
+    _cleanup_admin_tokens()  # 惰性清理过期 token，避免 _admin_tokens 长期累积
     expire = _admin_tokens.get(token)
     if expire is None:
         raise HTTPException(status_code=401, detail={"code": "INVALID_TOKEN", "message": "Token 无效或已过期"})
@@ -68,19 +69,49 @@ async def require_admin(request: Request):
 # ---------------------------------------------------------------------------
 # 简易内存速率限制器
 # ---------------------------------------------------------------------------
+# 注意：_rate_store 有上限，防止恶意构造大量不同 IP 造成内存膨胀。
+# 生产环境建议替换为 Redis 滑动窗口（多实例共享 + 自动 TTL 清理）。
 _rate_lock = threading.Lock()
 _rate_store: dict[str, list[float]] = defaultdict(list)
+_RATE_STORE_MAX_IPS = 10_000  # 最多跟踪 1 万个 IP，超出时整体清理
+
 
 def _check_rate_limit(ip: str, max_requests: int = 60, window_seconds: int = 60) -> None:
-    """每 IP 每窗口最多 max_requests 次请求，超出返回 429。"""
+    """每 IP 每窗口最多 max_requests 次请求，超出返回 429。
+
+    - 窗口内滑动计数（清理过期 timestamp 后判断）
+    - _rate_store 有 IP 数量上限，防止内存无界增长
+    """
     now = time.monotonic()
     with _rate_lock:
+        # 容量保护：超过上限时先整体清理过期记录
+        if len(_rate_store) > _RATE_STORE_MAX_IPS:
+            stale_keys = [
+                k for k, ts in _rate_store.items()
+                if not ts or now - ts[-1] >= window_seconds
+            ]
+            for k in stale_keys:
+                _rate_store.pop(k, None)
         timestamps = _rate_store[ip]
         # 清理过期记录
         _rate_store[ip] = [t for t in timestamps if now - t < window_seconds]
         if len(_rate_store[ip]) >= max_requests:
             raise HTTPException(status_code=429, detail="请求过于频繁，请稍后再试")
         _rate_store[ip].append(now)
+
+
+def _admin_rate_key(request: Request) -> str:
+    """管理端使用独立限流 key，避免与考生互相影响。"""
+    ip = request.client.host if request.client else "unknown"
+    return f"admin:{ip}"
+
+
+def _cleanup_admin_tokens() -> None:
+    """惰性清理过期 token，避免 _admin_tokens 长期累积。"""
+    now_ts = time.time()
+    expired = [t for t, exp in _admin_tokens.items() if now_ts > exp]
+    for t in expired:
+        _admin_tokens.pop(t, None)
 
 # ---------------------------------------------------------------------------
 # 全局时间窗口校验（仅依赖服务器时间）
@@ -208,10 +239,17 @@ def schedule_grading(submission_id: int, answers: dict[str, Any]) -> None:
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
+    # 管理端单独配额，避免导出等大请求被考生流量挤占
+    path = request.url.path
+    is_admin = path.startswith("/api/admin") or path.startswith("/admin")
+    ip = request.client.host if request.client else "unknown"
+    key = f"admin:{ip}" if is_admin else ip
     try:
-        _check_rate_limit(request.client.host if request.client else "unknown")
+        # 管理端 120/min，考生端 60/min
+        _check_rate_limit(key, max_requests=120 if is_admin else 60)
     except HTTPException:
         return JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
+    # 不再吞掉其他异常：仅捕获限流 HTTPException，其余异常向上抛由 FastAPI 处理
     return await call_next(request)
 
 
@@ -328,7 +366,13 @@ def admin_login(req: LoginRequest) -> dict[str, Any]:
         return {"success": True, "token": "auth_disabled", "message": "认证未启用"}
     
     if not cfg.password:
-        raise HTTPException(status_code=500, detail={"code": "NO_PASSWORD", "message": "管理员密码未配置"})
+        # 配置错误（非代码异常）：用 503 明确表示服务未就绪，而非 500 内部错误
+        logger.error("管理员认证已启用但未配置密码（admin.enable_auth=true 且 password 为空）")
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "ADMIN_PASSWORD_NOT_CONFIGURED",
+                    "message": "管理员认证已启用但未配置密码，请在 config.yaml 中设置 admin.password"},
+        )
     
     # 验证密码（支持明文和 SHA-256 哈希）
     pwd_hash = hashlib.sha256(req.password.encode()).hexdigest()
