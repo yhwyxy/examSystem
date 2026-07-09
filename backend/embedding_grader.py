@@ -105,9 +105,10 @@ def similarity(student_answer: str, reference_answer: str) -> tuple[float, str]:
 
 def review_status_by_confidence(confidence: float) -> str:
     cfg = get_config().review
+    # 与 grader._review_status_from_confidence 保持一致的三阈值四段语义
     if confidence >= cfg.high_confidence_threshold:
-        return "high_confidence"
-    if confidence >= cfg.low_confidence_threshold:
+        return "auto_scored"
+    if confidence >= cfg.need_review_threshold:
         return "need_review"
     return "low_confidence"
 

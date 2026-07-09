@@ -58,9 +58,14 @@ def _review_status_from_confidence(confidence: Any, cfg: Any) -> str:
         value = float(confidence)
     except (TypeError, ValueError):
         return "need_review"
+    # 三阈值四段语义：
+    #   >= high_confidence_threshold      → auto_scored（高置信，自动采信）
+    #   >= need_review_threshold          → need_review（中等，进人工复核队列）
+    #   >= low_confidence_threshold       → low_confidence（低置信，标记重点关注）
+    #   <  low_confidence_threshold       → low_confidence
     if value >= cfg.review.high_confidence_threshold:
         return "auto_scored"
-    if value >= cfg.review.low_confidence_threshold:
+    if value >= cfg.review.need_review_threshold:
         return "need_review"
     return "low_confidence"
 
