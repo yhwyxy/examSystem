@@ -75,8 +75,13 @@ def parse_llm_output(content: str, max_score: float) -> dict[str, Any] | None:
     }
 
 
-def grade_with_llm(question: dict[str, Any], student_answer: str) -> dict[str, Any] | None:
-    cfg = get_config()
+def grade_with_llm(question: dict[str, Any], student_answer: str, cfg: Any = None) -> dict[str, Any] | None:
+    """使用 Ollama LLM 对主观题进行判分。返回 None 表示不可用或失败。
+
+    cfg 可选，未传入时读取全局配置（向后兼容）。
+    """
+    if cfg is None:
+        cfg = get_config()
     if not cfg.grading.use_llm:
         return None
     llm = cfg.grading.llm
@@ -115,5 +120,10 @@ def grade_with_llm(question: dict[str, Any], student_answer: str) -> dict[str, A
 
 
 def grade_subjective(question: dict[str, Any], student_answer: str, cfg: Any = None) -> dict[str, Any] | None:
-    """兼容接口：grader.py 调用 llm_grader.grade_subjective(question, answer, cfg)。"""
-    return grade_with_llm(question, student_answer)
+    """兼容接口：grader.py 调用时会传入已加载的 cfg，避免重复读配置 + 便于测试 mock。
+
+    若未传入 cfg 则降级到 get_config()（向后兼容）。
+    """
+    if cfg is None:
+        cfg = get_config()
+    return grade_with_llm(question, student_answer, cfg)

@@ -162,6 +162,18 @@ async def _run_subjective_grading(
     return detail
 
 
+def _aggregate_review_status(
+    pending_subjective_ids: list[str],
+    low_confidence_count: int,
+) -> str:
+    """根据待复核主观题数量汇总整体 review_status，保持原四段语义。"""
+    if pending_subjective_ids:
+        return "low_confidence" if low_confidence_count else "need_review"
+    if low_confidence_count > 0:
+        return "low_confidence"
+    return "auto_scored"
+
+
 async def grade_submission(answers: dict[str, Any]) -> SubmissionGradingResult:
     cfg = get_config()
     questions = get_question_map()
@@ -195,12 +207,7 @@ async def grade_submission(answers: dict[str, Any]) -> SubmissionGradingResult:
         for d in details
         if not is_objective({"type": d.get("type")})
     )
-    if pending_subjective_ids:
-        review_status = "low_confidence" if low_confidence_count else "need_review"
-    elif low_confidence_count > 0:
-        review_status = "low_confidence"
-    else:
-        review_status = "auto_scored"
+    review_status = _aggregate_review_status(pending_subjective_ids, low_confidence_count)
 
     total_score = objective_score + subjective_score_final
     return SubmissionGradingResult(
