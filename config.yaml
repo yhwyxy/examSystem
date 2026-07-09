@@ -45,6 +45,9 @@ grading:
     device: "cpu"
 
 admin:
+  # 生产环境必须设置 password（明文或 SHA-256 哈希）。
+  # 留空且 enable_auth=true 时，管理员登录将返回 500，
+  # 必须显式配置密码或设置 enable_auth: false（仅限内网/开发环境）。
   enable_auth: true
   password: null
 

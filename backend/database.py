@@ -59,6 +59,15 @@ CREATE TABLE IF NOT EXISTS review_logs (
 CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(review_status);
 CREATE INDEX IF NOT EXISTS idx_submissions_submitted ON submissions(submitted_at);
 CREATE INDEX IF NOT EXISTS idx_review_logs_sub ON review_logs(submission_id);
+
+-- 考试会话：服务器端记录的「开始答题」时间，防止客户端篡改。
+-- 持久化到 DB 以避免进程重启导致考生无法提交，以及内存无界增长。
+CREATE TABLE IF NOT EXISTS exam_sessions (
+    employee_id TEXT PRIMARY KEY,
+    started_at  TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_exam_sessions_created ON exam_sessions(created_at);
 """
 
 
@@ -471,5 +480,39 @@ def delete_submissions(submission_ids: list[int]) -> int:
         cur = conn.execute(
             f"DELETE FROM submissions WHERE id IN ({placeholders})",
             submission_ids,
+        )
+        return cur.rowcount
+
+# ---------------- 考试会话 CRUD ----------------
+
+def upsert_exam_session(*, employee_id: str, started_at: str) -> None:
+    """记录或覆盖某员工的服务器端开始时间。"""
+    with db_cursor() as conn:
+        conn.execute(
+            """INSERT INTO exam_sessions (employee_id, started_at, created_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(employee_id) DO UPDATE SET started_at = excluded.started_at, created_at = excluded.created_at""",
+            (employee_id, started_at, now_iso()),
+        )
+
+def pop_exam_session(employee_id: str) -> str | None:
+    """读取并删除某员工的开始时间，返回 ISO 字符串或 None。"""
+    with db_cursor() as conn:
+        row = conn.execute(
+            "SELECT started_at FROM exam_sessions WHERE employee_id = ?", (employee_id,)
+        ).fetchone()
+        if not row:
+            return None
+        conn.execute("DELETE FROM exam_sessions WHERE employee_id = ?", (employee_id,))
+        return str(row["started_at"])
+
+def cleanup_exam_sessions(older_than_seconds: int = 86400) -> int:
+    """清理超过 older_than_seconds 的残留会话，避免长期未提交的记录堆积。返回删除条数。"""
+    from datetime import datetime, timezone
+    cutoff_dt = datetime.now(timezone.utc).timestamp() - older_than_seconds
+    cutoff_iso = datetime.fromtimestamp(cutoff_dt, timezone.utc).isoformat()
+    with db_cursor() as conn:
+        cur = conn.execute(
+            "DELETE FROM exam_sessions WHERE created_at < ?", (cutoff_iso,)
         )
         return cur.rowcount

@@ -19,7 +19,7 @@ from fastapi.concurrency import run_in_threadpool
 
 from . import database, exporter, grader, question_loader
 from .config import get_config, reload_config
-from .utils import generate_qr_base64, get_lan_ip
+from .utils import generate_qr_base64, get_lan_ip, parse_iso
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -103,8 +103,11 @@ def _error(status: int, code: str, message: str) -> HTTPException:
 # ---------------------------------------------------------------------------
 # 考试开始时间记录（服务器端，防篡改）
 # ---------------------------------------------------------------------------
-_exam_start_lock = threading.Lock()
-_exam_start_times: dict[str, datetime] = {}  # employee_id -> server start time
+# 考试「开始时间」改为 DB 持久化（exam_sessions 表），避免：
+#   1) 进程重启导致已开始考生无法提交
+#   2) 全局内存字典无界增长（长期未提交的记录堆积）
+# 详见 database.upsert_exam_session / pop_exam_session / cleanup_exam_sessions
+# ---------------------------------------------------------------------------
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +214,7 @@ def exam_start(req: ExamStartRequest, request: Request) -> dict[str, Any]:
     if not employee_id:
         raise _error(400, "INVALID_EMPLOYEE_ID", "请提供工号")
     now = datetime.now(timezone.utc)
-    with _exam_start_lock:
-        _exam_start_times[employee_id] = now
+    database.upsert_exam_session(employee_id=employee_id, started_at=now.isoformat())
     return {"started_at": now.isoformat(), "server_time": now.isoformat()}
 
 
@@ -223,11 +225,10 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
 
     # 使用服务器记录的开始时间进行超时校验，不信任客户端 started_at
     employee_id = req.employee_id.strip()
-    with _exam_start_lock:
-        server_start = _exam_start_times.pop(employee_id, None)
-
-    if server_start is None:
+    started_at_iso = database.pop_exam_session(employee_id)
+    if started_at_iso is None:
         raise _error(403, "EXAM_NOT_STARTED", "请先开始考试")
+    server_start = parse_iso(started_at_iso)
 
     now = datetime.now(timezone.utc)
     elapsed = (now - server_start).total_seconds()

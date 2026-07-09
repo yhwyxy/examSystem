@@ -390,7 +390,8 @@ def test_exam_api_returns_config_contract():
 def test_submit_without_server_start_is_rejected(monkeypatch):
     from backend import main
 
-    main._exam_start_times.clear()
+    # 没有调用 /api/exam/start，DB 中不存在该员工的会话
+    monkeypatch.setattr(main.database, "pop_exam_session", lambda employee_id: None)
     client = TestClient(main.app)
     response = client.post("/api/submit", json={
         "name": "未开始",
@@ -407,11 +408,11 @@ def test_submit_with_server_start_succeeds(monkeypatch):
 
     monkeypatch.setattr(main.database, "insert_submission_pending", lambda **kwargs: 123)
     monkeypatch.setattr(main, "schedule_grading", lambda submission_id, answers: None, raising=False)
-    main._exam_start_times.clear()
+    # 模拟 /api/exam/start 已写入会话（开始时间为 1 分钟前，确保不超时）
+    from datetime import datetime, timezone, timedelta
+    started_iso = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+    monkeypatch.setattr(main.database, "pop_exam_session", lambda employee_id: started_iso)
     client = TestClient(main.app)
-
-    started = client.post("/api/exam/start", json={"employee_id": "START_OK_001"})
-    assert started.status_code == 200
 
     response = client.post("/api/submit", json={
         "name": "已开始",
