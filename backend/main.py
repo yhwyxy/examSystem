@@ -569,3 +569,47 @@ def detail_page():
 from starlette.staticfiles import StaticFiles
 app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
 app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
+
+
+def _preflight_check() -> None:
+    """启动时对关键配置做静默预检，仅记录日志不阻塞启动。
+
+    将「运行时才崩」的配置错误（如 admin 启用认证但未设密码）
+    前置到启动日志，便于运维第一时间发现。
+    """
+    try:
+        cfg = get_config()
+    except Exception:
+        logger.exception("配置加载失败，将使用默认配置可能行为异常")
+        return
+
+    # admin 认证与密码一致性
+    admin = cfg.admin
+    if admin.enable_auth and not admin.password:
+        logger.warning(
+            "配置预检：admin.enable_auth=true 但 password 为空 —— "
+            "管理员将无法登录。请在 config.yaml 设置 admin.password 或关闭 enable_auth"
+        )
+
+    # 考试时间窗口合理性
+    exam = getattr(cfg, "exam", None)
+    if exam is not None and getattr(exam, "enable_global_time_window", False):
+        try:
+            start = parse_iso(exam.start_time)
+            end = parse_iso(exam.end_time)
+            if end <= start:
+                logger.warning("配置预检：考试时间窗口结束时间早于开始时间")
+        except Exception:
+            logger.warning("配置预检：考试时间窗口时间格式无法解析")
+
+    # DB 初始化
+    try:
+        database.init_db()
+    except Exception:
+        logger.exception("配置预检：数据库初始化失败")
+
+    logger.info("配置预检完成")
+
+
+# 模块加载时执行预检（uvicorn 启动即触发）
+_preflight_check()

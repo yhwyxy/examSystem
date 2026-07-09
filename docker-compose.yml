@@ -1,0 +1,22 @@
+version: "3.9"
+
+services:
+  exam:
+    build: .
+    image: examsystem:latest
+    container_name: exam-app
+    ports:
+      - "8000:8000"
+    volumes:
+      # 配置文件：宿主改 config.yaml 后重启即可生效（注意 CorsMiddleware 等启动时定型项需重启）
+      - ./config.yaml:/app/config.yaml:ro
+      # 题库目录（questions.json）
+      - ./data/questions.json:/app/data/questions.json:ro
+      # DB 持久化：exam.db 独立 volume，避免容器重建丢失提交记录
+      - exam-db:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  exam-db:

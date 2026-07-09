@@ -65,3 +65,31 @@ grading:
 pytest -q
 python -m compileall backend main.py
 ```
+
+## Docker 部署
+
+```bash
+# 构建并启动（首次会自动构建镜像）
+docker compose up -d
+
+# 查看日志 / 健康状态
+docker compose logs -f
+docker compose ps
+
+# 停止 / 重建
+docker compose down
+docker compose up -d --build
+```
+
+挂载说明：
+- `config.yaml`（只读）：宿主修改后需 `docker compose restart` 生效
+- `data/questions.json`（只读）：题库
+- `exam-db` volume：SQLite `exam.db` 持久化，容器重建不丢数据
+
+## 安全注意事项
+
+- `admin.enable_auth: true` 时必须设置 `password`，否则管理员无法登录（启动时日志会告警）
+- CORS 默认 `allow_credentials=false`（Token 走 Authorization header，无需 cookie），避免 CSRF 凭证泄漏
+- 速率限制按 IP 维度，管理端独立配额（120/min）、考生端 60/min
+- 管理员 Token 为进程内存储，进程重启需重新登录；多实例部署需替换为 Redis 共享
+
