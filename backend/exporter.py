@@ -41,6 +41,9 @@ def export_submissions_xlsx() -> bytes:
         cell.font = Font(bold=True)
         cell.fill = header_fill
 
+    # 流式逐行 append：openpyxl 在 append 时即序列化，避免显式持有中间结构。
+    # 注：write_only 模式可进一步降内存但不支持 column_dimensions 列宽，
+    # 当前考试系统数据量（百~千行）下普通模式已足够，保留列宽体验。
     for r in rows:
         answers = json.loads(r.get("answers_json") or "{}")
         base = [
@@ -52,12 +55,12 @@ def export_submissions_xlsx() -> bytes:
         ans_cols = [_answer_to_text(answers.get(q["id"])) for q in questions]
         ws.append(base + ans_cols)
 
-    for col in ws.columns:
-        max_len = 10
-        letter = col[0].column_letter
-        for cell in col:
-            max_len = max(max_len, len(str(cell.value or "")))
-        ws.column_dimensions[letter].width = min(max_len + 2, 45)
+    # 列宽：按表头长度估算，避免遍历全部 cell 造成的二次全表扫描
+    from openpyxl.utils import get_column_letter
+    for idx, h in enumerate(headers, start=1):
+        letter = get_column_letter(idx)
+        # 基础列宽：表头长度 + 2，上限 45
+        ws.column_dimensions[letter].width = min(len(str(h)) + 2, 45)
 
     buf = BytesIO()
     wb.save(buf)
