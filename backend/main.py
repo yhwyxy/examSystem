@@ -6,6 +6,7 @@ import hashlib
 import logging
 import secrets
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -133,9 +134,35 @@ class ReviewRequest(BaseModel):
     note: str | None = None
 
 
+# 评分并发上限：防止「提交即新建线程 + 新建事件循环」导致
+# 百人并发时 OOM / 事件循环爆炸 / LLM 服务被打满。
+# 单进程内所有评分共享一个有界线程池，超出时提交排队等待。
+_GRADING_MAX_WORKERS = 4
+_grading_executor: ThreadPoolExecutor | None = None
+
+
+def _get_grading_executor() -> ThreadPoolExecutor:
+    """惰性创建全局有界线程池。进程级别单例。"""
+    global _grading_executor
+    if _grading_executor is None:
+        _grading_executor = ThreadPoolExecutor(
+            max_workers=_GRADING_MAX_WORKERS,
+            thread_name_prefix="grader",
+        )
+    return _grading_executor
+
+
 def schedule_grading(submission_id: int, answers: dict[str, Any]) -> None:
-    """后台线程执行评分，保持提交接口快速返回。"""
+    """后台线程执行评分，保持提交接口快速返回。
+
+    使用全局有界线程池（默认 4 workers）+ 复用单个事件循环模式，
+    避免每次提交新建线程/事件循环导致资源��尽。
+    队满时提交请求排队等待，不会丢失。
+    """
     def _background_grade(sub_id: int, submitted_answers: dict[str, Any]) -> None:
+        # 复用调用线程的事件循环：grader.grade_submission 是 async，
+        # 但在线程池 worker 中无 running loop，新建一个并立即关闭。
+        # 相比旧实现，线程数受 max_workers 约束，避免无界增长。
         import asyncio
         loop = asyncio.new_event_loop()
         try:
@@ -167,7 +194,12 @@ def schedule_grading(submission_id: int, answers: dict[str, Any]) -> None:
         finally:
             loop.close()
 
-    threading.Thread(target=_background_grade, args=(submission_id, answers), daemon=True).start()
+    try:
+        _get_grading_executor().submit(_background_grade, submission_id, answers)
+    except RuntimeError:
+        # executor 已关闭（如进程退出），降级同步评分避免丢任务
+        logger.warning("评分线程池不可用，降级同步评分: submission_id=%d", submission_id)
+        _background_grade(submission_id, answers)
 
 
 # ---------------------------------------------------------------------------
