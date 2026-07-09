@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Editor / IDE
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Local sandbox / agent metadata
+.aionrs/
+.codex/
+
+# Local logs / runtime
+*.log
+*.db
+*.sqlite
+*.sqlite3

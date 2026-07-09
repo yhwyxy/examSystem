@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>考试管理后台</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    #loginPanel { max-width: 400px; margin: 100px auto; }
+    #loginPanel .card { padding: 40px; text-align: center; }
+    #loginPanel input { width: 100%; margin-bottom: 15px; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1em; }
+    #loginPanel .btn { width: 100%; padding: 12px; }
+    #loginError { color: #ef4444; margin-top: 10px; display: none; }
+  </style>
+</head>
+<body>
+  <!-- 登录面板 -->
+  <div id="loginPanel" class="container" style="display:none">
+    <div class="card">
+      <h2 style="margin-bottom:20px">🔐 管理后台登录</h2>
+      <input type="password" id="loginPassword" placeholder="请输入管理员密码">
+      <button class="btn" onclick="doLogin()">登录</button>
+      <p id="loginError"></p>
+    </div>
+  </div>
+
+  <!-- 主内容 -->
+  <div id="mainContent" style="display:none">
+    <div class="container">
+      <div class="card header">
+        <div>
+          <h1>考试管理后台</h1>
+          <p class="muted">成绩统计、人工复核、导出 Excel</p>
+        </div>
+        <div class="toolbar">
+          <a class="btn secondary" href="/">考试端</a>
+          <a class="btn" href="#" onclick="exportData(); return false;">导出 Excel</a>
+        </div>
+      </div>
+
+      <div class="card" id="publish">
+        <h2>📢 发布考试</h2>
+        <p class="muted">将以下链接或二维码发送给考生，即可开始答题</p>
+        <div style="display:flex;gap:30px;align-items:center;margin-top:15px;flex-wrap:wrap">
+          <div>
+            <p style="margin-bottom:8px"><strong>考试链接：</strong></p>
+            <a id="examLink" href="#" target="_blank" style="color:#3b82f6;word-break:break-all;font-size:1.05em"></a>
+            <p style="margin-top:10px"><button class="btn secondary" onclick="copyLink()" style="font-size:0.85em">📋 复制链接</button></p>
+          </div>
+          <div style="text-align:center"><img id="examQR" alt="考试二维码" style="border:1px solid #e5e7eb;border-radius:8px"></div>
+        </div>
+      </div>
+
+      <div class="grid" id="stats"></div>
+
+      <div class="card">
+        <div class="toolbar">
+          <input id="keyword" type="text" placeholder="搜索姓名/工号" style="max-width:240px">
+          <select id="status">
+            <option value="">全部状态</option>
+            <option value="low_confidence">低置信</option>
+            <option value="need_review">待复核</option>
+            <option value="high_confidence">高置信</option>
+            <option value="reviewed">已复核</option>
+            <option value="auto_scored">自动判分</option>
+          </select>
+          <button class="btn" id="searchBtn">搜索</button>
+          <button class="btn secondary" id="selectAlBtn">全选本页</button>
+          <button class="btn" id="deleteSelBtn" style="background:#ef4444">删除所选</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:30px"><input type="checkbox" id="checkAll"></th>
+                <th>ID</th><th>姓名</th><th>工号</th><th>部门</th>
+                <th>客观分</th><th>主观分</th><th>总分</th><th>状态</th><th>提交时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="tbody"></tbody>
+          </table>
+        </div>
+        <div id="pagination" style="text-align:center;padding:15px 0"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

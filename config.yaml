@@ -1,0 +1,52 @@
+server:
+  host: "0.0.0.0"
+  port: 8000
+  allow_origins:
+    - "http://127.0.0.1:8000"
+    - "http://localhost:8000"
+
+exam:
+  title: "企业内部考试"
+  duration_minutes: 60
+  auto_submit: true
+  allow_duplicate_submit: false
+  duplicate_key: "employee_id"
+  enable_global_time_window: false
+  start_time: null
+  end_time: null
+  # 提交时长校验的容忍秒数，用于网络延迟。设计 9.3 节默认 30 秒。
+  grace_period_seconds: 30
+
+scoring:
+  multiple_choice_partial: true
+  wrong_choice_penalty: false
+  score_precision: 1
+
+review:
+  high_confidence_threshold: 0.75
+  need_review_threshold: 0.5
+  low_confidence_threshold: 0.35
+
+grading:
+  strategy: "llm_first"
+  use_llm: true
+  use_embedding_fallback: true
+  sync_grading: true
+
+  llm:
+    provider: "ollama"
+    endpoint: "http://localhost:11434"
+    model: "qwen3-vl:4b"
+    timeout_seconds: 180
+    retry_times: 2
+
+  embedding:
+    model: "quentinz/bge-large-zh-v1.5:latest"
+    device: "cpu"
+
+admin:
+  enable_auth: true
+  password: null
+
+export:
+  format: "xlsx"
