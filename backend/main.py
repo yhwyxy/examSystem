@@ -81,7 +81,7 @@ async def require_admin(request: Request):
 # 简易内存速率限制器
 # ---------------------------------------------------------------------------
 # 注意：_rate_store 有上限，防止恶意构造大量不同 IP 造成内存膨胀。
-# 生产环境建议替换为 Redis 滑动窗口（多实例共享 + 自动 TTL 清理）。
+# 本系统刻意不引入 Redis 等外部依赖，单进程内存限流即可满足内网考试场景。
 _rate_lock = threading.Lock()
 _rate_store: dict[str, list[float]] = defaultdict(list)
 _RATE_STORE_MAX_IPS = 10_000  # 最多跟踪 1 万个 IP，超出时整体清理
