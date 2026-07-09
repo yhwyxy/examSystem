@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -21,6 +23,11 @@ from fastapi.concurrency import run_in_threadpool
 from . import database, exporter, grader, question_loader
 from .config import get_config, reload_config
 from .utils import generate_qr_base64, get_lan_ip, parse_iso
+
+# 项目根目录基准：所有静态文件路径以 PROJECT_ROOT 为准，
+# 避免从非项目根目录启动 uvicorn 时出现 404。
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FRONTEND_DIR = PROJECT_ROOT / "frontend"
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -35,12 +42,16 @@ app = FastAPI(title="考试判分系统", version="1.0.0")
 # CORS
 # ---------------------------------------------------------------------------
 cfg = get_config().server
+# 注意：本系统 Token 通过 Authorization header 传递（非 cookie），
+# 因此不需要 allow_credentials=True。关闭 credentials 可避免
+# 「allow_origins=* + credentials」组合下的 CSRF 凭证泄漏风险。
+# 当 allow_origins 包含 "*" 时浏览器会拒绝 credentials，故显式关掉。
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cfg.allow_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
 # ---------------------------------------------------------------------------
@@ -537,24 +548,24 @@ def reload_config_api() -> dict[str, Any]:
 
 @app.get("/")
 def index():
-    return FileResponse("frontend/exam.html")
+    return FileResponse(FRONTEND_DIR / "exam.html")
 
 
 @app.get("/exam")
 def exam_page():
-    return FileResponse("frontend/exam.html")
+    return FileResponse(FRONTEND_DIR / "exam.html")
 
 
 @app.get("/admin")
 def admin_page():
-    return FileResponse("frontend/admin.html")
+    return FileResponse(FRONTEND_DIR / "admin.html")
 
 
 @app.get("/detail")
 def detail_page():
-    return FileResponse("frontend/detail.html")
+    return FileResponse(FRONTEND_DIR / "detail.html")
 
 
 from starlette.staticfiles import StaticFiles
-app.mount("/css", StaticFiles(directory="frontend/css"), name="css")
-app.mount("/js", StaticFiles(directory="frontend/js"), name="js")
+app.mount("/css", StaticFiles(directory=str(FRONTEND_DIR / "css")), name="css")
+app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
