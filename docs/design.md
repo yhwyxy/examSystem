@@ -1,50 +1,28 @@
 # 企业在线考试兼批改系统设计文档
 
-## 0. 文档信息
-
-| 项目 | 内容 |
-|---|---|
-| 文档名称 | 企业在线考试兼批改系统设计文档 |
-| 文档版本 | v1.0 |
-| 适用阶段 | MVP 设计与开发实施 |
-| 目标读者 | 项目负责人、后端开发、前端开发、测试人员、部署维护人员 |
-| 最后更新 | 2026-07-09 |
-
----
-
 ## 1. 背景与目标
 
-### 1.1 背景
+企业内部需要一套轻量、可本地部署的在线考试与批改系统，用于组织固定试卷考试，支持客观题自动判分、主观题语义相似度判分，以及管理员人工复核与成绩导出。
 
-本系统用于企业内部组织在线考试。项目部署在本地电脑或局域网内服务器上，管理员启动服务后生成考试二维码，员工使用手机扫码进入答题页面，填写姓名和工号后开始考试。
+### 1.1 核心目标
 
-系统不做完整登录系统，不接入云端大模型，不建设复杂题库平台，重点满足固定试卷、自动判分、管理员复核和成绩导出的最小可落地需求。
+1. 部署简单：单机可运行，依赖尽量少。
+2. 员工端轻量：手机扫码进入，填写姓名工号后答题。
+3. 判分可靠：客观题程序判分，主观题 Embedding 语义相似度评分。
+4. 可复核：管理员可查看完整答卷并人工改分。
+5. 可导出：支持成绩导出为 Excel/CSV。
 
-### 1.2 建设目标
+### 1.2 核心流程
 
-系统需要实现以下目标：
-
-1. 管理员本地启动考试服务并生���二维码。
+1. 管理员启动本地服务。
 2. 员工手机扫码进入答题页面。
 3. 员工手动填写姓名和工号后答题。
 4. 客观题由后端程序自动判分。
-5. 主观题优先使用本地小参数 LLM 判分，失败时回退到 Embedding 相似度判分。
+5. 主观题使用 Embedding 模型进行语义相似度评分，Ollama 不可用时回退到本地模型或关键词相似度。
 6. 员工提交后只看到提交成功，不展示成绩和参考答案。
 7. 管理员后台可以实时查看提交记录、成绩和复核状态。
 8. 管理员可以查看每位员工的完整试卷答案，并对主观题人工复核改分。
-9. 管理员可以导出汇总成绩。
-
-### 1.3 非目标范围
-
-MVP 阶段不实现以下能力：
-
-1. 员工账号登录体系。
-2. 管理员复杂权限体系。
-3. 多套试卷管理。
-4. 在线可视化题库编辑器。
-5. 公网部署与公网安全加固。
-6. 高并发考试平台能力。
-7. 主观题全自动免人工判分。
+9. 管理员可导出成绩。
 
 ---
 
@@ -58,7 +36,7 @@ MVP 阶段不实现以下能力：
 | FR-002 | 扫码入口 | 管理员启动服务后生成考试二维码 | P0 |
 | FR-003 | 身份填写 | 员工进入答题页后填写姓名、工号 | P0 |
 | FR-004 | 客观题判分 | 单选、判断严格匹配，多选按比例给分 | P0 |
-| FR-005 | 主��题判分 | 本地 LLM 优先，失败回退 Embedding | P0 |
+| FR-005 | 主观题判分 | Embedding 语义相似度判分，失败回退关键词 | P0 |
 | FR-006 | 员工不显示成绩 | 提交后仅显示提交成功 | P0 |
 | FR-007 | 管理员成绩列表 | 管理员查看所有提交记录与成绩 | P0 |
 | FR-008 | 试卷详情复核 | 管理员查看每位员工完整答案与判分详情 | P0 |
@@ -76,7 +54,7 @@ MVP 阶段不实现以下能力：
 | NFR-003 | 并发安全 | SQLite 开启 WAL，支持多人近似同时提交 |
 | NFR-004 | 可维护 | 题目、分数、考试时长、模型配置可通过文件调整 |
 | NFR-005 | 可复核 | 主观题机器评分必须保存评分详情，支持人工复核 |
-| NFR-006 | 可降级 | 本地 LLM 不可用时必须自动回退到 Embedding |
+| NFR-006 | 可降级 | Embedding 不可用时必须自动回退到关键词相似度 |
 | NFR-007 | 可追溯 | 人工改分需要记录改分日志 |
 
 ---
@@ -101,8 +79,8 @@ FastAPI 本地服务
     |-- questions.json：固定试卷与参考答案
     |-- exam.db：提交记录、判分结果、复核日志
     |
-    |-- Ollama：本地小参数 LLM，优先使用
-    |-- Embedding 模型：LLM 不可用时回退
+    |-- Ollama Embedding：优先语义相似度评分
+    |-- sentence-transformers / 关键词：回退方案
 ```
 
 ### 3.2 技术栈
@@ -113,75 +91,84 @@ FastAPI 本地服务
 | 数据库 | SQLite | 单文件数据库，开启 WAL 模式 |
 | 题库 | JSON 文件 | 固定试卷，只读加载 |
 | 前端 | HTML + CSS + Vanilla JS | 无需 Vue/React 构建链路 |
-| 主观题 LLM | Ollama | 本地小参数模型服务 |
-| 主观题回退 | sentence-transformers / bge-m3 | Embedding 相似度评分 |
+| 主观题判分 | Ollama Embedding / sentence-transformers | 语义相似度评分 |
+| 主观题回退 | 关键词 Jaccard 相似度 | Embedding 不可用时兜底 |
 | 导出 | openpyxl 或 csv | 优先 xlsx，失败可回退 csv |
 | 二维码 | qrcode | 生成考试入口二维码 |
 
-### 3.3 架构原则
-
-1. 判分逻辑和参考答案必须在后端，不能下发到员工端。
-2. 固定试卷使用 JSON 文件即可，不引入题库数据库。
-3. 提交记录、判分结果和复核日志使用 SQLite 保存。
-4. 主观题判分不是全自动免检，必须支持管理员复核。
-5. 前端采用轻量原生页面，避免过度工程化。
-6. MVP 阶段以单机局域网部署为主。
-
----
-
-## 4. 项目目录设计
+### 3.3 目录结构
 
 ```text
 examSystem/
+├── main.py                  # 启动入口
+├── config.yaml              # 运行配置
+├── requirements.txt
+├── pyproject.toml
+├── data/
+│   ├── questions.json       # 题库
+│   └── exam.db              # SQLite（运行时生成）
 ├── backend/
-│   ├── main.py              # FastAPI 入口，路由注册，静态资源挂载
-│   ├── config.py            # config.yaml 加载与校验
-│   ├── database.py          # SQLite 初始化、连接、事务、WAL 配置
+│   ├── main.py              # FastAPI 应用与路由
+│   ├── config.py            # 配置加载与校验
+│   ├── database.py          # SQLite 访问层
 │   ├── question_loader.py   # questions.json 加载、校验、脱敏
 │   ├── grader.py            # 判分总入口，编排客观题和主观题
 │   ├── objective_grader.py  # 单选、多选、判断题判分
-│   ├── llm_grader.py        # Ollama 本地 LLM 判分
-│   ├── embedding_grader.py  # Embedding 相似度判分
+│   ├── embedding_grader.py  # Embedding 语义相似度判分
 │   ├── review_service.py    # 人工复核、改分、总分重算
 │   ├── exporter.py          # xlsx / csv 导出
 │   └── utils.py             # 局域网 IP、二维码、时间工具
-│
-├── data/
-│   ├── questions.json       # 试卷配置与参考答案
-│   └── exam.db              # SQLite 数据库，运行后自动生成
-│
-���── frontend/
-│   ├── exam.html            # 员工答题页
-│   ├── admin.html           # 管理员成绩列表页
-│   ├── detail.html          # 单个员工试卷详情与复核页
-│   ├── css/
-│   │   └── style.css
+├── frontend/
+│   ├── exam.html
+│   ├── admin.html
+│   ├── detail.html
+│   ├── css/style.css
 │   └── js/
 │       ├── exam.js
 │       ├── admin.js
 │       └── detail.js
-│
-├── config.yaml              # 服务、考试、判分、复核配置
-├── requirements.txt         # Python 依赖
-├── README.md                # 运行与部署说明
-└── design.md                # 本设计文档
+├── docs/
+│   └── design.md
+└── tests/
+    ├── test_core.py
+    └── test_frontend_static.py
 ```
+
+---
+
+## 4. 模块职责
+
+| 模块 | 职责 |
+|---|---|
+| config.py | 加载 config.yaml，提供类型化配置对象 |
+| question_loader.py | 加载、校验题库，员工端脱敏 |
+| database.py | 提交记录 CRUD、复核日志、统计查询 |
+| objective_grader.py | 单选、多选、判断题判分 |
+| embedding_grader.py | Embedding 相似度判分与降级 |
+| grader.py | 编排整卷判分，汇总分数与复核状态 |
+| review_service.py | 人工改分、重算总分、写复核日志 |
+| exporter.py | 成绩导出 |
+| main.py | HTTP API、静态资源、鉴权与限流 |
 
 ---
 
 ## 5. 配置设计
 
-配置文件：`config.yaml`
+`config.yaml` 示例：
 
 ```yaml
 server:
   host: "0.0.0.0"
   port: 8000
+  allow_origins:
+    - "http://127.0.0.1:8000"
+    - "http://localhost:8000"
 
 exam:
   title: "企业内部考试"
   duration_minutes: 60
   auto_submit: true
+  grace_period_seconds: 30
   allow_duplicate_submit: false
   duplicate_key: "employee_id"
   enable_global_time_window: false
@@ -199,20 +186,11 @@ review:
   low_confidence_threshold: 0.35
 
 grading:
-  strategy: "llm_first"
-  use_llm: true
-  use_embedding_fallback: true
   sync_grading: true
-
-  llm:
-    provider: "ollama"
-    endpoint: "http://localhost:11434"
-    model: "qwen2.5:7b"
-    timeout_seconds: 8
-    retry_times: 1
-
   embedding:
-    model: "BAAI/bge-m3"
+    model: "bge-m3"
+    endpoint: "http://localhost:11434"
+    timeout_seconds: 10
     device: "cpu"
 
 admin:
@@ -229,12 +207,14 @@ export:
 |---|---|
 | server.host | 服务监听地址，本地局域网访问使用 0.0.0.0 |
 | server.port | 服务端口 |
+| server.allow_origins | CORS 允许源，生产环境勿使用 `*` |
 | exam.duration_minutes | 单次考试时长 |
 | exam.auto_submit | 前端超时后是否自动提交 |
+| exam.grace_period_seconds | 提交时长校验容忍秒数 |
 | exam.duplicate_key | 默认按 employee_id 限制重复提交 |
 | exam.enable_global_time_window | 是否启用全局考试开始和结束时间 |
-| grading.strategy | 主观题评分策略，MVP 使用 llm_first |
-| grading.sync_grading | MVP 阶段同步判分，LLM 超时后回退 |
+| grading.sync_grading | MVP 阶段同步判分 |
+| grading.embedding | Embedding 模型与 Ollama endpoint 配置 |
 | admin.enable_auth | MVP 默认 false，仅适用于可信局域网 |
 
 ---
@@ -412,11 +392,10 @@ CREATE TABLE IF NOT EXISTS review_logs (
     "machine_score": 7,
     "final_score": 7,
     "max_score": 10,
-    "grading_method": "llm",
-    "similarity": null,
-    "confidence": 0.82,
-    "reason": "覆盖资源导向，但缺少 HTTP 方法、无状态和缓存。",
-    "llm_raw_output": "{...}",
+    "grading_method": "embedding",
+    "similarity": 0.7,
+    "confidence": null,
+    "reason": null,
     "fallback_reason": null,
     "review_status": "need_review",
     "manually_reviewed": false
@@ -484,90 +463,55 @@ score = max_score × |S ∩ R| / |R|
 
 ### 8.2 主观题判分
 
-主观题采用 LLM 优先、Embedding 回退策略。
+主观题采用 Embedding 语义相似度评分策略。
 
 ```text
-Ollama 本地小模型判分成功 => 使用 LLM 分数
-Ollama 不可用或输出异常 => 回退到 Embedding 相似度判分
+Ollama Embedding 可用 => 使用 Ollama 计算相似度
+Ollama 不可用 => 回退到 sentence-transformers 本地模型
+本地模型也不可用 => 回退到关键词相似度
 ```
 
-### 8.3 LLM 判分
+### 8.3 Embedding 判分
 
 #### 8.3.1 推荐模型
 
-1. qwen2.5:7b
-2. qwen2.5:3b
-3. qwen2.5:1.5b
-4. 其他本地中文指令模型
+1. BAAI/bge-m3（Ollama 远程调用）
+2. sentence-transformers 本地模型
 
-#### 8.3.2 输入内容
+#### 8.3.2 判分逻辑
 
-LLM prompt 必须包含：
+1. 将学生答案和参考答案分别通过 Embedding 模型生成向量
+2. 计算两个向量的余弦相似度
+3. 按相似度比例给分
 
-1. 题目
-2. 满分
-3. 参考答案
-4. 评分 rubric
-5. 学生答案
-6. 输出 JSON 格式要求
-
-#### 8.3.3 输出格式
-
-```json
-{
-  "score": 8,
-  "confidence": 0.82,
-  "reason": "学生答案覆盖了资源导向、HTTP 方法和无状态，但缺少缓存和统一接口说明。"
-}
-```
-
-#### 8.3.4 回退条件
-
-以下情况必须回退到 Embedding：
-
-1. Ollama 服务无法连接。
-2. 模型不存在。
-3. 请求超时。
-4. 返回内容不是合法 JSON。
-5. 分数小于 0 或大于满分。
-6. confidence 缺失或不在 0 到 1 之间。
-7. reason 缺失或为空。
-
-### 8.4 Embedding 判分
-
-#### 8.4.1 推荐模型
-
-1. BAAI/bge-m3
-2. BAAI/bge-large-zh
-3. shibing624/text2vec-base-chinese
-
-#### 8.4.2 评分流程
+公式：
 
 ```text
-学生答案编码成向量
-参考答案编码成向量
-计算余弦相似度 sim
-score = round(sim × max_score, score_precision)
+score = max_score × cosine_similarity(student_embedding, reference_embedding)
 ```
 
-#### 8.4.3 复核分级
+#### 8.3.3 降级链路
 
-| 相似度 | 状态 | 说明 |
-|---|---|---|
-| sim >= 0.75 | high_confidence | 高置信度，可抽查 |
-| 0.5 <= sim < 0.75 | need_review | 建议复核 |
-| sim < 0.5 | low_confidence | 低置信度，优先复核 |
+当 Ollama 不可用时，依次尝试：
 
-### 8.5 同步与异步策略
+1. Ollama Embedding（远程，endpoint 配置非空时优先）
+2. sentence-transformers 本地模型
+3. 关键词重叠度（Jaccard 相似度）
+
+#### 8.3.4 置信度阈值（可配置）
+
+- `high_confidence_threshold`：0.75（默认），大于等于此值标记为高置信度
+- `need_review_threshold`：0.5（默认），介于低/高阈值之间标记为需要复核
+- `low_confidence_threshold`：0.35（默认），低于此值标记为低置信度
+
+### 8.4 同步与异步策略
 
 MVP 阶段采用同步判分：
 
 1. 员工提交后，后端立即执行客观题判分。
-2. 主观题先调用 LLM。
-3. LLM 在 `timeout_seconds` 内成功则使用 LLM 结果。
-4. LLM 超时或失败则立即回退到 Embedding。
-5. 后端保存完整判分结果。
-6. 员工端只收到提交成功。
+2. 主观题通过 Embedding 模型计算相似度。
+3. 后端保存完整判分结果。
+4. 员工端只收到提交成功。
 
 后续如果考试人数或主观题数量增加，可升级为异步队列判分。
 
@@ -588,7 +532,7 @@ MVP 阶段采用：
 
 ### 9.2 刷新页面处理
 
-员工开始答题后，前端应将开始时间缓存到浏览器本地存储中。��面刷新后继续使用原开始时间计算剩余时间。
+员工开始答题后，前端应将开始时间缓存到浏览器本地存储中。页面刷新后继续使用原开始时间计算剩余时间。
 
 ### 9.3 服务端校验
 
@@ -683,7 +627,7 @@ MVP 阶段根据当前需求不启用管理员登录和访问口令，仅适用�
 | 姓名 | 员工填写 |
 | 工号 | 员工填写，唯一 |
 | 客观题分数 | 自动计算 |
-| 主观题机器分 | LLM 或 Embedding 初判 |
+| 主观题机器分 | Embedding / 关键词初判 |
 | 主观题最终分 | 人工复核后可能变化 |
 | 总分 | 客观题 + 主观题最终分 |
 | 复核状态 | pending / reviewed / need_review / low_confidence |
@@ -707,7 +651,7 @@ MVP 阶段根据当前需求不启用管理员登录和访问口令，仅适用�
 
 #### 11.5.2 客观题详情
 
-��道客观题展示：
+每道客观题展示：
 
 1. 题目
 2. 选项
@@ -917,7 +861,7 @@ GET /api/admin/export
 
 ### 14.1 MVP 安全措施
 
-1. 参考答案只保存在后��。
+1. 参考答案只保存在后端。
 2. 员工获取试卷接口不返回答案和 rubric。
 3. 提交接口后端重新读取题库判分，不信任前端分数。
 4. 默认按工号限制重复提交。
@@ -950,31 +894,17 @@ GET /api/admin/export
 全自动免人工判分系统
 ```
 
-### 15.1 LLM 优点
-
-1. 能处理部分正确和部分错误。
-2. 能参考评分 rubric。
-3. 能输出评分理由。
-4. 更适合简答题和论述题。
-
-### 15.2 LLM 局限
-
-1. 部署复杂度更高。
-2. 需要本地模型服务。
-3. 可能超时或输出格式异常。
-4. 分数可能存在波动。
-
-### 15.3 Embedding 优点
+### 15.1 Embedding 优点
 
 1. 部署简单。
 2. CPU 可运行。
 3. 推理速度快。
-4. 适合作为回退方案。
+4. 支持 Ollama 远程调用和本地 sentence-transformers 模型。
 
-### 15.4 Embedding 局限
+### 15.2 Embedding 局限
 
 1. 只能衡量语义相似度。
-2. ���以判断逻辑错误。
+2. 难以判断逻辑错误。
 3. 难以识别答非所问但文字相近的答案。
 4. 不能自然生成评分理由。
 
@@ -992,8 +922,8 @@ GET /api/admin/export
 | AC-004 | 单选判分 | 答案一致满分，不一致 0 分 |
 | AC-005 | 判断判分 | 布尔值一致满分，不一致 0 分 |
 | AC-006 | 多选判分 | 无错选时按比例给分，有错选时 0 分 |
-| AC-007 | 主观题 LLM | Ollama 可用时使用 LLM 分数和理由 |
-| AC-008 | 主观题回退 | Ollama 不可用时自动回退 Embedding |
+| AC-007 | 主观题 Embedding | Ollama 可用时使用 Embedding 相似度判分 |
+| AC-008 | 主观题回退 | Ollama 不可用时自动回退本地模型或关键词 |
 | AC-009 | 重复提交 | 同一工号不能重复提交 |
 | AC-010 | 员工提交结果 | 员工只看到提交成功，不看到分数 |
 | AC-011 | 管理员列表 | 管理员能看到提交记录和成绩 |
@@ -1009,7 +939,7 @@ GET /api/admin/export
 | EX-001 | questions.json 格式错误 | 启动失败并提示具体错误 |
 | EX-002 | 题目 ID 重复 | 启动失败并提示重复 ID |
 | EX-003 | 分数总和不一致 | 启动失败或明确警告 |
-| EX-004 | LLM 超时 | 自动回退 Embedding，不影响提交 |
+| EX-004 | Ollama 不可用 | 自动回退本地模型或关键词，不影响提交 |
 | EX-005 | 非法复核分数 | 接口返回 REVIEW_SCORE_INVALID |
 | EX-006 | 查询不存在提交 | 接口返回 SUBMISSION_NOT_FOUND |
 
@@ -1041,14 +971,14 @@ GET /api/admin/export
 1. 实现单选题判分。
 2. 实现判断题判分。
 3. 实现多选题按比例判分。
-4. 实现 Ollama LLM 判分。
-5. 实现 Embedding 回退判分。
+4. 实现 Embedding 语义相似度判分。
+5. 实现关键词回退判分。
 6. 保存每题判分详情。
 
 ### Phase 4：管理员后台
 
 1. 实现统计面板。
-2. 实现成绩列表���
+2. 实现成绩列表。
 3. 实现搜索、筛选和排序。
 4. 实现试卷详情页。
 5. 实现人工复核改分。
@@ -1076,7 +1006,7 @@ GET /api/admin/export
 6. 工号白名单校验。
 7. 成绩排名和统计分析。
 8. 主观题批量复核。
-9. LLM 阅卷队列异步化。
+9. Embedding 阅卷队列异步化。
 10. 多模型交叉评分。
 11. 局域网长期服务部署。
 12. 操作审计日志。
@@ -1088,7 +1018,7 @@ GET /api/admin/export
 当前版本采用：
 
 ```text
-FastAPI + SQLite + questions.json + 原生 HTML/JS + 本地小参数 LLM 优先 + Embedding 回退
+FastAPI + SQLite + questions.json + 原生 HTML/JS + Embedding 语义相似度判分 + 关键词回退
 ```
 
 最终确认：
@@ -1099,4 +1029,4 @@ FastAPI + SQLite + questions.json + 原生 HTML/JS + 本地小参数 LLM 优先 
 4. 管理员通过浏览器访问后台。
 5. 管理员可以逐人复核完整试卷答案。
 6. 考试时长、模型、阈值、题目和分值都通过配置或 JSON 文件灵活调整。
-7. MVP 阶段管理员后台不启用���权，仅适用于可信局域网。
+7. MVP 阶段管理员后台不启用鉴权，仅适用于可信局域网。

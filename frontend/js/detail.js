@@ -19,15 +19,16 @@ function toast(msg) {
 }
 
 function badge(s) {
-  const cls = {
-    reviewed: 'badge-pass',
-    pending: 'badge-pending',
-    low_confidence: 'badge-low',
-    auto_scored: 'badge-pass',
-    need_review: 'badge-low',
-    high_confidence: 'badge-pass',
-  }[s] || '';
-  return `<span class="badge ${cls}">${esc(s || '')}</span>`;
+  const meta = {
+    reviewed: { className: 'badge-reviewed', label: '已复核' },
+    pending: { className: 'badge-pending', label: '待处理' },
+    low_confidence: { className: 'badge-low-confidence', label: '低置信' },
+    auto_scored: { className: 'badge-auto-scored', label: '自动判分' },
+    need_review: { className: 'badge-need-review', label: '待复核' },
+    high_confidence: { className: 'badge-high-confidence', label: '高置信' },
+    grading: { className: 'badge-grading', label: '评分中' },
+  }[s] || { className: 'badge-pending', label: s || '未知' };
+  return `<span class="badge ${meta.className}">${esc(meta.label)}</span>`;
 }
 
 async function authFetch(url, options = {}) {
@@ -51,7 +52,7 @@ function render() {
   $('summary').textContent = `${submission.name || ''} / ${submission.employee_id || ''} / 总分 ${submission.total_score ?? ''} / ${submission.review_status || ''}`;
 
   if (submission.review_status === 'grading') {
-    $('detail').innerHTML = '<div class="card" style="text-align:center;padding:40px"><h2 style="color:#3b82f6">⏳ 评分进行中</h2><p style="color:#64748b;margin-top:10px">该试卷正在后台评分，请稍后刷新页面查看结果</p><button class="btn" onclick="location.reload()" style="margin-top:15px">刷新页面</button></div>';
+    $('detail').innerHTML = '<div class="panel result-panel"><h2>评分进行中</h2><p class="muted form-note">该试卷正在后台评分，请稍后刷新页面查看结果。</p><button class="btn" onclick="location.reload()">刷新页面</button></div>';
     return;
   }
 
@@ -68,7 +69,7 @@ function render() {
       <div class="answer-box"><b>学生答案：</b><br>${esc(studentAnswer)}</div>
       <div class="answer-box"><b>参考答案：</b><br>${esc(referenceAnswer)}</div>
       ${d.reason ? `<p><b>判分理由：</b>${esc(d.reason)}</p>` : ''}
-      ${subjective ? `<div class="toolbar"><input type="text" id="score_${esc(questionId)}" value="${esc(d.final_score ?? d.score)}" style="max-width:120px"><input type="text" id="note_${esc(questionId)}" placeholder="复核备注" style="max-width:320px"><button class="btn review-btn" data-qid="${esc(questionId)}">保存复核</button></div>` : ''}
+      ${subjective ? `<div class="toolbar"><input class="score-input" type="number" id="score_${esc(questionId)}" value="${esc(d.final_score ?? d.score)}"><input class="note-input" type="text" id="note_${esc(questionId)}" placeholder="复核备注"><button class="btn review-btn" data-qid="${esc(questionId)}">保存复核</button></div>` : ''}
     </div>`;
   }).join('');
 }

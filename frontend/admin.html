@@ -5,83 +5,152 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>考试管理后台</title>
   <link rel="stylesheet" href="/css/style.css">
-  <style>
-    #loginPanel { max-width: 400px; margin: 100px auto; }
-    #loginPanel .card { padding: 40px; text-align: center; }
-    #loginPanel input { width: 100%; margin-bottom: 15px; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1em; }
-    #loginPanel .btn { width: 100%; padding: 12px; }
-    #loginError { color: #ef4444; margin-top: 10px; display: none; }
-  </style>
 </head>
-<body>
-  <!-- 登录面板 -->
-  <div id="loginPanel" class="container" style="display:none">
-    <div class="card">
-      <h2 style="margin-bottom:20px">🔐 管理后台登录</h2>
-      <input type="password" id="loginPassword" placeholder="请输入管理员密码">
-      <button class="btn" onclick="doLogin()">登录</button>
-      <p id="loginError"></p>
-    </div>
+<body class="admin-page">
+  <div id="loginPanel" class="login-screen" style="display:none">
+    <section class="panel login-card">
+      <p class="eyebrow">ADMIN</p>
+      <h1>考试管理后台</h1>
+      <p class="muted">登录后查看提交、复核主观题并导出成绩。</p>
+      <label>
+        管理员密码
+        <input type="password" id="loginPassword" placeholder="请输入管理员密码" autocomplete="current-password">
+      </label>
+      <button class="btn full" id="loginBtn" type="button">登录</button>
+      <p id="loginError" class="login-error"></p>
+    </section>
   </div>
 
-  <!-- 主内容 -->
-  <div id="mainContent" style="display:none">
-    <div class="container">
-      <div class="card header">
-        <div>
-          <h1>考试管理后台</h1>
-          <p class="muted">成绩统计、人工复核、导出 Excel</p>
-        </div>
-        <div class="toolbar">
-          <a class="btn secondary" href="/">考试端</a>
-          <a class="btn" href="#" onclick="exportData(); return false;">导出 Excel</a>
-        </div>
+  <div id="mainContent" class="app-shell admin-shell" style="display:none">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-title">考试系统</div>
+        <div class="brand-subtitle">内部考试管理</div>
       </div>
+      <nav class="nav-list" aria-label="后台导航">
+        <button class="nav-item active" type="button" data-view="overview">总览</button>
+        <button class="nav-item" type="button" data-view="publish">发布考试</button>
+        <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
+        <a class="nav-item" href="/">考试端</a>
+      </nav>
+      <div class="sidebar-note">默认本地配置可直接进入后台；生产环境请启用认证并配置强密码。</div>
+    </aside>
 
-      <div class="card" id="publish">
-        <h2>📢 发布考试</h2>
-        <p class="muted">将以下链接或二维码发送给考生，即可开始答题</p>
-        <div style="display:flex;gap:30px;align-items:center;margin-top:15px;flex-wrap:wrap">
-          <div>
-            <p style="margin-bottom:8px"><strong>考试链接：</strong></p>
-            <a id="examLink" href="#" target="_blank" style="color:#3b82f6;word-break:break-all;font-size:1.05em"></a>
-            <p style="margin-top:10px"><button class="btn secondary" onclick="copyLink()" style="font-size:0.85em">📋 复制链接</button></p>
-          </div>
-          <div style="text-align:center"><img id="examQR" alt="考试二维码" style="border:1px solid #e5e7eb;border-radius:8px"></div>
-        </div>
+    <main class="workspace">
+      <div class="workspace-inner">
+        <section class="view-panel is-active" id="view-overview" data-view="overview">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">DASHBOARD</p>
+              <h1>考试管理后台</h1>
+              <p class="muted">成绩统计、人工复核、导出 Excel。</p>
+            </div>
+            <div class="toolbar">
+              <a class="btn secondary" href="/">考试端</a>
+              <button class="btn" id="exportBtn" type="button">导出 Excel</button>
+            </div>
+          </header>
+          <section class="stats-grid" id="stats" aria-live="polite"></section>
+          <section class="panel overview-summary">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">QUICK ACTIONS</p>
+                <h2>快捷入口</h2>
+              </div>
+            </div>
+            <div class="toolbar">
+              <button class="btn secondary" type="button" data-view-jump="publish">去发布考试</button>
+              <button class="btn secondary" type="button" data-view-jump="submissions">查看成绩列表</button>
+            </div>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-publish" data-view="publish">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">PUBLISH</p>
+              <h1>发布考试</h1>
+              <p class="muted">生成考试链接和二维码，发给考生即可开考。</p>
+            </div>
+          </header>
+          <section class="panel" id="publish">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">LINK</p>
+                <h2>考试入口</h2>
+              </div>
+              <button class="btn secondary" id="copyLinkBtn" type="button">复制链接</button>
+            </div>
+            <div class="publish-layout">
+              <div class="link-box">
+                <p class="muted">将考试链接或二维码发送给考生即可开始答题。</p>
+                <a id="examLink" class="exam-link" href="#" target="_blank" rel="noreferrer"></a>
+              </div>
+              <div>
+                <img id="examQR" alt="考试二维码">
+              </div>
+            </div>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-submissions" data-view="submissions">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">SUBMISSIONS</p>
+              <h1>成绩列表</h1>
+              <p class="muted">搜索、筛选、复核与批量删除提交记录。</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn" id="exportBtnSub" type="button">导出 Excel</button>
+            </div>
+          </header>
+          <section class="panel table-panel" id="submissions">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">FILTER</p>
+                <h2>提交记录</h2>
+              </div>
+              <div class="filters">
+                <input id="keyword" type="text" placeholder="搜索姓名或工号">
+                <select id="status">
+                  <option value="">全部状态</option>
+                  <option value="low_confidence">低置信</option>
+                  <option value="need_review">待复核</option>
+                  <option value="auto_scored">自动判分</option>
+                  <option value="reviewed">已复核</option>
+                </select>
+                <button class="btn" id="searchBtn" type="button">搜索</button>
+                <button class="btn secondary" id="selectAllBtn" type="button">全选本页</button>
+                <button class="btn danger" id="deleteSelBtn" type="button">删除所选</button>
+              </div>
+            </div>
+
+            <div id="adminTableState" class="table-state">正在加载提交记录...</div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th style="width:40px"><input type="checkbox" id="checkAll" aria-label="全选本页"></th>
+                    <th>ID</th>
+                    <th>姓名</th>
+                    <th>工号</th>
+                    <th>部门</th>
+                    <th>客观分</th>
+                    <th>主观分</th>
+                    <th>总分</th>
+                    <th>状态</th>
+                    <th>提交时间</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+              </table>
+            </div>
+            <div id="pagination" class="pagination"></div>
+          </section>
+        </section>
       </div>
-
-      <div class="grid" id="stats"></div>
-
-      <div class="card">
-        <div class="toolbar">
-          <input id="keyword" type="text" placeholder="搜索姓名/工号" style="max-width:240px">
-          <select id="status">
-            <option value="">全部状态</option>
-            <option value="low_confidence">低置信</option>
-            <option value="need_review">待复核</option>
-            <option value="auto_scored">自动判分/高置信</option>
-            <option value="reviewed">已复核</option>
-          </select>
-          <button class="btn" id="searchBtn">搜索</button>
-          <button class="btn secondary" id="selectAlBtn">全选本页</button>
-          <button class="btn" id="deleteSelBtn" style="background:#ef4444">删除所选</button>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th style="width:30px"><input type="checkbox" id="checkAll"></th>
-                <th>ID</th><th>姓名</th><th>工号</th><th>部门</th>
-                <th>客观分</th><th>主观分</th><th>总分</th><th>状态</th><th>提交时间</th><th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="tbody"></tbody>
-          </table>
-        </div>
-        <div id="pagination" style="text-align:center;padding:15px 0"></div>
-      </div>
-    </div>
+    </main>
   </div>
 
   <div class="toast" id="toast"></div>

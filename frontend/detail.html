@@ -1,1 +1,44 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>复核详情</title><link rel="stylesheet" href="/css/style.css"></head><body><div class="container"><div class="card header"><div><h1>复核详情</h1><p id="summary" class="muted"></p></div><div class="toolbar"><a class="btn secondary" href="/admin">返回列表</a><button class="btn" id="regradeBtn">重新机器判分</button></div></div><div id="detail"></div></div><div class="toast" id="toast"></div><script src="/js/detail.js"></script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>复核详情</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="admin-page detail-page">
+  <div class="app-shell admin-shell detail-shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-title">考试系统</div>
+        <div class="brand-subtitle">人工复核</div>
+      </div>
+      <nav class="nav-list" aria-label="复核导航">
+        <a class="nav-item" href="/admin">返回列表</a>
+        <a class="nav-item" href="/">考试端</a>
+      </nav>
+      <div class="sidebar-note">复核只调整主观题最终分，机器判分记录会保留在详情中。</div>
+    </aside>
+
+    <main class="workspace">
+      <div class="workspace-inner">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">REVIEW</p>
+            <h1>复核详情</h1>
+            <p id="summary" class="muted"></p>
+          </div>
+          <div class="toolbar">
+            <a class="btn secondary" href="/admin">返回列表</a>
+            <button class="btn" id="regradeBtn" type="button">重新机器判分</button>
+          </div>
+        </header>
+        <div id="detail"></div>
+      </div>
+    </main>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/detail.js"></script>
+</body>
+</html>

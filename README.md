@@ -1,6 +1,6 @@
 # 企业在线考试兼批改系统
 
-基于 FastAPI + SQLite 的企业内部在线考试 MVP，支持员工扫码答题、客观题自动判分、主观题 LLM 判分、Embedding/关键词回退、管理员人工复核与 Excel 导出。
+基于 FastAPI + SQLite 的企业内部在线考试 MVP，支持员工扫码答题、客观题自动判分、主观题 Embedding 语义相似度判分、关键词回退、管理员人工复核与 Excel 导出。
 
 ## 启动
 
@@ -42,18 +42,19 @@ server:
 
 不要在生产环境使用 `allow_origins: ["*"]`。
 
-## Ollama 判分
+## Ollama Embedding 判分
 
 默认配置使用：
 
 ```yaml
 grading:
-  llm:
+  embedding:
+    model: "bge-m3"
     endpoint: "http://localhost:11434"
-    model: "qwen2.5:7b"
+    timeout_seconds: 10
 ```
 
-如本地未启动 Ollama 或模型不可用，系统会自动回退到 Embedding/关键词相似度判分，保证提交流程不中断。
+如本地未启动 Ollama 或模型不可用，系统会自动回退到 sentence-transformers 本地模型或关键词相似度判分，保证提交流程不中断。
 
 ## 题库
 

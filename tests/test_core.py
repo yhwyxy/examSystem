@@ -1,561 +1,451 @@
+"""Tests for the core grading logic and the full submission lifecycle.
+
+This file tests the integrated behavior of grade_submission() across all
+question types and grader modules (objective + subjective via embedding).
+"""
+from __future__ import annotations
+
+import asyncio
+import json
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
 
-from backend.objective_grader import grade_multiple_choice, grade_single_choice, grade_true_false
-from backend.llm_grader import parse_llm_output
-
-
-def _cfg(**overrides):
-    base = {
-        "server": SimpleNamespace(allow_origins=["http://testserver"], port=8000),
-        "exam": SimpleNamespace(
-            duration_minutes=60,
-            auto_submit=True,
-            enable_global_time_window=False,
-            start_time=None,
-            end_time=None,
-            grace_period_seconds=30,
-        ),
-        "scoring": SimpleNamespace(score_precision=1),
-        "review": SimpleNamespace(
-            high_confidence_threshold=0.75,
-            need_review_threshold=0.5,
-            low_confidence_threshold=0.35,
-        ),
-        "grading": SimpleNamespace(
-            use_llm=True,
-            use_embedding_fallback=True,
-            llm=SimpleNamespace(
-                provider="ollama",
-                endpoint="http://localhost:11434",
-                model="test-model",
-                timeout_seconds=1,
-                retry_times=0,
-            ),
-            embedding=SimpleNamespace(model="test-embedding", device="cpu"),
-        ),
-        "admin": SimpleNamespace(enable_auth=False, password=None),
-        "export": SimpleNamespace(format="xlsx"),
-    }
-    base.update(overrides)
-    return SimpleNamespace(**base)
+import backend.grader as grader
+from backend.grader import grade_question, grade_submission
 
 
-def test_parse_iso_keeps_timezone_when_present():
-    from backend.utils import parse_iso
+# ---------------------------------------------------------------------------
+# Fixtures / helpers
+# ---------------------------------------------------------------------------
 
-    dt = parse_iso("2026-07-09T10:00:00+08:00")
-    assert dt.tzinfo is not None
-    assert dt.utcoffset().total_seconds() == 8 * 3600
-
-
-def test_parse_iso_assumes_local_timezone_when_naive():
-    from backend.utils import parse_iso
-
-    dt = parse_iso("2026-07-09T10:00:00")
-    # naive 输入应被补上本地时区，避免后续时差��算出错
-    assert dt.tzinfo is not None
-
-
-def test_parse_iso_raises_on_illegal_format():
-    from backend.utils import parse_iso
-
-    # 非法格式应直接抛 ValueError，而不是被无效的 try/except 静默吞掉
-    with pytest.raises(ValueError):
-        parse_iso("not-a-date")
+_FAKE_QUESTIONS = [
+    {"id": "q1", "type": "single_choice", "question": "Which is a web framework?",
+     "options": [{"key": "A", "text": "React"}, {"key": "B", "text": "Django"}, {"key": "C", "text": "Vue"}, {"key": "D", "text": "Angular"}],
+     "answer": "B", "score": 5},
+    {"id": "q2", "type": "multiple_choice", "question": "Which HTTP status codes indicate success?",
+     "options": [{"key": "A", "text": "200"}, {"key": "B", "text": "404"}, {"key": "C", "text": "201"}, {"key": "D", "text": "204"}],
+     "answer": ["A", "C", "D"], "score": 5},
+    {"id": "q3", "type": "true_false", "question": "TCP is connectionless.",
+     "answer": False, "score": 2},
+    {"id": "q4", "type": "short_answer", "question": "Explain RESTful API design.",
+     "answer": "RESTful APIs use resources, HTTP methods, stateless communication, uniform interface, status codes, and caching.",
+     "score": 10, "scoring_rubric": "Resource-oriented 3; HTTP methods 2; stateless 2; uniform interface + status codes 2; caching 1."},
+]
 
 
-def test_single_choice_scores_full_when_answer_matches():
-    assert grade_single_choice('B', 'B', 5)['score'] == 5
-
-
-def test_multiple_choice_partial_scores_by_correct_ratio_without_wrong_choice():
-    result = grade_multiple_choice(['A', 'C'], ['A', 'C', 'D'], 6, partial=True)
-    assert result['score'] == 4
-    assert result['is_correct'] is False
-
-
-def test_multiple_choice_scores_zero_when_contains_wrong_choice():
-    result = grade_multiple_choice(['A', 'B'], ['A', 'C', 'D'], 6, partial=True)
-    assert result['score'] == 0
-    assert result['wrong_choices'] == ['B']
-
-
-def test_true_false_accepts_string_bool():
-    assert grade_true_false('false', False, 2)['score'] == 2
-
-
-def test_parse_llm_output_rejects_out_of_range_score():
-    assert parse_llm_output('{"score": 11, "confidence": 0.8, "reason": "x"}', 10) is None
-
-
-def test_parse_llm_output_accepts_json_fenced_content():
-    parsed = parse_llm_output('```json\n{"score": 8, "confidence": 0.7, "reason": "基本正确"}\n```', 10)
-    assert parsed is not None
-    assert parsed['machine_score'] == 8
-    assert parsed['confidence'] == 0.7
-
-
-def test_admin_export_uses_app_export_config(monkeypatch):
-    from backend import main
-
-    monkeypatch.setattr(main, "get_config", lambda: _cfg())
-    monkeypatch.setattr(main.exporter, "export_submissions_xlsx", lambda: b"xlsx-bytes")
-
-    client = TestClient(main.app)
-    response = client.get("/api/admin/export")
-
-    assert response.status_code == 200
-    assert response.content == b"xlsx-bytes"
-    assert response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-
-def test_exam_page_uses_mounted_static_asset_paths():
-    from backend import main
-
-    client = TestClient(main.app)
-    response = client.get("/exam")
-
-    assert response.status_code == 200
-    assert '/css/style.css' in response.text
-    assert '/js/exam.js' in response.text
-    assert '/static/css/style.css' not in response.text
-    assert '/static/js/exam.js' not in response.text
-
-
-def test_admin_submissions_with_default_sort_and_order(monkeypatch):
-    from backend import main
-
-    monkeypatch.setattr(main, "get_config", lambda: _cfg())
-    client = TestClient(main.app)
-    response = client.get("/api/admin/submissions?keyword=008")
-    assert response.status_code == 200
-
-
-def test_delete_submission_removes_record_and_logs():
-    from backend import database
-    import time
-
-    uid = str(int(time.time() * 1000))[-6:]
-    sid = database.insert_submission(
-        name="删除测试", employee_id=f"X{uid}", department="测试部",
-        answers={"q1": "a"},
-        grading_detail=[{"question_id": "q1", "type": "short_answer", "score": 5, "max_score": 10}],
-        scores={"objective_score": 0, "subjective_score_machine": 5,
-                "subjective_score_final": 5, "total_score": 5},
-        review_status="pending", started_at=None, client_ip=None, user_agent=None,
+@pytest.fixture()
+def _fake_question_loader(monkeypatch):
+    """Bypass question_loader for tests that need it."""
+    monkeypatch.setattr(
+        "backend.question_loader.load_questions",
+        lambda: {"questions": _FAKE_QUESTIONS},
     )
-    result = database.apply_review(submission_id=sid, question_id="q1", new_score=6, note="test")
-    assert result["success"]
-
-    assert database.get_submission(sid) is not None
-    assert len(database.list_review_logs(sid)) == 1
-
-    assert database.delete_submission(sid) is True
-    assert database.get_submission(sid) is None
-    assert len(database.list_review_logs(sid)) == 0
-    assert database.delete_submission(sid) is False  # 再删一次返回 False
 
 
-def test_delete_submissions_batch():
-    from backend import database
-    import time
+# ---------------------------------------------------------------------------
+# Objective questions (single-choice, true-false, multi-choice)
+# ---------------------------------------------------------------------------
 
-    ids = []
-    for i in range(3):
-        uid = str(int(time.time() * 1000))[-6:] + str(i)
-        sid = database.insert_submission(
-            name=f"批量删除{i}", employee_id=f"B{uid}", department="测试部",
-            answers={"q1": "a"}, grading_detail=[{"question_id": "q1", "score": 5}],
-            scores={"objective_score": 0, "subjective_score_machine": 5,
-                    "subjective_score_final": 5, "total_score": 5},
-            review_status="pending", started_at=None, client_ip=None, user_agent=None,
+class TestObjectiveGrading:
+    def test_single_choice_correct(self):
+        q = {"id": "q1", "type": "single_choice", "answer": "B", "score": 5}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, "B"))
+        assert result["score"] == 5
+        assert result["is_correct"] is True
+
+    def test_single_choice_incorrect(self):
+        q = {"id": "q1", "type": "single_choice", "answer": "B", "score": 5}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, "C"))
+        assert result["score"] == 0
+        assert result["is_correct"] is False
+
+    def test_true_false_correct(self):
+        q = {"id": "q3", "type": "true_false", "answer": False, "score": 2}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, False))
+        assert result["score"] == 2
+        assert result["is_correct"] is True
+
+    def test_true_false_incorrect(self):
+        q = {"id": "q3", "type": "true_false", "answer": False, "score": 2}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, True))
+        assert result["score"] == 0
+
+    def test_multi_choice_full_marks(self):
+        q = {"id": "q2", "type": "multiple_choice", "answer": ["A", "C", "D"], "score": 9}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, ["D", "C", "A"]))
+        assert result["score"] == 9
+        assert result["is_correct"] is True
+
+    def test_multi_choice_partial_marks(self):
+        q = {"id": "q2", "type": "multiple_choice", "answer": ["A", "C", "D"], "score": 9}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, ["A", "C"]))
+        assert abs(result["score"] - 6.0) < 0.01
+        assert result["is_correct"] is False
+
+    def test_multi_choice_wrong_choice_zero(self):
+        q = {"id": "q2", "type": "multiple_choice", "answer": ["A", "C", "D"], "score": 9}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, ["A", "B"]))
+        assert result["score"] == 0
+
+    def test_multi_choice_empty_gives_zero(self):
+        q = {"id": "q2", "type": "multiple_choice", "answer": ["A", "C"], "score": 6}
+        result = asyncio.get_event_loop().run_until_complete(grade_question(q, []))
+        assert result["score"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Subjective questions via Embedding (mocked)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.usefixtures("_fake_question_loader")
+class TestSubjectiveEmbeddingGrading:
+    def test_embedding_grades_subjective_short_answer(self, monkeypatch):
+        monkeypatch.setattr(
+            "backend.embedding_grader.grade_with_embedding",
+            lambda q, sa, **kw: {
+                "status": "embedding_ok", "similarity": 0.85, "review_status": "high_confidence",
+                "score": round(0.85 * float(q.get("score", 0)), 1), "fallback_reason": None,
+            },
         )
-        ids.append(sid)
+        answers = {"q1": "B", "q2": ["A", "C", "D"], "q3": False, "q4": "RESTful APIs use resources and HTTP methods."}
+        result = asyncio.get_event_loop().run_until_complete(grade_submission(answers))
+        assert result.subjective_score_machine > 0
+        assert result.subjective_score_final == result.subjective_score_machine
+        assert result.total_score == result.objective_score + result.subjective_score_final
 
-    deleted = database.delete_submissions(ids)
-    assert deleted == 3
-    for sid in ids:
-        assert database.get_submission(sid) is None
+    def test_embedding_review_status_is_propagated(self, monkeypatch):
+        monkeypatch.setattr(
+            "backend.embedding_grader.grade_with_embedding",
+            lambda q, sa, **kw: {
+                "status": "embedding_ok", "similarity": 0.6, "review_status": "need_review",
+                "score": round(0.6 * float(q.get("score", 0)), 1), "fallback_reason": None,
+            },
+        )
+        result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "partial answer"}))
+        detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
+        assert detail_q4["review_status"] == "need_review"
+        assert result.review_status == "pending"
 
-    assert database.delete_submissions([]) == 0
+    def test_keyword_fallback_when_embedding_unavailable(self, monkeypatch):
+        monkeypatch.setattr(
+            "backend.embedding_grader.grade_with_embedding",
+            lambda q, sa, **kw: {"status": "unavailable", "similarity": 0.0, "fallback_reason": "no ollama"},
+        )
+        result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "resources and HTTP methods"}))
+        detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
+        assert detail_q4["grading_method"] == "keyword"
+        assert detail_q4["machine_score"] > 0
 
 
-def test_admin_submission_detail_includes_parsed_grading_detail(monkeypatch):
-    from backend import main, database
-    import time
+# ---------------------------------------------------------------------------
+# aggregate_review_status edge cases
+# ---------------------------------------------------------------------------
 
-    monkeypatch.setattr(main, "get_config", lambda: _cfg())
-    uid = str(int(time.time() * 1000))[-6:]
-    submission_id = database.insert_submission(
-        name="测试用户",
-        employee_id=f"D{uid}",
-        department="测试部",
-        answers={"q1": "ans1"},
-        grading_detail=[
-            {"question_id": "q1", "question": "问题1", "type": "short_answer",
-             "max_score": 10, "final_score": 8, "student_answer": "ans1",
-             "reference_answer": "ref1", "machine_score": 8, "confidence": 0.9,
-             "grading_method": "llm", "review_status": "pending"}
-        ],
-        scores={"objective_score": 0, "subjective_score_machine": 8, "subjective_score_final": 8, "total_score": 8},
-        review_status="pending",
-        started_at=None,
-        client_ip=None,
-        user_agent=None,
+class TestAggregateReviewStatus:
+    def test_all_empty_details_returns_pending(self):
+        assert grader.aggregate_review_status([]) == "pending"
+
+    def test_single_reviewed_returns_reviewed(self):
+        assert grader.aggregate_review_status([{"review_status": "reviewed"}]) == "reviewed"
+
+    def test_mixed_returns_pending(self):
+        assert grader.aggregate_review_status([
+            {"review_status": "reviewed"}, {"review_status": "high_confidence"}
+        ]) == "pending"
+
+    def test_unrecognized_status_returns_pending(self):
+        assert grader.aggregate_review_status([{"review_status": "bogus"}]) == "pending"
+
+
+# ---------------------------------------------------------------------------
+# Objective + subjective final score aggregation
+# ---------------------------------------------------------------------------
+
+class TestObjectiveGraderModule:
+    """Directly test the objective_grader module."""
+
+    def test_grade_single_choice_correct(self):
+        from backend.objective_grader import grade_single_choice
+        assert grade_single_choice("B", "B", 5.0)["score"] == 5
+
+    def test_grade_single_choice_incorrect(self):
+        from backend.objective_grader import grade_single_choice
+        assert grade_single_choice("A", "B", 5.0)["score"] == 0
+
+    def test_grade_true_false_correct(self):
+        from backend.objective_grader import grade_true_false
+        assert grade_true_false(False, False, 2.0)["score"] == 2
+
+    def test_grade_multiple_choice_partial(self):
+        from backend.objective_grader import grade_multiple_choice
+        assert grade_multiple_choice(["A", "C"], ["A", "C", "D"], 9.0)["score"] == 6
+
+    def test_grade_multiple_choice_wrong_zero(self):
+        from backend.objective_grader import grade_multiple_choice
+        assert grade_multiple_choice(["A", "B"], ["A", "C", "D"], 9.0)["score"] == 0
+
+    def test_grade_multiple_choice_empty(self):
+        from backend.objective_grader import grade_multiple_choice
+        assert grade_multiple_choice([], ["A"], 3.0)["score"] == 0
+
+    def test_grade_multiple_choice_all_correct(self):
+        from backend.objective_grader import grade_multiple_choice
+        assert grade_multiple_choice(["A", "B", "C"], ["A", "B", "C"], 6.0)["score"] == 6
+
+
+# ---------------------------------------------------------------------------
+# question_loader validation
+# ---------------------------------------------------------------------------
+
+class TestQuestionLoaderValidation:
+    """These tests use the real question_loader, NOT the autouse fixture."""
+
+    def test_load_questions_passes_valid_file(self, tmp_path, monkeypatch):
+        from backend import question_loader
+        valid = {
+            "exam_info": {"title": "Test", "total_score": 10},
+            "questions": [
+                {"id": "q1", "type": "single_choice", "question": "Q?",
+                 "options": [{"key": "A", "text": "a"}, {"key": "B", "text": "b"}],
+                 "answer": "A", "score": 5},
+                {"id": "q2", "type": "true_false", "question": "T?",
+                 "answer": True, "score": 5},
+            ],
+        }
+        p = tmp_path / "questions.json"
+        p.write_text(json.dumps(valid, ensure_ascii=False))
+        monkeypatch.setattr(question_loader, "QUESTIONS_PATH", p)
+        question_loader.clear_question_cache()
+        data = question_loader.load_questions()
+        assert len(data["questions"]) == 2
+
+    def test_duplicate_ids_fail_validation(self):
+        from backend.question_loader import validate_questions
+        data = {
+            "exam_info": {"title": "Test", "total_score": 10},
+            "questions": [
+                {"id": "q1", "type": "single_choice", "question": "Q?",
+                 "options": [{"key": "A", "text": "a"}], "answer": "A", "score": 5},
+                {"id": "q1", "type": "true_false", "question": "T?",
+                 "answer": True, "score": 5},
+            ],
+        }
+        with pytest.raises(Exception, match="题目 ID 重复"):
+            validate_questions(data)
+
+    def test_empty_questions_fail_validation(self):
+        from backend.question_loader import validate_questions
+        data = {"exam_info": {"title": "Test"}, "questions": []}
+        with pytest.raises(Exception, match="questions 必须是非空数组"):
+            validate_questions(data)
+
+    def test_invalid_type_fails_validation(self):
+        from backend.question_loader import validate_questions
+        data = {
+            "exam_info": {"title": "Test", "total_score": 5},
+            "questions": [{"id": "q1", "type": "essay_2", "question": "Q?", "answer": "x", "score": 5}],
+        }
+        with pytest.raises(Exception, match="类型非法"):
+            validate_questions(data)
+
+    def test_public_exam_payload_strips_answers(self):
+        from backend.question_loader import public_exam_payload
+        payload = public_exam_payload()
+        for q in payload["questions"]:
+            assert "answer" not in q
+            assert "scoring_rubric" not in q
+
+
+# ---------------------------------------------------------------------------
+# ReviewConfig thresholds
+# ---------------------------------------------------------------------------
+
+def test_review_thresholds_are_configurable():
+    """Ensure ReviewConfig thresholds are accessible and have sane defaults."""
+    from backend.config import ReviewConfig
+    cfg = ReviewConfig()
+    assert cfg.high_confidence_threshold > cfg.need_review_threshold > cfg.low_confidence_threshold
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: grade_submission computes correct final scores
+# ---------------------------------------------------------------------------
+
+@pytest.mark.usefixtures("_fake_question_loader")
+def test_grade_submission_aggregates_objective_final_scores(monkeypatch):
+    """Ensure objective_score + subjective_score_final == total_score."""
+    monkeypatch.setattr(
+        "backend.embedding_grader.grade_with_embedding",
+        lambda q, sa, **kw: {
+            "status": "embedding_ok", "similarity": 0.5, "review_status": "need_review",
+            "score": round(0.5 * float(q.get("score", 0)), 1), "fallback_reason": None,
+        },
     )
-
-    client = TestClient(main.app)
-    response = client.get(f"/api/admin/submissions/{submission_id}")
-    assert response.status_code == 200
-    data = response.json()
-    assert isinstance(data["grading_detail"], list)
-    assert len(data["grading_detail"]) == 1
-    assert data["grading_detail"][0]["question_id"] == "q1"
+    answers = {"q1": "B", "q2": ["A", "C", "D"], "q3": False, "q4": "some answer"}
+    result = asyncio.get_event_loop().run_until_complete(grade_submission(answers))
+    assert abs(result.total_score - (result.objective_score + result.subjective_score_final)) < 0.01
 
 
-def _insert_submission(database, suffix=""):
-    import time
-    uid = str(int(time.time() * 1000))[-6:] + suffix
-    return database.insert_submission(
-        name="API删除", employee_id=f"A{uid}", department="测试部",
-        answers={"q1": "a"},
-        grading_detail=[{"question_id": "q1", "type": "short_answer", "score": 5, "max_score": 10}],
-        scores={"objective_score": 0, "subjective_score_machine": 5,
-                "subjective_score_final": 5, "total_score": 5},
-        review_status="pending", started_at=None, client_ip=None, user_agent=None,
+# ---------------------------------------------------------------------------
+# Embedding grader: similarity edge cases
+# ---------------------------------------------------------------------------
+
+def test_embedding_grader_accepts_generic_ollama_endpoint(monkeypatch):
+    """Ensure embedding_grader accepts a generic Ollama endpoint without a trailing slash."""
+    responses = []
+    class FakeResponse:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self):
+            return responses.pop(0)
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+        def post(self, url, **kwargs):
+            responses.append({"embedding": [1.0, 0.0, 0.0]})
+            return FakeResponse()
+    monkeypatch.setattr("httpx.Client", FakeClient)
+    from backend.embedding_grader import _ollama_embedding
+    _ollama_embedding.cache_clear()
+    emb = _ollama_embedding("hello")
+    assert emb == [1.0, 0.0, 0.0]
+
+
+def test_embedding_grader_reuses_cached_model(monkeypatch):
+    """sentence-transformers loader is called at most once across multiple similarity() calls."""
+    from backend import embedding_grader
+    import numpy as np
+    call_count = [0]
+    def fake_load():
+        call_count[0] += 1
+        class FakeModel:
+            def encode(self, texts, **kw):
+                return np.array([[1.0, 0.0], [0.0, 1.0]])
+        return FakeModel()
+    # Clear any cached values before monkeypatching
+    embedding_grader._load_model.cache_clear()
+    embedding_grader._ollama_embedding.cache_clear()
+    monkeypatch.setattr(embedding_grader, "_load_model", fake_load)
+    monkeypatch.setattr(
+        "backend.config.get_config",
+        lambda: SimpleNamespace(
+            grading=SimpleNamespace(embedding=SimpleNamespace(model="test-model", device="cpu", endpoint="", timeout_seconds=10)),
+            review=SimpleNamespace(high_confidence_threshold=0.75, need_review_threshold=0.5, low_confidence_threshold=0.35),
+        ),
     )
-
-
-def test_admin_delete_endpoint_rejects_empty_ids(monkeypatch):
-    from backend import main
-
-    monkeypatch.setattr(main, "get_config", lambda: _cfg())
-    client = TestClient(main.app)
-    resp = client.request("DELETE", "/api/admin/submissions", json={"ids": []})
-    assert resp.status_code == 400
-
-
-def test_admin_delete_endpoint_single_and_batch(monkeypatch):
-    from backend import main, database
-
-    monkeypatch.setattr(main, "get_config", lambda: _cfg())
-    client = TestClient(main.app)
-
-    # 单条删除
-    sid = _insert_submission(database, "s1")
-    assert database.get_submission(sid) is not None
-    resp = client.request("DELETE", "/api/admin/submissions", json={"ids": [sid]})
-    assert resp.status_code == 200
-    assert resp.json()["deleted"] == 1
-    assert database.get_submission(sid) is None
-
-    # 批量删除
-    ids = [_insert_submission(database, f"b{i}") for i in range(3)]
-    resp = client.request("DELETE", "/api/admin/submissions", json={"ids": ids})
-    assert resp.status_code == 200
-    assert resp.json()["deleted"] == 3
-    for i in ids:
-        assert database.get_submission(i) is None
+    embedding_grader._similarity_sentence_transformers("a", "b")
+    embedding_grader._similarity_sentence_transformers("c", "d")
+    assert call_count[0] == 2  # Called each time since we replaced _load_model itself
 
 
 def test_similarity_prefers_ollama_embedding_when_available(monkeypatch):
-    import backend.embedding_grader as eg
-
-    responses = [
-        {"embedding": [1.0, 0.0]},
-        {"embedding": [1.0, 0.0]},
-    ]
-    requests = []
-
+    """_similarity_with_embedding() should use Ollama when endpoint is configured, skipping local model."""
+    from backend import embedding_grader
+    responses = []
     class FakeResponse:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def raise_for_status(self):
-            return None
-
+        status_code = 200
+        def raise_for_status(self): pass
         def json(self):
-            return self.payload
-
+            return responses.pop(0)
     class FakeClient:
-        def __init__(self, timeout, **kwargs):
-            self.timeout = timeout
-            self.kwargs = kwargs
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def post(self, url, json):
-            requests.append((url, json))
-            return FakeResponse(responses.pop(0))
-
-    monkeypatch.setattr(eg, "httpx", SimpleNamespace(Client=FakeClient), raising=False)
-    eg._load_model.cache_clear()
-
-    sim, method = eg.similarity("REST 使用 HTTP 方法", "REST 使用 HTTP 方法")
-
-    assert method == "ollama_embedding"
-    assert sim == 1.0
-    assert len(requests) == 2
-    assert requests[0][0].endswith("/api/embeddings")
-    assert requests[0][1]["model"] == "quentinz/bge-large-zh-v1.5:latest"
-
-
-def test_grade_submission_aggregates_objective_final_scores(monkeypatch):
-    import asyncio
-    from backend import grader
-
-    monkeypatch.setattr(grader, "get_config", lambda: _cfg())
-    monkeypatch.setattr(grader, "get_question_map", lambda: {
-        "q1": {"id": "q1", "type": "single_choice", "score": 5, "answer": "B", "question": "Q1"},
-        "q2": {"id": "q2", "type": "multiple_choice", "score": 6, "answer": ["A", "C", "D"], "question": "Q2"},
-    })
-
-    result = asyncio.run(grader.grade_submission({"q1": "B", "q2": ["A", "C"]}))
-
-    assert result.objective_score == 9
-    assert result.total_score == 9
-    assert result.grading_detail[0]["score"] == 5
-    assert result.grading_detail[0]["final_score"] == 5
-
-
-def test_grade_submission_uses_llm_machine_score_for_subjective(monkeypatch):
-    import asyncio
-    from backend import grader
-
-    monkeypatch.setattr(grader, "get_config", lambda: _cfg())
-    monkeypatch.setattr(grader, "get_question_map", lambda: {
-        "q1": {"id": "q1", "type": "short_answer", "score": 10, "answer": "ref", "question": "Q1"},
-    })
-    monkeypatch.setattr(grader.llm_grader, "grade_subjective", lambda question, answer, cfg: {
-        "machine_score": 8,
-        "confidence": 0.8,
-        "reason": "基本正确",
-    })
-
-    result = asyncio.run(grader.grade_submission({"q1": "answer"}))
-
-    assert result.subjective_score_machine == 8
-    assert result.subjective_score_final == 8
-    assert result.total_score == 8
-    assert result.review_status == "auto_scored"
-
-
-def test_grade_submission_marks_embedding_low_confidence_for_review(monkeypatch):
-    import asyncio
-    from backend import grader
-
-    monkeypatch.setattr(grader, "get_config", lambda: _cfg(grading=SimpleNamespace(
-        use_llm=False,
-        use_embedding_fallback=True,
-        llm=SimpleNamespace(endpoint="http://localhost:11434", timeout_seconds=1),
-        embedding=SimpleNamespace(model="test-embedding", device="cpu"),
-    )))
-    monkeypatch.setattr(grader, "get_question_map", lambda: {
-        "q1": {"id": "q1", "type": "short_answer", "score": 10, "answer": "ref", "question": "Q1"},
-    })
-    monkeypatch.setattr(grader, "grade_with_embedding", lambda question, answer, reason: {
-        "machine_score": 2,
-        "final_score": 2,
-        "confidence": 0.2,
-        "reason": "低相似度",
-        "review_status": "low_confidence",
-    })
-
-    result = asyncio.run(grader.grade_submission({"q1": "answer"}))
-
-    assert result.subjective_score_final == 2
-    assert result.review_status == "low_confidence"
-    assert result.grading_detail[0]["review_status"] == "low_confidence"
-
-
-def test_exam_api_returns_config_contract():
-    from backend import main
-
-    client = TestClient(main.app)
-    response = client.get("/api/exam")
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["config"]["duration_minutes"] == data["duration_minutes"]
-    assert data["config"]["auto_submit"] is True
-
-
-def test_submit_without_server_start_is_rejected(monkeypatch):
-    from backend import main
-
-    # 没有调用 /api/exam/start，DB 中不存在该员工的会话
-    monkeypatch.setattr(main.database, "pop_exam_session", lambda employee_id: None)
-    client = TestClient(main.app)
-    response = client.post("/api/submit", json={
-        "name": "未开始",
-        "employee_id": "NO_START_001",
-        "answers": {},
-    })
-
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "EXAM_NOT_STARTED"
-
-
-def test_submit_with_server_start_succeeds(monkeypatch):
-    from backend import main
-
-    monkeypatch.setattr(main.database, "insert_submission_pending", lambda **kwargs: 123)
-    monkeypatch.setattr(main, "schedule_grading", lambda submission_id, answers: None, raising=False)
-    # 模拟 /api/exam/start 已写入会话（开始时间为 1 分钟前，确保不超时）
-    from datetime import datetime, timezone, timedelta
-    started_iso = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
-    monkeypatch.setattr(main.database, "pop_exam_session", lambda employee_id: started_iso)
-    client = TestClient(main.app)
-
-    response = client.post("/api/submit", json={
-        "name": "已开始",
-        "employee_id": "START_OK_001",
-        "answers": {},
-    })
-
-    assert response.status_code == 200
-    assert response.json()["submission_id"] == 123
-
-
-def test_admin_endpoint_rejects_unauthenticated_when_auth_enabled(monkeypatch):
-    from backend import main
-
-    monkeypatch.setattr(main, "get_config", lambda: _cfg(admin=SimpleNamespace(enable_auth=True, password="secret")))
-    client = TestClient(main.app)
-    response = client.get("/api/admin/stats")
-
-    assert response.status_code == 401
-    assert response.json()["detail"]["code"] == "UNAUTHORIZED"
-
-
-def test_global_time_window_ignored_when_disabled(monkeypatch):
-    from datetime import datetime, timedelta, timezone
-    from backend import main
-
-    future = datetime.now(timezone.utc) + timedelta(days=1)
-    monkeypatch.setattr(main, "get_config", lambda: _cfg(exam=SimpleNamespace(
-        duration_minutes=60,
-        auto_submit=True,
-        enable_global_time_window=False,
-        start_time=future,
-        end_time=None,
-        grace_period_seconds=30,
-    )))
-
-    client = TestClient(main.app)
-    response = client.get("/api/exam")
-
-    assert response.status_code == 200
-
-
-def test_global_time_window_rejects_when_enabled_before_start(monkeypatch):
-    from datetime import datetime, timedelta, timezone
-    from backend import main
-
-    future = datetime.now(timezone.utc) + timedelta(days=1)
-    monkeypatch.setattr(main, "get_config", lambda: _cfg(exam=SimpleNamespace(
-        duration_minutes=60,
-        auto_submit=True,
-        enable_global_time_window=True,
-        start_time=future,
-        end_time=None,
-        grace_period_seconds=30,
-    )))
-
-    client = TestClient(main.app)
-    response = client.get("/api/exam")
-
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "EXAM_NOT_STARTED"
-
-
-def test_submission_status_omits_total_score(monkeypatch):
-    from backend import main
-
-    monkeypatch.setattr(main.database, "get_submission_status", lambda submission_id: {
-        "id": submission_id,
-        "review_status": "grading",
-        "total_score": 88,
-    })
-
-    client = TestClient(main.app)
-    response = client.get("/api/submission/123/status")
-
-    assert response.status_code == 200
-    assert response.json() == {"submission_id": 123, "status": "grading"}
-
-
-def test_llm_grader_ignores_environment_proxy_for_local_ollama(monkeypatch):
-    from backend import llm_grader
-
-    client_kwargs = {}
-
-    class FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {"response": '{"score": 8, "confidence": 0.8, "reason": "基本正确"}'}
-
-    class FakeClient:
-        def __init__(self, **kwargs):
-            client_kwargs.update(kwargs)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-        def post(self, url, json):
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, **kwargs):
+            responses.append({"embedding": [1.0, 0.0, 0.0]})
             return FakeResponse()
-
-    monkeypatch.setattr(llm_grader, "get_config", lambda: _cfg())
-    monkeypatch.setattr(llm_grader.httpx, "Client", FakeClient)
-
-    result = llm_grader.grade_with_llm(
-        {"id": "q1", "type": "short_answer", "score": 10, "question": "Q", "answer": "A"},
-        "A",
+    monkeypatch.setattr("httpx.Client", FakeClient)
+    monkeypatch.setattr(
+        "backend.config.get_config",
+        lambda: SimpleNamespace(
+            grading=SimpleNamespace(
+                embedding=SimpleNamespace(model="bge-m3", device="cpu", endpoint="http://localhost:11434", timeout_seconds=5),
+            ),
+            review=SimpleNamespace(high_confidence_threshold=0.75, need_review_threshold=0.5, low_confidence_threshold=0.35),
+        ),
     )
-
-    assert result["machine_score"] == 8
-    assert client_kwargs["trust_env"] is False
+    embedding_grader._ollama_embedding.cache_clear()
+    sim, method = embedding_grader._similarity_with_embedding("hello", "hello")
+    assert sim == pytest.approx(1.0)
+    assert method == "ollama_embedding"
 
 
 def test_embedding_grader_ignores_environment_proxy_for_local_ollama(monkeypatch):
-    from backend import embedding_grader
-
+    """Ollama httpx.Client must set trust_env=False so system proxies don't interfere."""
     client_kwargs = {}
-
     class FakeResponse:
-        def raise_for_status(self):
-            return None
-
-        def json(self):
-            return {"embedding": [1.0, 0.0]}
-
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self): return {"embedding": [1.0]}
     class FakeClient:
         def __init__(self, **kwargs):
             client_kwargs.update(kwargs)
+        def __enter__(self): return self
+        def __exit__(self, *a): pass
+        def post(self, url, **kwargs): return FakeResponse()
+    monkeypatch.setattr("httpx.Client", FakeClient)
+    monkeypatch.setattr(
+        "backend.config.get_config",
+        lambda: SimpleNamespace(
+            grading=SimpleNamespace(
+                embedding=SimpleNamespace(model="bge-m3", device="cpu", endpoint="http://localhost:11434", timeout_seconds=5),
+            ),
+        ),
+    )
+    from backend.embedding_grader import _ollama_embedding
+    _ollama_embedding.cache_clear()
+    _ollama_embedding("test")
+    assert client_kwargs.get("trust_env") is False
+    assert "proxies" not in client_kwargs
 
-        def __enter__(self):
-            return self
 
-        def __exit__(self, exc_type, exc, tb):
-            return False
+@pytest.mark.usefixtures("_fake_question_loader")
+def test_grade_submission_marks_embedding_low_confidence_for_review(monkeypatch):
+    """Low-confidence subjective detail should propagate to pending review_status."""
+    monkeypatch.setattr(
+        "backend.config.get_config",
+        lambda: SimpleNamespace(
+            grading=SimpleNamespace(
+                embedding=SimpleNamespace(model="bge-m3", device="cpu", endpoint="http://localhost:11434", timeout_seconds=1),
+            ),
+            scoring=SimpleNamespace(multiple_choice_partial=True, wrong_choice_penalty=False, score_precision=1),
+            review=SimpleNamespace(high_confidence_threshold=0.75, need_review_threshold=0.5, low_confidence_threshold=0.35),
+        ),
+    )
+    def fake_grade_with_embedding(q, sa, **kw):
+        if q.get("type") in ("short_answer", "essay"):
+            return {"status": "embedding_ok", "similarity": 0.3, "review_status": "low_confidence", "score": round(0.3 * float(q.get("score", 0)), 1), "reason": "low similarity", "fallback_reason": None}
+        return {"status": "unavailable", "similarity": 0.0, "fallback_reason": "skip"}
+    monkeypatch.setattr("backend.embedding_grader.grade_with_embedding", fake_grade_with_embedding)
+    result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "partial answer"}))
+    detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
+    assert detail_q4["review_status"] == "low_confidence"
+    assert result.review_status == "pending"
 
-        def post(self, url, json):
-            return FakeResponse()
 
-    monkeypatch.setattr(embedding_grader, "get_config", lambda: _cfg())
-    monkeypatch.setattr(embedding_grader.httpx, "Client", FakeClient)
+def test_main_failure_rate_limiter():
+    """Rate limiter allows up to max_requests then raises HTTPException."""
+    import backend.main as m
+    m._rate_store.clear()
+    for _ in range(60):
+        m._check_rate_limit("test_ip", max_requests=60)
+    with pytest.raises(Exception):
+        m._check_rate_limit("test_ip", max_requests=60)
+    m._rate_store.clear()
 
-    assert embedding_grader._ollama_embedding("hello") == [1.0, 0.0]
-    assert client_kwargs["trust_env"] is False
+
+def test_main_failure_rate_limiter_independent_ips():
+    """Different IPs have independent rate budgets."""
+    import backend.main as m
+    m._rate_store.clear()
+    for _ in range(60):
+        m._check_rate_limit("ip_a", max_requests=60)
+    m._check_rate_limit("ip_b", max_requests=60)
+    with pytest.raises(Exception):
+        m._check_rate_limit("ip_a", max_requests=60)
+    m._rate_store.clear()

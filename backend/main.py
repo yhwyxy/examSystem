@@ -177,7 +177,7 @@ class ReviewRequest(BaseModel):
 
 
 # 评分并发上限：防止「提交即新建线程 + 新建事件循环」导致
-# 百人并发时 OOM / 事件循环爆炸 / LLM 服务被打满。
+# 百人并发时 OOM / 事件循环爆炸 / Embedding 服务被打满。
 # 单进程内所有评分共享一个有界线程池，超出时提交排队等待。
 _GRADING_MAX_WORKERS = 4
 _grading_executor: ThreadPoolExecutor | None = None

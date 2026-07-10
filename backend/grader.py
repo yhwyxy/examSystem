@@ -1,112 +1,69 @@
-"""判分主入口。
-
-返回结构统一使用 GradingResult dataclass，避免裸 tuple 导致可读性差、易出错。
-"""
-
+"""判分总入口：编排客观题和主观题。"""
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from fastapi.concurrency import run_in_threadpool
+from . import embedding_grader, objective_grader
+from .question_loader import SUBJECTIVE_TYPES
 
-from . import database, llm_grader, objective_grader
-from .config import get_config
-from .embedding_grader import grade_with_embedding
-from .question_loader import get_question_map, is_objective
-
-
-@dataclass(frozen=True, slots=True)
-class GradingResult:
-    """单条判题结果。"""
-    question_id: str
-    question_type: str
-    max_score: float
-    score: float
-    is_correct: bool | None = None
-    grading_method: str = "objective"
-    reason: str = ""
-    confidence: float | None = None
-    low_confidence: bool = False
-    raw_scores: dict[str, float] | None = None
+logger = logging.getLogger(__name__)
 
 
 @dataclass
-class SubmissionGradingResult:
-    """整份试卷的判分结果。"""
+class GradingResult:
+    """判分结果数据结构。"""
     objective_score: float = 0.0
     subjective_score_machine: float = 0.0
     subjective_score_final: float = 0.0
     total_score: float = 0.0
-    review_status: str = "auto_scored"
+    review_status: str = "pending"
     grading_detail: list[dict[str, Any]] = field(default_factory=list)
 
 
-def _score_value(detail: dict[str, Any], *keys: str) -> float:
-    for key in keys:
-        value = detail.get(key)
-        if value is not None:
-            try:
-                return float(value)
-            except (TypeError, ValueError):
-                continue
-    return 0.0
+# ---------------------------------------------------------------------------
+# 主观题判分（Embedding 为主，关键词回退）
+# ---------------------------------------------------------------------------
 
-
-def _review_status_from_confidence(confidence: Any, cfg: Any) -> str:
-    try:
-        value = float(confidence)
-    except (TypeError, ValueError):
-        return "need_review"
-    # 三阈值四段语义：
-    #   >= high_confidence_threshold      → auto_scored（高置信，自动采信）
-    #   >= need_review_threshold          → need_review（中等，进人工复核队列）
-    #   >= low_confidence_threshold       → low_confidence（低置信，标记重点关注）
-    #   <  low_confidence_threshold       → low_confidence
-    if value >= cfg.review.high_confidence_threshold:
-        return "auto_scored"
-    if value >= cfg.review.need_review_threshold:
-        return "need_review"
-    return "low_confidence"
-
-
-def _subjective_detail_from_llm(
+async def _run_subjective_grading(
     question: dict[str, Any],
     student_answer: str,
-    llm_result: dict[str, Any],
-    cfg: Any,
 ) -> dict[str, Any]:
-    score_raw = llm_result.get("score", llm_result.get("machine_score"))
-    try:
-        score = round(float(score_raw), 2)
-    except (TypeError, ValueError):
-        score = 0.0
+    """对单道主观题判分，返回 grading_detail 条目。"""
 
     max_score = float(question.get("score", 0))
-    if score < 0:
-        score = 0.0
-    if score > max_score:
-        score = max_score
-    confidence = llm_result.get("confidence", 0.0)
-    review_status = _review_status_from_confidence(confidence, cfg)
+    qid = question.get("id", "?")
 
+    emb = embedding_grader.grade_with_embedding(question, student_answer)
+
+    if emb["status"] == "embedding_ok":
+        return _subjective_detail_from_embedding(question, student_answer, emb)
+
+    # Embedding 不可用，回退关键词相似度
+    logger.info("Embedding 不可用，回退关键词判分: %s (reason=%s)", qid, emb.get("fallback_reason"))
+    from .utils import keyword_similarity
+
+    ref = question.get("answer", "")
+    sim = keyword_similarity(student_answer, ref)
+    score = round(sim * max_score, 2)
     return {
-        "question_id": question["id"],
-        "type": question.get("type", "unknown"),
-        "max_score": max_score,
-        "score": score,
+        "question_id": qid,
+        "type": question.get("type"),
+        "question": question.get("question", ""),
+        "student_answer": student_answer,
+        "reference_answer": ref,
+        "scoring_rubric": question.get("scoring_rubric"),
         "machine_score": score,
         "final_score": score,
-        "question": question.get("question", question.get("text", "")),
-        "student_answer": student_answer,
-        "reference_answer": question.get("answer", ""),
-        "grading_method": "llm",
-        "reason": llm_result.get("reason", ""),
-        "confidence": confidence,
-        "low_confidence": review_status in {"need_review", "low_confidence"},
-        "review_status": review_status,
-        "grading_status": "pending" if review_status in {"need_review", "low_confidence"} else "auto_scored",
-        "raw_scores": llm_result.get("raw_scores"),
+        "max_score": max_score,
+        "grading_method": "keyword",
+        "similarity": round(sim, 4),
+        "confidence": None,
+        "reason": None,
+        "fallback_reason": f"Embedding 不可用: {emb.get('fallback_reason', '')}",
+        "review_status": "need_review",
+        "low_confidence": False,
     }
 
 
@@ -116,105 +73,92 @@ def _subjective_detail_from_embedding(
     embedding_result: dict[str, Any],
 ) -> dict[str, Any]:
     max_score = float(question.get("score", 0))
-    safe_score = max(0.0, min(embedding_result.get("final_score", 0), max_score))
-    review_status = embedding_result.get("review_status") or "need_review"
-    low_confidence = review_status in {"need_review", "low_confidence", "pending"}
+    sim = float(embedding_result.get("similarity", 0.0))
+    raw = sim * max_score
+    from .utils import safe_score
+    score = safe_score(raw, max_score)
+    low = embedding_result.get("review_status") == "low_confidence"
     return {
-        "question_id": question["id"],
-        "type": question.get("type", "unknown"),
-        "max_score": max_score,
-        "score": safe_score,
-        "machine_score": max(0.0, min(embedding_result.get("machine_score", safe_score), max_score)),
-        "final_score": safe_score,
-        "question": question.get("question", question.get("text", "")),
+        "question_id": question.get("id"),
+        "type": question.get("type"),
+        "question": question.get("question", ""),
         "student_answer": student_answer,
         "reference_answer": question.get("answer", ""),
+        "scoring_rubric": question.get("scoring_rubric"),
+        "machine_score": score,
+        "final_score": score,
+        "max_score": max_score,
         "grading_method": "embedding",
-        "reason": embedding_result.get("reason", ""),
-        "confidence": embedding_result.get("confidence"),
-        "low_confidence": low_confidence,
-        "review_status": "need_review" if review_status == "pending" else review_status,
-        "grading_status": "pending" if low_confidence else "auto_scored",
-        "raw_scores": None,
+        "similarity": round(sim, 4),
+        "confidence": round(sim, 4),
+        "reason": None,
+        "fallback_reason": embedding_result.get("fallback_reason"),
+        "review_status": embedding_result.get("review_status", "pending"),
+        "low_confidence": low,
     }
 
 
-async def _run_subjective_grading(
+# ---------------------------------------------------------------------------
+# 逐题判分
+# ---------------------------------------------------------------------------
+
+async def grade_question(
     question: dict[str, Any],
     student_answer: Any,
-    cfg: Any,
 ) -> dict[str, Any]:
-    text_answer = student_answer if isinstance(student_answer, str) else str(student_answer or "")
-
-    llm_result = await run_in_threadpool(
-        llm_grader.grade_subjective, question, text_answer, cfg
-    ) if cfg.grading.use_llm else None
-
-    if llm_result is not None:
-        detail = _subjective_detail_from_llm(question, text_answer, llm_result, cfg)
-    else:
-        fallback_reason = "llm_unavailable_or_invalid" if cfg.grading.use_llm else "llm_disabled"
-        embedding_result = grade_with_embedding(question, text_answer, fallback_reason)
-        detail = _subjective_detail_from_embedding(question, text_answer, embedding_result)
-        if fallback_reason == "llm_unavailable_or_invalid":
-            detail["reason"] = f"{detail['reason']}（LLM 不可用，已回退到嵌入评分）".strip()
-
-    return detail
+    """对单道题判分，返回该题的 grading_detail 条目。"""
+    qtype = question.get("type")
+    if qtype in SUBJECTIVE_TYPES:
+        return await _run_subjective_grading(question, str(student_answer or ""))
+    return objective_grader.grade_objective(question, student_answer)
 
 
-def _aggregate_review_status(
-    pending_subjective_ids: list[str],
-    low_confidence_count: int,
-) -> str:
-    """根据待复核主观题数量汇总整体 review_status，保持原四段语义。"""
-    if pending_subjective_ids:
-        return "low_confidence" if low_confidence_count else "need_review"
-    if low_confidence_count > 0:
-        return "low_confidence"
-    return "auto_scored"
+# ---------------------------------------------------------------------------
+# 汇总评分
+# ---------------------------------------------------------------------------
+
+def aggregate_review_status(details: list[dict[str, Any]]) -> str:
+    """汇总复核状态（兼容新旧数据）。"""
+    if not details:
+        return "pending"
+    for d in details:
+        rs = d.get("review_status", "")
+        if rs != "reviewed":
+            return "pending"
+    return "reviewed"
 
 
-async def grade_submission(answers: dict[str, Any]) -> SubmissionGradingResult:
-    cfg = get_config()
-    questions = get_question_map()
+async def grade_submission(answers: dict[str, Any]) -> GradingResult:
+    """完整判分入口，返回 GradingResult。"""
+    from .question_loader import load_questions
+
+    data = load_questions()
+    questions = data.get("questions", [])
+    q_map = {q["id"]: q for q in questions}
 
     details: list[dict[str, Any]] = []
-    objective_score = 0.0
-    subjective_score_machine = 0.0
-    pending_subjective_ids: list[str] = []
-    low_confidence_count = 0
+    obj_score = 0.0
+    subj_machine = 0.0
+    subj_final = 0.0
 
-    for qid, question in questions.items():
+    for qid, q in q_map.items():
         student_answer = answers.get(qid)
+        detail = await grade_question(q, student_answer)
+        details.append(detail)
 
-        if is_objective(question):
-            detail = objective_grader.grade_objective(question, student_answer)
-            details.append(detail)
-            objective_score += _score_value(detail, "final_score", "score", "machine_score")
+        if q["type"] not in SUBJECTIVE_TYPES:
+            obj_score += float(detail.get("final_score", 0))
         else:
-            detail = await _run_subjective_grading(question, student_answer, cfg)
-            details.append(detail)
-            subjective_score_machine += _score_value(detail, "machine_score", "score", "final_score")
-            review_status = detail.get("review_status")
-            if review_status == "low_confidence":
-                low_confidence_count += 1
-                pending_subjective_ids.append(qid)
-            elif review_status in {"need_review", "pending"} or detail.get("low_confidence"):
-                pending_subjective_ids.append(qid)
+            subj_machine += float(detail.get("machine_score", 0))
+            subj_final += float(detail.get("final_score", 0))
 
-    subjective_score_final = sum(
-        _score_value(d, "final_score", "score", "machine_score")
-        for d in details
-        if not is_objective({"type": d.get("type")})
-    )
-    review_status = _aggregate_review_status(pending_subjective_ids, low_confidence_count)
+    review_status = aggregate_review_status(details)
 
-    total_score = objective_score + subjective_score_final
-    return SubmissionGradingResult(
-        objective_score=objective_score,
-        subjective_score_machine=subjective_score_machine,
-        subjective_score_final=subjective_score_final,
-        total_score=total_score,
+    return GradingResult(
+        objective_score=round(obj_score, 6),
+        subjective_score_machine=round(subj_machine, 6),
+        subjective_score_final=round(subj_final, 6),
+        total_score=round(obj_score + subj_final, 6),
         review_status=review_status,
         grading_detail=details,
     )

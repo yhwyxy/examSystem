@@ -1,1 +1,70 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>企业考试</title><link rel="stylesheet" href="/css/style.css"></head><body><div class="container"><div class="card header"><div><h1 id="title">企业考试</h1><p id="desc" class="muted"></p></div><div class="timer" id="timer">--:--</div></div><div class="card" id="login"><h2>考生信息</h2><div class="grid"><label>姓名<input id="name" type="text" placeholder="请输入姓名"></label><label>工号<input id="employee_id" type="text" placeholder="请输入工号"></label><label>部门<input id="department" type="text" placeholder="可选"></label></div><p class="muted">点击开始后计时，提交后不展示分数，请等待管理员复核。</p><button class="btn" id="startBtn">开始答题</button></div><form class="card" id="examForm" style="display:none"><div id="questions"></div><button class="btn" type="submit" id="submitBtn">提交试卷</button></form><div class="card" id="grading" style="display:none;text-align:center;padding:40px 20px"><div class="spinner" style="margin:0 auto 20px;width:48px;height:48px;border:4px solid #e5e7eb;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite"></div><h2 style="color:#3b82f6">试卷已提交，系统正在评分中…</h2><p style="color:#64748b;margin-top:10px">请稍候，评分完成后将自动显示结果</p><p id="grading-hint" style="color:#94a3b8;margin-top:6px;font-size:0.9em"></p><style>@keyframes spin{to{transform:rotate(360deg)}}</style></div><div class="card" id="result" style="display:none"><h2 style="color:#3b82f6;text-align:center">🎉 考试完成</h2><div id="resultContent"></div><p class="muted" style="text-align:center;margin-top:15px">如有疑问请联系系统管理员 | <a href="/admin">管理后台</a></p></div></div><div class="toast" id="toast"></div><script src="/js/exam.js"></script></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>企业考试</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="exam-page">
+  <main class="exam-shell">
+    <section class="exam-hero">
+      <div class="hero-panel">
+        <p class="eyebrow">ONLINE EXAM</p>
+        <h1 id="title">企业考试</h1>
+        <p id="desc" class="muted"></p>
+      </div>
+      <div class="timer-card" aria-live="polite">
+        <div>
+          <div class="timer-label">剩余时间</div>
+          <div class="timer" id="timer">--:--</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel exam-intake" id="login">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">CANDIDATE</p>
+          <h2>考生信息</h2>
+        </div>
+      </div>
+      <div class="form-grid">
+        <label>
+          姓名
+          <input id="name" type="text" placeholder="请输入姓名" autocomplete="name">
+        </label>
+        <label>
+          工号
+          <input id="employee_id" type="text" placeholder="请输入工号" autocomplete="off">
+        </label>
+        <label>
+          部门
+          <input id="department" type="text" placeholder="可选" autocomplete="organization">
+        </label>
+      </div>
+      <p class="muted form-note">点击开始后计时，提交后不展示分数，请等待管理员复核。</p>
+      <button class="btn" id="startBtn" type="button">开始答题</button>
+    </section>
+
+    <form class="panel exam-form" id="examForm" style="display:none">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">QUESTIONS</p>
+          <h2>试题</h2>
+        </div>
+        <button class="btn" type="submit" id="submitBtn">提交试卷</button>
+      </div>
+      <div id="questions"></div>
+    </form>
+
+    <section class="panel result-panel" id="successPanel" style="display:none">
+      <div id="resultContent" class="result-content"></div>
+      <p class="muted form-note">如有疑问请联系系统管理员 | <a href="/admin">管理后台</a></p>
+    </section>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="/js/exam.js"></script>
+</body>
+</html>
