@@ -1,7 +1,7 @@
 """Tests for the core grading logic and the full submission lifecycle.
 
 This file tests the integrated behavior of grade_submission() across all
-question types and grader modules (objective + subjective via embedding).
+question types and grader modules (objective + subjective via subjective-scoring).
 """
 from __future__ import annotations
 
@@ -13,6 +13,37 @@ import pytest
 
 import backend.grader as grader
 from backend.grader import grade_question, grade_submission
+
+import backend.grader as grader_mod
+
+
+def _fake_scoring_result(score: float, confidence: float, review_level: str = "auto_pass"):
+    """Build a ScoringResult-like object for grader integration tests."""
+    from backend.scoring import ReviewLevel, ScoringMode, ScoringResult
+
+    level = ReviewLevel(review_level)
+    return ScoringResult(
+        question_id="q4",
+        score=score,
+        max_score=10,
+        scoring_mode=ScoringMode.TEXT,
+        track="TextRerankerScorer",
+        confidence=confidence,
+        need_manual_review=level is not ReviewLevel.AUTO_PASS,
+        review_level=level,
+        matched_points=[],
+        missed_points=[],
+        warnings=[],
+    )
+
+
+class _FakeSubjectiveService:
+    def __init__(self, result_factory):
+        self._factory = result_factory
+
+    def score(self, request, **kwargs):
+        return self._factory(request)
+
 
 
 # ---------------------------------------------------------------------------
@@ -99,43 +130,48 @@ class TestObjectiveGrading:
 # ---------------------------------------------------------------------------
 
 @pytest.mark.usefixtures("_fake_question_loader")
-class TestSubjectiveEmbeddingGrading:
-    def test_embedding_grades_subjective_short_answer(self, monkeypatch):
-        monkeypatch.setattr(
-            "backend.embedding_grader.grade_with_embedding",
-            lambda q, sa, **kw: {
-                "status": "embedding_ok", "similarity": 0.85, "review_status": "high_confidence",
-                "score": round(0.85 * float(q.get("score", 0)), 1), "fallback_reason": None,
-            },
+class TestSubjectiveScoringIntegration:
+    def setup_method(self):
+        grader_mod.set_subjective_service(None)
+
+    def teardown_method(self):
+        grader_mod.set_subjective_service(None)
+
+    def test_subjective_service_grades_short_answer(self, monkeypatch):
+        svc = _FakeSubjectiveService(
+            lambda req: _fake_scoring_result(score=8.5, confidence=0.85, review_level="auto_pass")
         )
+        grader_mod.set_subjective_service(svc)
         answers = {"q1": "B", "q2": ["A", "C", "D"], "q3": False, "q4": "RESTful APIs use resources and HTTP methods."}
         result = asyncio.get_event_loop().run_until_complete(grade_submission(answers))
-        assert result.subjective_score_machine > 0
+        assert result.subjective_score_machine == 8.5
         assert result.subjective_score_final == result.subjective_score_machine
         assert result.total_score == result.objective_score + result.subjective_score_final
+        detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
+        assert detail_q4["grading_method"].startswith("subjective_scoring:")
+        assert detail_q4["review_status"] == "high_confidence"
 
-    def test_embedding_review_status_is_propagated(self, monkeypatch):
-        monkeypatch.setattr(
-            "backend.embedding_grader.grade_with_embedding",
-            lambda q, sa, **kw: {
-                "status": "embedding_ok", "similarity": 0.6, "review_status": "need_review",
-                "score": round(0.6 * float(q.get("score", 0)), 1), "fallback_reason": None,
-            },
+    def test_review_status_is_propagated(self, monkeypatch):
+        svc = _FakeSubjectiveService(
+            lambda req: _fake_scoring_result(score=6.0, confidence=0.72, review_level="suggested_review")
         )
+        grader_mod.set_subjective_service(svc)
         result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "partial answer"}))
         detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
         assert detail_q4["review_status"] == "need_review"
         assert result.review_status == "pending"
 
-    def test_keyword_fallback_when_embedding_unavailable(self, monkeypatch):
-        monkeypatch.setattr(
-            "backend.embedding_grader.grade_with_embedding",
-            lambda q, sa, **kw: {"status": "unavailable", "similarity": 0.0, "fallback_reason": "no ollama"},
-        )
+    def test_service_error_marks_need_review(self, monkeypatch):
+        class Boom:
+            def score(self, request, **kwargs):
+                raise RuntimeError("boom")
+
+        grader_mod.set_subjective_service(Boom())
         result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "resources and HTTP methods"}))
         detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
-        assert detail_q4["grading_method"] == "keyword"
-        assert detail_q4["machine_score"] > 0
+        assert detail_q4["grading_method"] == "subjective_scoring:error"
+        assert detail_q4["machine_score"] == 0
+        assert detail_q4["review_status"] == "need_review"
 
 
 # ---------------------------------------------------------------------------
@@ -275,157 +311,35 @@ def test_review_thresholds_are_configurable():
 @pytest.mark.usefixtures("_fake_question_loader")
 def test_grade_submission_aggregates_objective_final_scores(monkeypatch):
     """Ensure objective_score + subjective_score_final == total_score."""
-    monkeypatch.setattr(
-        "backend.embedding_grader.grade_with_embedding",
-        lambda q, sa, **kw: {
-            "status": "embedding_ok", "similarity": 0.5, "review_status": "need_review",
-            "score": round(0.5 * float(q.get("score", 0)), 1), "fallback_reason": None,
-        },
+    grader_mod.set_subjective_service(
+        _FakeSubjectiveService(
+            lambda req: _fake_scoring_result(score=5.0, confidence=0.5, review_level="suggested_review")
+        )
     )
-    answers = {"q1": "B", "q2": ["A", "C", "D"], "q3": False, "q4": "some answer"}
-    result = asyncio.get_event_loop().run_until_complete(grade_submission(answers))
-    assert abs(result.total_score - (result.objective_score + result.subjective_score_final)) < 0.01
+    try:
+        answers = {"q1": "B", "q2": ["A", "C", "D"], "q3": False, "q4": "some answer"}
+        result = asyncio.get_event_loop().run_until_complete(grade_submission(answers))
+        assert abs(result.total_score - (result.objective_score + result.subjective_score_final)) < 0.01
+    finally:
+        grader_mod.set_subjective_service(None)
 
-
-# ---------------------------------------------------------------------------
-# Embedding grader: similarity edge cases
-# ---------------------------------------------------------------------------
-
-def test_embedding_grader_accepts_generic_ollama_endpoint(monkeypatch):
-    """Ensure embedding_grader accepts a generic Ollama endpoint without a trailing slash."""
-    responses = []
-    class FakeResponse:
-        status_code = 200
-        def raise_for_status(self): pass
-        def json(self):
-            return responses.pop(0)
-    class FakeClient:
-        def __init__(self, **kwargs):
-            pass
-        def __enter__(self):
-            return self
-        def __exit__(self, *a):
-            pass
-        def post(self, url, **kwargs):
-            responses.append({"embedding": [1.0, 0.0, 0.0]})
-            return FakeResponse()
-    monkeypatch.setattr("httpx.Client", FakeClient)
-    from backend.embedding_grader import _ollama_embedding
-    _ollama_embedding.cache_clear()
-    emb = _ollama_embedding("hello")
-    assert emb == [1.0, 0.0, 0.0]
-
-
-def test_embedding_grader_reuses_cached_model(monkeypatch):
-    """sentence-transformers loader is called at most once across multiple similarity() calls."""
-    from backend import embedding_grader
-    import numpy as np
-    call_count = [0]
-    def fake_load():
-        call_count[0] += 1
-        class FakeModel:
-            def encode(self, texts, **kw):
-                return np.array([[1.0, 0.0], [0.0, 1.0]])
-        return FakeModel()
-    # Clear any cached values before monkeypatching
-    embedding_grader._load_model.cache_clear()
-    embedding_grader._ollama_embedding.cache_clear()
-    monkeypatch.setattr(embedding_grader, "_load_model", fake_load)
-    monkeypatch.setattr(
-        "backend.config.get_config",
-        lambda: SimpleNamespace(
-            grading=SimpleNamespace(embedding=SimpleNamespace(model="test-model", device="cpu", endpoint="", timeout_seconds=10)),
-            review=SimpleNamespace(high_confidence_threshold=0.75, need_review_threshold=0.5, low_confidence_threshold=0.35),
-        ),
-    )
-    embedding_grader._similarity_sentence_transformers("a", "b")
-    embedding_grader._similarity_sentence_transformers("c", "d")
-    assert call_count[0] == 2  # Called each time since we replaced _load_model itself
-
-
-def test_similarity_prefers_ollama_embedding_when_available(monkeypatch):
-    """_similarity_with_embedding() should use Ollama when endpoint is configured, skipping local model."""
-    from backend import embedding_grader
-    responses = []
-    class FakeResponse:
-        status_code = 200
-        def raise_for_status(self): pass
-        def json(self):
-            return responses.pop(0)
-    class FakeClient:
-        def __init__(self, **kwargs): pass
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
-        def post(self, url, **kwargs):
-            responses.append({"embedding": [1.0, 0.0, 0.0]})
-            return FakeResponse()
-    monkeypatch.setattr("httpx.Client", FakeClient)
-    monkeypatch.setattr(
-        "backend.config.get_config",
-        lambda: SimpleNamespace(
-            grading=SimpleNamespace(
-                embedding=SimpleNamespace(model="bge-m3", device="cpu", endpoint="http://localhost:11434", timeout_seconds=5),
-            ),
-            review=SimpleNamespace(high_confidence_threshold=0.75, need_review_threshold=0.5, low_confidence_threshold=0.35),
-        ),
-    )
-    embedding_grader._ollama_embedding.cache_clear()
-    sim, method = embedding_grader._similarity_with_embedding("hello", "hello")
-    assert sim == pytest.approx(1.0)
-    assert method == "ollama_embedding"
-
-
-def test_embedding_grader_ignores_environment_proxy_for_local_ollama(monkeypatch):
-    """Ollama httpx.Client must set trust_env=False so system proxies don't interfere."""
-    client_kwargs = {}
-    class FakeResponse:
-        status_code = 200
-        def raise_for_status(self): pass
-        def json(self): return {"embedding": [1.0]}
-    class FakeClient:
-        def __init__(self, **kwargs):
-            client_kwargs.update(kwargs)
-        def __enter__(self): return self
-        def __exit__(self, *a): pass
-        def post(self, url, **kwargs): return FakeResponse()
-    monkeypatch.setattr("httpx.Client", FakeClient)
-    monkeypatch.setattr(
-        "backend.config.get_config",
-        lambda: SimpleNamespace(
-            grading=SimpleNamespace(
-                embedding=SimpleNamespace(model="bge-m3", device="cpu", endpoint="http://localhost:11434", timeout_seconds=5),
-            ),
-        ),
-    )
-    from backend.embedding_grader import _ollama_embedding
-    _ollama_embedding.cache_clear()
-    _ollama_embedding("test")
-    assert client_kwargs.get("trust_env") is False
-    assert "proxies" not in client_kwargs
 
 
 @pytest.mark.usefixtures("_fake_question_loader")
-def test_grade_submission_marks_embedding_low_confidence_for_review(monkeypatch):
+def test_grade_submission_marks_low_confidence_for_review(monkeypatch):
     """Low-confidence subjective detail should propagate to pending review_status."""
-    monkeypatch.setattr(
-        "backend.config.get_config",
-        lambda: SimpleNamespace(
-            grading=SimpleNamespace(
-                embedding=SimpleNamespace(model="bge-m3", device="cpu", endpoint="http://localhost:11434", timeout_seconds=1),
-            ),
-            scoring=SimpleNamespace(multiple_choice_partial=True, wrong_choice_penalty=False, score_precision=1),
-            review=SimpleNamespace(high_confidence_threshold=0.75, need_review_threshold=0.5, low_confidence_threshold=0.35),
-        ),
+    grader_mod.set_subjective_service(
+        _FakeSubjectiveService(
+            lambda req: _fake_scoring_result(score=3.0, confidence=0.3, review_level="manual_required")
+        )
     )
-    def fake_grade_with_embedding(q, sa, **kw):
-        if q.get("type") in ("short_answer", "essay"):
-            return {"status": "embedding_ok", "similarity": 0.3, "review_status": "low_confidence", "score": round(0.3 * float(q.get("score", 0)), 1), "reason": "low similarity", "fallback_reason": None}
-        return {"status": "unavailable", "similarity": 0.0, "fallback_reason": "skip"}
-    monkeypatch.setattr("backend.embedding_grader.grade_with_embedding", fake_grade_with_embedding)
-    result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "partial answer"}))
-    detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
-    assert detail_q4["review_status"] == "low_confidence"
-    assert result.review_status == "pending"
+    try:
+        result = asyncio.get_event_loop().run_until_complete(grade_submission({"q4": "partial answer"}))
+        detail_q4 = next(d for d in result.grading_detail if d["question_id"] == "q4")
+        assert detail_q4["review_status"] == "low_confidence"
+        assert result.review_status == "pending"
+    finally:
+        grader_mod.set_subjective_service(None)
 
 
 def test_main_failure_rate_limiter():
@@ -449,3 +363,55 @@ def test_main_failure_rate_limiter_independent_ips():
     with pytest.raises(Exception):
         m._check_rate_limit("ip_a", max_requests=60)
     m._rate_store.clear()
+
+
+# ---------------------------------------------------------------------------
+# grader ↔ subjective-scoring 映射
+# ---------------------------------------------------------------------------
+
+def test_parse_scoring_rubric_splits_points():
+    from backend.grader import parse_scoring_rubric
+    points = parse_scoring_rubric(
+        "资源导向 3 分；HTTP 方法 2 分；无状态 2 分；统一接口和状态码 2 分；缓存 1 分。",
+        max_score=10,
+    )
+    assert len(points) == 5
+    assert points[0]["text"] == "资源导向"
+    assert points[0]["score"] == 3
+    assert abs(sum(p["score"] for p in points) - 10) < 1e-6
+
+
+def test_build_scoring_request_from_question():
+    from backend.grader import build_scoring_request
+    q = {
+        "id": "q4",
+        "type": "short_answer",
+        "question": "Explain REST",
+        "answer": "resources and HTTP methods",
+        "score": 10,
+        "scoring_rubric": "资源导向 5 分；HTTP 方法 5 分。",
+    }
+    req = build_scoring_request(q, "student text")
+    assert req.question_id == "q4"
+    assert req.scoring_mode.value == "text"
+    assert len(req.scoring_points) == 2
+    assert req.student_answer == "student text"
+
+
+
+@pytest.mark.usefixtures("_fake_question_loader")
+def test_real_subjective_service_smoke():
+    """真实 SubjectiveScoringService（无模型）可跑通 short_answer。"""
+    from backend.scoring import SubjectiveScoringService
+    grader_mod.set_subjective_service(SubjectiveScoringService(allow_model_load=False))
+    try:
+        result = asyncio.get_event_loop().run_until_complete(
+            grade_submission({"q4": "资源导向，使用 HTTP 方法，无状态，统一接口，支持缓存"})
+        )
+        detail = next(d for d in result.grading_detail if d["question_id"] == "q4")
+        assert detail["grading_method"].startswith("subjective_scoring:")
+        assert detail["max_score"] == 10
+        assert "matched_points" in detail
+        assert detail["machine_score"] >= 0
+    finally:
+        grader_mod.set_subjective_service(None)

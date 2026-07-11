@@ -24,13 +24,9 @@ review:
   need_review_threshold: 0.5
   low_confidence_threshold: 0.35
 
-# 判分配置（仅使用 Embedding 模型）
+# 判分流程：主观题由 subjective-scoring 处理（模型参数见该服务 / 环境变量）
 grading:
   sync_grading: true
-  # Ollama Embedding 配置
-  embedding:
-    model: "bge-m3"          # Ollama embedding 模型名
-    device: "cpu"
 
 admin:
   enable_auth: false

@@ -1,14 +1,38 @@
-"""判分总入口：编排客观题和主观题。"""
+"""判分总入口：编排客观题和主观题。
+
+主观题通过独立库 subjective-scoring（SubjectiveScoringService）评分；
+客观题仍由 objective_grader 处理。
+"""
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
-from . import embedding_grader, objective_grader
+from . import objective_grader
+from .config import get_config
 from .question_loader import SUBJECTIVE_TYPES
 
 logger = logging.getLogger(__name__)
+
+try:
+    from subjective_scoring import (
+        ReviewLevel,
+        ScoringMode,
+        ScoringRequest,
+        ScoringResult,
+        SubjectiveScoringService,
+    )
+except ImportError:  # pragma: no cover - 兼容层
+    from backend.scoring import (
+        ReviewLevel,
+        ScoringMode,
+        ScoringRequest,
+        ScoringResult,
+        SubjectiveScoringService,
+    )
 
 
 @dataclass
@@ -23,61 +47,183 @@ class GradingResult:
 
 
 # ---------------------------------------------------------------------------
-# 主观题判分（Embedding 为主，关键词回退）
+# 主观题服务（懒加载单例，测试可替换）
 # ---------------------------------------------------------------------------
 
-async def _run_subjective_grading(
+_subjective_service: SubjectiveScoringService | None = None
+
+
+def get_subjective_service() -> SubjectiveScoringService:
+    """获取主观题评分服务单例。"""
+    global _subjective_service
+    if _subjective_service is None:
+        # 默认允许加载 CrossEncoder；无 semantic 依赖时库内回退词法相似度
+        _subjective_service = SubjectiveScoringService(allow_model_load=True)
+    return _subjective_service
+
+
+def set_subjective_service(service: SubjectiveScoringService | None) -> None:
+    """测试/运维注入自定义服务；传 None 恢复懒加载默认。"""
+    global _subjective_service
+    _subjective_service = service
+
+
+# ---------------------------------------------------------------------------
+# 题库字段 → ScoringRequest
+# ---------------------------------------------------------------------------
+
+_RUBRIC_SPLIT_RE = re.compile(r"[；;。\n]+")
+_RUBRIC_POINT_RE = re.compile(
+    r"^\s*(.+?)\s*[:：]?\s*(\d+(?:\.\d+)?)\s*分?\s*$"
+)
+_RUBRIC_POINT_RE_ALT = re.compile(
+    r"^\s*(.+?)\s+(\d+(?:\.\d+)?)\s*分\s*$"
+)
+
+
+def parse_scoring_rubric(rubric: str | None, max_score: float) -> list[dict[str, Any]]:
+    """将中文评分标准字符串拆成 scoring_points。
+
+    示例：
+    ``资源导向 3 分；HTTP 方法 2 分；无状态 2 分``
+    """
+    if not rubric or not str(rubric).strip():
+        return []
+    points: list[dict[str, Any]] = []
+    parts = [p.strip() for p in _RUBRIC_SPLIT_RE.split(str(rubric)) if p.strip()]
+    for i, part in enumerate(parts):
+        m = _RUBRIC_POINT_RE_ALT.match(part) or _RUBRIC_POINT_RE.match(part)
+        if not m:
+            continue
+        text = m.group(1).strip().rstrip("：:")
+        try:
+            score = float(m.group(2))
+        except ValueError:
+            continue
+        if score < 0:
+            continue
+        points.append(
+            {
+                "id": f"r{i + 1}",
+                "text": text,
+                "score": score,
+                "required": i == 0,
+            }
+        )
+    if not points:
+        return []
+    total = sum(p["score"] for p in points)
+    if total > max_score + 1e-6 and total > 0:
+        # 按比例缩放到题目满分，避免 ValidationError
+        scale = max_score / total
+        for p in points:
+            p["score"] = round(p["score"] * scale, 4)
+    return points
+
+
+def _coerce_scoring_mode(raw: Any) -> ScoringMode | None:
+    if raw is None or raw == "":
+        return None
+    if isinstance(raw, ScoringMode):
+        return raw
+    try:
+        return ScoringMode(str(raw).strip().lower())
+    except ValueError:
+        return None
+
+
+def build_scoring_request(
     question: dict[str, Any],
     student_answer: str,
-) -> dict[str, Any]:
-    """对单道主观题判分，返回 grading_detail 条目。"""
+) -> ScoringRequest:
+    """把题库题目 + 学生作答映射为 ScoringRequest。"""
+    max_score = float(question.get("score", 0) or 0)
+    qtype = str(question.get("type") or "subjective")
 
-    max_score = float(question.get("score", 0))
-    qid = question.get("id", "?")
+    # scoring_points：显式配置优先，否则解析 scoring_rubric
+    raw_points = question.get("scoring_points")
+    if isinstance(raw_points, list) and raw_points:
+        scoring_points = raw_points
+    else:
+        scoring_points = parse_scoring_rubric(
+            question.get("scoring_rubric"), max_score
+        )
 
-    emb = embedding_grader.grade_with_embedding(question, student_answer)
+    mode = _coerce_scoring_mode(question.get("scoring_mode"))
+    # short_answer / essay 默认 text；sql/code 由 mode / code_language 决定
+    if mode is None and qtype in SUBJECTIVE_TYPES:
+        code_lang = question.get("code_language")
+        if code_lang and str(code_lang).strip().lower() == "sql":
+            mode = ScoringMode.SQL
+        elif code_lang:
+            mode = ScoringMode.CODE
+        else:
+            mode = ScoringMode.TEXT
 
-    if emb["status"] == "embedding_ok":
-        return _subjective_detail_from_embedding(question, student_answer, emb)
+    cfg = get_config()
+    precision = int(getattr(cfg.scoring, "score_precision", 1))
 
-    # Embedding 不可用，回退关键词相似度
-    logger.info("Embedding 不可用，回退关键词判分: %s (reason=%s)", qid, emb.get("fallback_reason"))
-    from .utils import keyword_similarity
-
-    ref = question.get("answer", "")
-    sim = keyword_similarity(student_answer, ref)
-    score = round(sim * max_score, 2)
-    return {
-        "question_id": qid,
-        "type": question.get("type"),
-        "question": question.get("question", ""),
-        "student_answer": student_answer,
-        "reference_answer": ref,
-        "scoring_rubric": question.get("scoring_rubric"),
-        "machine_score": score,
-        "final_score": score,
+    payload: dict[str, Any] = {
+        "question_id": str(question.get("id", "?")),
+        "paper_id": question.get("paper_id"),
+        "question_type": qtype,
+        "scoring_mode": mode,
+        "code_language": question.get("code_language"),
+        "course_type": question.get("course_type"),
         "max_score": max_score,
-        "grading_method": "keyword",
-        "similarity": round(sim, 4),
-        "confidence": None,
-        "reason": None,
-        "fallback_reason": f"Embedding 不可用: {emb.get('fallback_reason', '')}",
-        "review_status": "need_review",
-        "low_confidence": False,
+        "question": str(question.get("question") or ""),
+        "reference_answer": str(question.get("answer") or ""),
+        "scoring_points": scoring_points,
+        "student_answer": student_answer,
+        "scoring_config": {
+            "score_precision": precision,
+            "allow_auto_scoring_point_generation": False,
+        },
     }
+    return ScoringRequest.model_validate(payload)
 
 
-def _subjective_detail_from_embedding(
+def _legacy_review_status(result: ScoringResult) -> str:
+    """映射到现有管理端使用的 review_status 字符串。"""
+    if result.review_level is ReviewLevel.MANUAL_REQUIRED:
+        return "low_confidence" if result.confidence < 0.5 else "need_review"
+    if result.review_level is ReviewLevel.SUGGESTED_REVIEW:
+        return "need_review"
+    return "high_confidence"
+
+
+def detail_from_scoring_result(
     question: dict[str, Any],
     student_answer: str,
-    embedding_result: dict[str, Any],
+    result: ScoringResult,
 ) -> dict[str, Any]:
-    max_score = float(question.get("score", 0))
-    sim = float(embedding_result.get("similarity", 0.0))
-    raw = sim * max_score
-    from .utils import safe_score
-    score = safe_score(raw, max_score)
-    low = embedding_result.get("review_status") == "low_confidence"
+    """ScoringResult → grading_detail 条目（兼容 admin / 导出）。"""
+    max_score = float(question.get("score", 0) or 0)
+    score = float(result.score)
+    review_status = _legacy_review_status(result)
+    low = review_status == "low_confidence" or result.need_manual_review and result.confidence < 0.5
+
+    matched = [
+        {
+            "point_id": p.point_id,
+            "score": p.score,
+            "max_score": p.max_score,
+            "similarity": p.similarity,
+            "evidence": p.evidence,
+            "reason": p.reason,
+        }
+        for p in result.matched_points
+    ]
+    missed = [
+        {
+            "point_id": p.point_id,
+            "score": p.score,
+            "max_score": p.max_score,
+            "reason": p.reason,
+        }
+        for p in result.missed_points
+    ]
+
     return {
         "question_id": question.get("id"),
         "type": question.get("type"),
@@ -88,14 +234,64 @@ def _subjective_detail_from_embedding(
         "machine_score": score,
         "final_score": score,
         "max_score": max_score,
-        "grading_method": "embedding",
-        "similarity": round(sim, 4),
-        "confidence": round(sim, 4),
-        "reason": None,
-        "fallback_reason": embedding_result.get("fallback_reason"),
-        "review_status": embedding_result.get("review_status", "pending"),
+        "grading_method": f"subjective_scoring:{result.track}",
+        "similarity": round(float(result.confidence), 4),
+        "confidence": round(float(result.confidence), 4),
+        "reason": "; ".join(result.warnings) if result.warnings else None,
+        "fallback_reason": None,
+        "review_status": review_status,
         "low_confidence": low,
+        "scoring_mode": result.scoring_mode.value if result.scoring_mode else None,
+        "track": result.track,
+        "need_manual_review": result.need_manual_review,
+        "review_level": result.review_level.value if result.review_level else None,
+        "matched_points": matched,
+        "missed_points": missed,
+        "warnings": list(result.warnings),
     }
+
+
+# ---------------------------------------------------------------------------
+# 主观题判分
+# ---------------------------------------------------------------------------
+
+async def _run_subjective_grading(
+    question: dict[str, Any],
+    student_answer: str,
+) -> dict[str, Any]:
+    """对单道主观题调用 SubjectiveScoringService，返回 grading_detail 条目。"""
+    qid = question.get("id", "?")
+    try:
+        request = build_scoring_request(question, student_answer)
+        service = get_subjective_service()
+        result = service.score(request)
+        if not isinstance(result, ScoringResult):
+            # score_with_trace 包装
+            result = result.result  # type: ignore[attr-defined]
+        return detail_from_scoring_result(question, student_answer, result)
+    except Exception:
+        logger.exception("主观题评分失败 question_id=%s，回退 0 分待复核", qid)
+        max_score = float(question.get("score", 0) or 0)
+        return {
+            "question_id": qid,
+            "type": question.get("type"),
+            "question": question.get("question", ""),
+            "student_answer": student_answer,
+            "reference_answer": question.get("answer", ""),
+            "scoring_rubric": question.get("scoring_rubric"),
+            "machine_score": 0.0,
+            "final_score": 0.0,
+            "max_score": max_score,
+            "grading_method": "subjective_scoring:error",
+            "similarity": 0.0,
+            "confidence": 0.0,
+            "reason": "主观题评分异常",
+            "fallback_reason": "SubjectiveScoringService 异常",
+            "review_status": "need_review",
+            "low_confidence": True,
+            "need_manual_review": True,
+            "warnings": ["主观题评分异常，已记 0 分并标记复核"],
+        }
 
 
 # ---------------------------------------------------------------------------

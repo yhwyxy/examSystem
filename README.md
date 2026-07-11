@@ -1,15 +1,63 @@
 # 企业在线考试兼批改系统
 
-基于 FastAPI + SQLite 的企业内部在线考试 MVP，支持员工扫码答题、客观题自动判分、主观题 Embedding 语义相似度判分、关键词回退、管理员人工复核与 Excel 导出。
+基于 FastAPI + SQLite 的企业内部在线考试 MVP，支持员工扫码答题、客观题自动判分、主观题多引擎评分（独立库 [subjective-scoring](https://github.com/yhwyxy/subjective-scoring)：文本评分点 / SQL AST / 代码混合）、管理员人工复核与 Excel 导出。
 
-## 启动
+## 环境安装
+
+项目使用 `uv` 管理依赖，虚拟环境位于 `.venv/`。
 
 ```bash
-cd /Users/yhw/Code/Github/examSystem
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+# 安装核心依赖 + 全部可选组（scoring / dev / embedding）
+uv sync --extra scoring --extra dev --extra embedding
+
+# 仅安装核心依赖 + 单个可选组
+uv sync --extra scoring
+uv sync --extra dev
+
+# 安装完成后启动
 python main.py
+```
+
+可选依赖组说明：
+
+| 组名 | 用途 | 关键包 |
+|------|------|--------|
+| `scoring` | 主观题多引擎评分（独立库 `subjective-scoring`） | ftfy, sqlglot, tree-sitter* |
+| `dev` | 开发与测试 | pytest |
+| `embedding` / `semantic` | 主观题 CrossEncoder 语义（sentence-transformers） | sentence-transformers, torch |
+
+主观题多引擎评分已拆为独立库：
+
+- GitHub（public）：https://github.com/yhwyxy/subjective-scoring
+- 当前钉选版本：`v0.1.0`
+- 本地开发：`pyproject.toml` 中 `[tool.uv.sources]` 使用 path editable（`../subjective-scoring`）
+- 无本地克隆时改为 git 依赖：
+
+```toml
+[tool.uv.sources]
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.0" }
+```
+
+```bash
+pip install "subjective-scoring[text,sql,code] @ git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.0"
+```
+
+```python
+# 推荐
+from subjective_scoring import SubjectiveScoringService
+
+# 兼容旧导入
+from backend.scoring import SubjectiveScoringService
+```
+
+更换 CrossEncoder：
+
+```python
+SubjectiveScoringService(
+    allow_model_load=True,
+    text_model="BAAI/bge-reranker-base",
+    code_model="BAAI/bge-reranker-base",
+)
 ```
 
 访问：
@@ -42,19 +90,24 @@ server:
 
 不要在生产环境使用 `allow_origins: ["*"]`。
 
-## Ollama Embedding 判分
+## 主观题语义模型（可选）
 
-默认配置使用：
+主观题由独立库 `subjective-scoring` 评分。默认 CrossEncoder 为 `BAAI/bge-reranker-base`，需安装 `sentence-transformers`（`uv sync --extra embedding` 或 `pip install "subjective-scoring[semantic]"`）。
 
-```yaml
-grading:
-  embedding:
-    model: "bge-m3"
-    endpoint: "http://localhost:11434"
-    timeout_seconds: 10
+未安装或加载失败时自动回退词法相似度，提交流程不中断。
+
+更换模型：
+
+```python
+from backend.grader import set_subjective_service
+from subjective_scoring import SubjectiveScoringService
+
+set_subjective_service(SubjectiveScoringService(
+    allow_model_load=True,
+    text_model="BAAI/bge-reranker-base",
+))
 ```
 
-如本地未启动 Ollama 或模型不可用，系统会自动回退到 sentence-transformers 本地模型或关键词相似度判分，保证提交流程不中断。
 
 ## 题库
 

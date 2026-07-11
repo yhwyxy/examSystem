@@ -56,19 +56,9 @@ class ReviewConfig:
 
 
 @dataclass(frozen=True)
-class EmbeddingConfig:
-    """Ollama Embedding 配置。"""
-    model: str = "bge-m3"
-    device: str = "cpu"
-    endpoint: str = "http://localhost:11434"
-    timeout_seconds: int = 10
-
-
-@dataclass(frozen=True)
 class GradingConfig:
-    """判分配置（仅使用 Embedding 模型）。"""
+    """判分流程配置。主观题语义模型由 subjective-scoring 服务参数控制。"""
     sync_grading: bool = True
-    embedding: EmbeddingConfig = field(default_factory=EmbeddingConfig)
 
 
 @dataclass(frozen=True)
@@ -157,19 +147,9 @@ def _build_config(raw: dict) -> AppConfig:
 def _build_grading_config(grading: dict) -> GradingConfig:
     """从 grading 原始 dict 构建 GradingConfig，忽略未知字段（向前兼容）。"""
     defaults_grading = {"sync_grading": True}
-    merged_grading = _deep_merge(defaults_grading, grading)
-    emb_raw = merged_grading.get("embedding", {})
-    defaults_emb = {
-        "model": "bge-m3",
-        "device": "cpu",
-        "endpoint": "http://localhost:11434",
-        "timeout_seconds": 10,
-    }
-    merged_emb = _deep_merge(defaults_emb, emb_raw)
-    emb_known = {f.name for f in EmbeddingConfig.__dataclass_fields__.values()}
-    emb = EmbeddingConfig(**{k: v for k, v in merged_emb.items() if k in emb_known})
+    merged_grading = _deep_merge(defaults_grading, grading or {})
     known = {f.name for f in GradingConfig.__dataclass_fields__.values()}
-    return GradingConfig(**{k: v for k, v in merged_grading.items() if k in known and k != "embedding"}, embedding=emb)
+    return GradingConfig(**{k: v for k, v in merged_grading.items() if k in known})
 
 
 def _validate_config(raw: dict) -> None:
@@ -185,13 +165,10 @@ def _validate_config(raw: dict) -> None:
         "review": {"high_confidence_threshold", "need_review_threshold", "low_confidence_threshold"},
         "grading": {
             "sync_grading",
-            "embedding",  # 嵌套 section
         },
         "admin": {"enable_auth", "password"},
         "export": {"format"},
     }
-    # grading.embedding 的允许键单独校验
-    _allowed_grading_embedding = {"model", "device", "endpoint", "timeout_seconds"}
 
     errors: list[str] = []
     for section, allowed in _allowed.items():
@@ -202,33 +179,12 @@ def _validate_config(raw: dict) -> None:
         unknown = set(data.keys()) - allowed
         if unknown:
             errors.append(f"[{section}] 未知配置项: {unknown}。已忽略，请检查拼写或删除。")
-        # 递归校验 grading.embedding
-        if section == "grading":
-            emb = data.get("embedding", {})
-            if not isinstance(emb, dict):
-                errors.append("[grading.embedding] 必须是 dict")
-            else:
-                emb_unknown = set(emb.keys()) - _allowed_grading_embedding
-                if emb_unknown:
-                    errors.append(f"[grading.embedding] 未知配置项: {emb_unknown}")
-
-    # 严格校验 embedding.model：必须是实际路径，不能是纯文字描述
-    emb_section = raw.get("grading", {}).get("embedding", {})
-    if isinstance(emb_section, dict):
-        model = emb_section.get("model", "")
-        if isinstance(model, str) and ("词向量" in model or "embedding" in model.lower() and "/" not in model and "." not in model):
-            errors.append(
-                f"[grading.embedding.model] 不能是描述性文字（实际收到: {model!r}）。"
-                "请填写实际模型路径，例如 ollama 的 bge-m3 或 BAAI/bge-m3。"
-            )
 
     if errors:
         print("⚠️  配置校验发现以下问题（已忽略未知字段，不影响启动）：", file=sys.stderr)
         for e in errors:
             print(f"  - {e}", file=sys.stderr)
         print(f"  已知配置项: {', '.join(sorted(_allowed.keys()))}", file=sys.stderr)
-        if any("不能是描述性文字" in e for e in errors):
-            sys.exit(1)
 
 
 # ---------------------------------------------------------------------------

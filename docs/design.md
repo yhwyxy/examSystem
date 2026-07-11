@@ -79,8 +79,7 @@ FastAPI 本地服务
     |-- questions.json：固定试卷与参考答案
     |-- exam.db：提交记录、判分结果、复核日志
     |
-    |-- Ollama Embedding：优先语义相似度评分
-    |-- sentence-transformers / 关键词：回退方案
+    |-- subjective-scoring：文本/SQL/代码多引擎主观题评分
 ```
 
 ### 3.2 技术栈
@@ -91,8 +90,8 @@ FastAPI 本地服务
 | 数据库 | SQLite | 单文件数据库，开启 WAL 模式 |
 | 题库 | JSON 文件 | 固定试卷，只读加载 |
 | 前端 | HTML + CSS + Vanilla JS | 无需 Vue/React 构建链路 |
-| 主观题判分 | Ollama Embedding / sentence-transformers | 语义相似度评分 |
-| 主观题回退 | 关键词 Jaccard 相似度 | Embedding 不可用时兜底 |
+| 主观题判分 | subjective-scoring | 评分点 / SQL AST / 代码混合 |
+| 主观题语义 | sentence-transformers CrossEncoder（可选） | 无模型时词法回退 |
 | 导出 | openpyxl 或 csv | 优先 xlsx，失败可回退 csv |
 | 二维码 | qrcode | 生成考试入口二维码 |
 
@@ -114,7 +113,7 @@ examSystem/
 │   ├── question_loader.py   # questions.json 加载、校验、脱敏
 │   ├── grader.py            # 判分总入口，编排客观题和主观题
 │   ├── objective_grader.py  # 单选、多选、判断题判分
-│   ├── embedding_grader.py  # Embedding 语义相似度判分
+│   ├── grader.py           # 判分入口（主观题调用 subjective-scoring）
 │   ├── review_service.py    # 人工复核、改分、总分重算
 │   ├── exporter.py          # xlsx / csv 导出
 │   └── utils.py             # 局域网 IP、二维码、时间工具
@@ -144,7 +143,7 @@ examSystem/
 | question_loader.py | 加载、校验题库，员工端脱敏 |
 | database.py | 提交记录 CRUD、复核日志、统计查询 |
 | objective_grader.py | 单选、多选、判断题判分 |
-| embedding_grader.py | Embedding 相似度判分与降级 |
+| grader.py | 客观题 + 主观题（subjective-scoring） |
 | grader.py | 编排整卷判分，汇总分数与复核状态 |
 | review_service.py | 人工改分、重算总分、写复核日志 |
 | exporter.py | 成绩导出 |
@@ -187,11 +186,6 @@ review:
 
 grading:
   sync_grading: true
-  embedding:
-    model: "bge-m3"
-    endpoint: "http://localhost:11434"
-    timeout_seconds: 10
-    device: "cpu"
 
 admin:
   enable_auth: false
@@ -213,8 +207,8 @@ export:
 | exam.grace_period_seconds | 提交时长校验容忍秒数 |
 | exam.duplicate_key | 默认按 employee_id 限制重复提交 |
 | exam.enable_global_time_window | 是否启用全局考试开始和结束时间 |
-| grading.sync_grading | MVP 阶段同步判分 |
-| grading.embedding | Embedding 模型与 Ollama endpoint 配置 |
+| grading.sync_grading | 是否同步判分 |
+| （主观题模型） | 由 subjective-scoring 的 SubjectiveScoringService / 环境变量配置 |
 | admin.enable_auth | MVP 默认 false，仅适用于可信局域网 |
 
 ---
@@ -392,7 +386,7 @@ CREATE TABLE IF NOT EXISTS review_logs (
     "machine_score": 7,
     "final_score": 7,
     "max_score": 10,
-    "grading_method": "embedding",
+    "grading_method": "subjective_scoring:TextRerankerScorer",
     "similarity": 0.7,
     "confidence": null,
     "reason": null,
@@ -463,46 +457,21 @@ score = max_score × |S ∩ R| / |R|
 
 ### 8.2 主观题判分
 
-主观题采用 Embedding 语义相似度评分策略。
+主观题由独立库 [subjective-scoring](https://github.com/yhwyxy/subjective-scoring) 处理：
 
 ```text
-Ollama Embedding 可用 => 使用 Ollama 计算相似度
-Ollama 不可用 => 回退到 sentence-transformers 本地模型
-本地模型也不可用 => 回退到关键词相似度
+Text 题：评分点 + CrossEncoder/词法 + 规则拦截
+SQL 题：sqlglot AST 结构比较
+Code 题：tree-sitter 结构分 + 语义分融合
 ```
 
-### 8.3 Embedding 判分
+题库字段 `scoring_rubric` 会解析为 `scoring_points`；也可直接配置 `scoring_points` / `scoring_mode` / `code_language`。
 
-#### 8.3.1 推荐模型
+### 8.3 语义模型与复核
 
-1. BAAI/bge-m3（Ollama 远程调用）
-2. sentence-transformers 本地模型
-
-#### 8.3.2 判分逻辑
-
-1. 将学生答案和参考答案分别通过 Embedding 模型生成向量
-2. 计算两个向量的余弦相似度
-3. 按相似度比例给分
-
-公式：
-
-```text
-score = max_score × cosine_similarity(student_embedding, reference_embedding)
-```
-
-#### 8.3.3 降级链路
-
-当 Ollama 不可用时，依次尝试：
-
-1. Ollama Embedding（远程，endpoint 配置非空时优先）
-2. sentence-transformers 本地模型
-3. 关键词重叠度（Jaccard 相似度）
-
-#### 8.3.4 置信度阈值（可配置）
-
-- `high_confidence_threshold`：0.75（默认），大于等于此值标记为高置信度
-- `need_review_threshold`：0.5（默认），介于低/高阈值之间标记为需要复核
-- `low_confidence_threshold`：0.35（默认），低于此值标记为低置信度
+- 默认 CrossEncoder：`BAAI/bge-reranker-base`（sentence-transformers）
+- 无模型时回退词法相似度
+- 复核阈值仍由 `review.*` 配置（管理端展示用）；引擎侧另有 `ScoringOptions.manual_review_thresholds`
 
 ### 8.4 同步与异步策略
 
@@ -627,7 +596,7 @@ MVP 阶段根据当前需求不启用管理员登录和访问口令，仅适用�
 | 姓名 | 员工填写 |
 | 工号 | 员工填写，唯一 |
 | 客观题分数 | 自动计算 |
-| 主观题机器分 | Embedding / 关键词初判 |
+| 主观题机器分 | subjective-scoring 初判 |
 | 主观题最终分 | 人工复核后可能变化 |
 | 总分 | 客观题 + 主观题最终分 |
 | 复核状态 | pending / reviewed / need_review / low_confidence |
