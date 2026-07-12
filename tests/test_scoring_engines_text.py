@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from backend.scoring import ScoringMode, ScoringRequest
-from backend.scoring.engines import RuleInterceptor, TextRerankerScorer
+from subjective_scoring import ScoringMode, ScoringRequest
+from subjective_scoring.engines import RuleInterceptor, TextRerankerScorer
 
 
 def _req(**kwargs) -> ScoringRequest:
@@ -40,7 +40,7 @@ def test_scores_points_with_injected_similarity():
     assert result.metadata["model"] == "injected"
 
 
-def test_negation_conflict_zeros_point_and_forces_review():
+def test_negation_conflict_penalizes_point_and_forces_review():
     def sim(student: str, point: str) -> float:
         return 0.95
 
@@ -52,9 +52,12 @@ def test_negation_conflict_zeros_point_and_forces_review():
         )
     )
 
-    assert result.score == 0.0
+    assert 0.0 < result.score < 5.0
     assert result.force_manual_review is True
     assert any("否定" in w for w in result.warnings)
+    diagnostic = result.metadata["point_diagnostics"][0]
+    assert diagnostic["raw_similarity"] == 0.95
+    assert diagnostic["rule_hits"][0]["evidence"] == "索引不能提高查询效率"
 
 
 def test_full_reference_fallback_forces_review():

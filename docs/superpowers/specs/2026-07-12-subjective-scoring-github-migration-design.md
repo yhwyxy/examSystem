@@ -6,7 +6,7 @@ Make `subjective-scoring` the only source of subjective-scoring implementation a
 
 ## Dependency Strategy
 
-The committed `pyproject.toml` source for `subjective-scoring` will use the public GitHub repository and pin tag `v0.1.0`. `uv.lock` will be regenerated so clean environments do not require a sibling checkout.
+The committed `pyproject.toml` source for `subjective-scoring` will use the public GitHub repository and pin tag `v0.1.1`. `uv.lock` will be regenerated so clean environments do not require a sibling checkout.
 
 Local library development remains separate from the committed dependency configuration. A developer may temporarily replace the installed distribution with an editable sibling checkout:
 
@@ -31,7 +31,7 @@ After all imports are migrated, the tracked files under `backend/scoring/` will 
 
 ## Documentation
 
-The README will describe `v0.1.0` as the committed GitHub dependency and document the editable-install command for local library work. References presenting `backend.scoring` as a supported compatibility import will be removed.
+The README will describe `v0.1.1` as the committed GitHub dependency and document the editable-install command for local library work. References presenting `backend.scoring` as a supported compatibility import will be removed.
 
 ## Failure Behavior
 
@@ -43,7 +43,7 @@ The migration is complete when:
 
 1. No Python source or test imports `backend.scoring`.
 2. `backend/scoring/` has no tracked files.
-3. `uv.lock` resolves `subjective-scoring` from GitHub tag `v0.1.0`, not `../subjective-scoring`.
+3. `uv.lock` resolves `subjective-scoring` from GitHub tag `v0.1.1`, not `../subjective-scoring`.
 4. The scoring-focused test suite passes.
 5. The full test suite passes.
 

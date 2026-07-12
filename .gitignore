@@ -27,3 +27,8 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+
+# Local environment secrets
+.env
+.env.*
+!.env.example

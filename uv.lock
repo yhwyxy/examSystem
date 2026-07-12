@@ -156,9 +156,10 @@ dependencies = [
     { name = "httpx" },
     { name = "openpyxl" },
     { name = "pydantic" },
+    { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "qrcode", extra = ["pil"] },
-    { name = "subjective-scoring" },
+    { name = "subjective-scoring", extra = ["remote"] },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -171,7 +172,7 @@ embedding = [
     { name = "torch" },
 ]
 scoring = [
-    { name = "subjective-scoring", extra = ["code", "sql", "text"] },
+    { name = "subjective-scoring", extra = ["code", "remote", "sql", "text"] },
 ]
 
 [package.metadata]
@@ -181,11 +182,12 @@ requires-dist = [
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pydantic", specifier = ">=2.7" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
+    { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qrcode", extras = ["pil"], specifier = ">=7.4" },
     { name = "sentence-transformers", marker = "extra == 'embedding'", specifier = ">=3.0" },
-    { name = "subjective-scoring", editable = "../subjective-scoring" },
-    { name = "subjective-scoring", extras = ["text", "sql", "code"], marker = "extra == 'scoring'", editable = "../subjective-scoring" },
+    { name = "subjective-scoring", extras = ["remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.2" },
+    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], marker = "extra == 'scoring'", git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.2" },
     { name = "torch", marker = "extra == 'embedding'", specifier = ">=2.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
@@ -1279,8 +1281,8 @@ wheels = [
 
 [[package]]
 name = "subjective-scoring"
-version = "0.1.0"
-source = { editable = "../subjective-scoring" }
+version = "0.1.2"
+source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.2#a0210f1279377d2acc8d8fe3cf733fa5f343a225" }
 dependencies = [
     { name = "pydantic" },
 ]
@@ -1293,30 +1295,15 @@ code = [
     { name = "tree-sitter-javascript" },
     { name = "tree-sitter-python" },
 ]
+remote = [
+    { name = "httpx" },
+]
 sql = [
     { name = "sqlglot" },
 ]
 text = [
     { name = "ftfy" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "ftfy", marker = "extra == 'text'", specifier = ">=6.3" },
-    { name = "pydantic", specifier = ">=2.7" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0" },
-    { name = "sentence-transformers", marker = "extra == 'semantic'", specifier = ">=3.0" },
-    { name = "sqlglot", marker = "extra == 'sql'", specifier = ">=30.0" },
-    { name = "subjective-scoring", extras = ["text", "sql", "code"], marker = "extra == 'dev'" },
-    { name = "subjective-scoring", extras = ["text", "sql", "code", "semantic"], marker = "extra == 'all'" },
-    { name = "torch", marker = "extra == 'semantic'", specifier = ">=2.2" },
-    { name = "tree-sitter", marker = "extra == 'code'", specifier = ">=0.25" },
-    { name = "tree-sitter-cpp", marker = "extra == 'code'", specifier = ">=0.23" },
-    { name = "tree-sitter-java", marker = "extra == 'code'", specifier = ">=0.23" },
-    { name = "tree-sitter-javascript", marker = "extra == 'code'", specifier = ">=0.23" },
-    { name = "tree-sitter-python", marker = "extra == 'code'", specifier = ">=0.23" },
-]
-provides-extras = ["text", "sql", "code", "semantic", "all", "dev"]
 
 [[package]]
 name = "sympy"

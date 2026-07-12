@@ -999,3 +999,15 @@ FastAPI + SQLite + questions.json + 原生 HTML/JS + Embedding 语义相似度�
 5. 管理员可以逐人复核完整试卷答案。
 6. 考试时长、模型、阈值、题目和分值都通过配置或 JSON 文件灵活调整。
 7. MVP 阶段管理员后台不启用鉴权，仅适用于可信局域网。
+
+---
+
+## 20. 多专业试卷（已实现）
+
+- 存储：`data/papers/{slug}.json` + `index.json`（一专业一当前卷）。
+- 发布：专业状态 `open`/`closed`；考生链接 `/exam?paper={slug}`。
+- 录入：管理端试卷 CRUD；`closed` 可改题，`open` 锁定。
+- 提交：`UNIQUE(employee_id, paper_id)`；会话按 `(employee_id, paper_id)`。
+- 脱敏：员工端剥离 `answer` / `scoring_rubric` / `scoring_points`。
+- 旧 `data/questions.json` 启动时迁入 `default` 专业。
+

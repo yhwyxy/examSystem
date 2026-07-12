@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from .config import get_config
-from .utils import now_iso, parse_iso, seconds_between
+from .utils import now_iso, seconds_between
 
 PROJECT_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
 DB_PATH = PROJECT_ROOT / "data" / "exam.db"
@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS submissions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     employee_id TEXT NOT NULL,
+    paper_id TEXT NOT NULL DEFAULT 'default',
+    paper_name TEXT,
     department TEXT,
     answers_json TEXT NOT NULL,
     grading_detail_json TEXT NOT NULL,
@@ -42,7 +44,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     reviewer_note TEXT,
     client_ip TEXT,
     user_agent TEXT,
-    UNIQUE(employee_id)
+    UNIQUE(employee_id, paper_id)
 );
 
 CREATE TABLE IF NOT EXISTS review_logs (
@@ -61,11 +63,13 @@ CREATE INDEX IF NOT EXISTS idx_submissions_submitted ON submissions(submitted_at
 CREATE INDEX IF NOT EXISTS idx_review_logs_sub ON review_logs(submission_id);
 
 -- 考试会话：服务器端记录的「开始答题」时间，防止客户端篡改。
--- 持久化到 DB 以避免进程重启导致考生无法提交，以及内存无界增长。
+-- 主键为 (employee_id, paper_id)，支持同一员工跨专业并行开考。
 CREATE TABLE IF NOT EXISTS exam_sessions (
-    employee_id TEXT PRIMARY KEY,
+    employee_id TEXT NOT NULL,
+    paper_id    TEXT NOT NULL DEFAULT 'default',
     started_at  TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    PRIMARY KEY (employee_id, paper_id)
 );
 CREATE INDEX IF NOT EXISTS idx_exam_sessions_created ON exam_sessions(created_at);
 """
@@ -81,7 +85,10 @@ def get_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(str(DB_PATH), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     if not _initialized:
+        # 先建表（IF NOT EXISTS 不改旧表结构），再迁移补 paper_id 等
         conn.executescript(_SCHEMA)
+        _migrate_schema(conn)
+        conn.commit()
         _initialized = True
     return conn
 
@@ -101,9 +108,127 @@ def db_cursor():
 
 
 def init_db() -> None:
-    """启动时调用一次，确保表存在。"""
+    """启动时调用一次，确保表存在并完成轻量迁移。"""
     with db_cursor() as conn:
-        conn.executescript(_SCHEMA)
+        # get_connection 已执行 schema + migrate；此处再兜底一次（幂等）
+        _migrate_schema(conn)
+
+
+def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return {str(r["name"] if isinstance(r, sqlite3.Row) else r[1]) for r in rows}
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+    """为旧库补齐 paper_id / 会话复合主键。"""
+    # submissions.paper_id / paper_name
+    cols = _table_columns(conn, "submissions")
+    if "paper_id" not in cols:
+        conn.execute("ALTER TABLE submissions ADD COLUMN paper_id TEXT NOT NULL DEFAULT 'default'")
+    if "paper_name" not in cols:
+        conn.execute("ALTER TABLE submissions ADD COLUMN paper_name TEXT")
+
+    # 唯一约束：旧 UNIQUE(employee_id) → UNIQUE(employee_id, paper_id)
+    # SQLite 无法直接改约束，用索引兜底；旧约束若仍在则可能阻止同工号跨专业。
+    # 检测是否仍有仅 employee_id 的唯一索引，必要时重建表。
+    idx_rows = conn.execute("PRAGMA index_list(submissions)").fetchall()
+    need_rebuild = False
+    for idx in idx_rows:
+        # idx: seq, name, unique, origin, partial
+        name = idx["name"] if isinstance(idx, sqlite3.Row) else idx[1]
+        unique = idx["unique"] if isinstance(idx, sqlite3.Row) else idx[2]
+        if not unique:
+            continue
+        info = conn.execute(f"PRAGMA index_info({name})").fetchall()
+        col_names = []
+        for r in info:
+            cid = r["cid"] if isinstance(r, sqlite3.Row) else r[1]
+            # cid 可能为列序号
+            tinfo = conn.execute("PRAGMA table_info(submissions)").fetchall()
+            for t in tinfo:
+                tid = t["cid"] if isinstance(t, sqlite3.Row) else t[0]
+                tname = t["name"] if isinstance(t, sqlite3.Row) else t[1]
+                if tid == cid:
+                    col_names.append(tname)
+        if col_names == ["employee_id"]:
+            need_rebuild = True
+            break
+
+    if need_rebuild:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS submissions_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                employee_id TEXT NOT NULL,
+                paper_id TEXT NOT NULL DEFAULT 'default',
+                paper_name TEXT,
+                department TEXT,
+                answers_json TEXT NOT NULL,
+                grading_detail_json TEXT NOT NULL,
+                objective_score REAL NOT NULL DEFAULT 0,
+                subjective_score_machine REAL NOT NULL DEFAULT 0,
+                subjective_score_final REAL NOT NULL DEFAULT 0,
+                total_score REAL NOT NULL DEFAULT 0,
+                review_status TEXT NOT NULL DEFAULT 'pending',
+                started_at TEXT,
+                submitted_at TEXT NOT NULL,
+                reviewed_at TEXT,
+                reviewer_note TEXT,
+                client_ip TEXT,
+                user_agent TEXT,
+                UNIQUE(employee_id, paper_id)
+            );
+            INSERT INTO submissions_new (
+                id, name, employee_id, paper_id, paper_name, department,
+                answers_json, grading_detail_json,
+                objective_score, subjective_score_machine, subjective_score_final,
+                total_score, review_status, started_at, submitted_at, reviewed_at,
+                reviewer_note, client_ip, user_agent
+            )
+            SELECT
+                id, name, employee_id,
+                COALESCE(NULLIF(paper_id, ''), 'default'),
+                paper_name, department,
+                answers_json, grading_detail_json,
+                objective_score, subjective_score_machine, subjective_score_final,
+                total_score, review_status, started_at, submitted_at, reviewed_at,
+                reviewer_note, client_ip, user_agent
+            FROM submissions;
+            DROP TABLE submissions;
+            ALTER TABLE submissions_new RENAME TO submissions;
+            CREATE INDEX IF NOT EXISTS idx_submissions_status ON submissions(review_status);
+            CREATE INDEX IF NOT EXISTS idx_submissions_submitted ON submissions(submitted_at);
+            CREATE INDEX IF NOT EXISTS idx_submissions_paper ON submissions(paper_id);
+            """
+        )
+
+    # exam_sessions 迁移到复合主键
+    sess_cols = _table_columns(conn, "exam_sessions")
+    if sess_cols and "paper_id" not in sess_cols:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS exam_sessions_new (
+                employee_id TEXT NOT NULL,
+                paper_id    TEXT NOT NULL DEFAULT 'default',
+                started_at  TEXT NOT NULL,
+                created_at  TEXT NOT NULL,
+                PRIMARY KEY (employee_id, paper_id)
+            );
+            INSERT INTO exam_sessions_new (employee_id, paper_id, started_at, created_at)
+            SELECT employee_id, 'default', started_at, created_at FROM exam_sessions;
+            DROP TABLE exam_sessions;
+            ALTER TABLE exam_sessions_new RENAME TO exam_sessions;
+            CREATE INDEX IF NOT EXISTS idx_exam_sessions_created ON exam_sessions(created_at);
+            """
+        )
+
+    # 迁移后再建依赖 paper_id 的索引（旧库在补列前不能建）
+    cols = _table_columns(conn, "submissions")
+    if "paper_id" in cols:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_submissions_paper ON submissions(paper_id)"
+        )
 
 
 # ---------------- 提交记录 CRUD ----------------
@@ -112,6 +237,8 @@ def insert_submission(
     *,
     name: str,
     employee_id: str,
+    paper_id: str,
+    paper_name: str | None = None,
     department: str | None,
     answers: dict[str, Any],
     grading_detail: list[dict[str, Any]],
@@ -124,16 +251,16 @@ def insert_submission(
     submitted_at = now_iso()
     sql = """
         INSERT INTO submissions
-        (name, employee_id, department, answers_json, grading_detail_json,
+        (name, employee_id, paper_id, paper_name, department, answers_json, grading_detail_json,
          objective_score, subjective_score_machine, subjective_score_final,
          total_score, review_status, started_at, submitted_at, client_ip, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
     with db_cursor() as conn:
         cur = conn.execute(
             sql,
             (
-                name, employee_id, department,
+                name, employee_id, paper_id, paper_name, department,
                 json.dumps(answers, ensure_ascii=False),
                 json.dumps(grading_detail, ensure_ascii=False),
                 scores["objective_score"],
@@ -154,6 +281,8 @@ def insert_submission_pending(
     *,
     name: str,
     employee_id: str,
+    paper_id: str,
+    paper_name: str | None = None,
     department: str | None,
     answers: dict[str, Any],
     started_at: str | None,
@@ -164,15 +293,16 @@ def insert_submission_pending(
     submitted_at = now_iso()
     sql = """
         INSERT INTO submissions
-        (name, employee_id, department, answers_json, grading_detail_json,
+        (name, employee_id, paper_id, paper_name, department, answers_json, grading_detail_json,
          objective_score, subjective_score_machine, subjective_score_final,
          total_score, review_status, started_at, submitted_at, client_ip, user_agent)
-        VALUES (?, ?, ?, ?, '[]', 0, 0, 0, 0, 'grading', ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, '[]', 0, 0, 0, 0, 'grading', ?, ?, ?, ?)
     """
     with db_cursor() as conn:
         cur = conn.execute(
             sql,
-            (name, employee_id, department, json.dumps(answers, ensure_ascii=False),
+            (name, employee_id, paper_id, paper_name, department,
+             json.dumps(answers, ensure_ascii=False),
              started_at, submitted_at, client_ip, user_agent),
         )
         lastrowid = cur.lastrowid
@@ -238,12 +368,13 @@ def list_submissions(
     *,
     keyword: str | None = None,
     review_status: str | None = None,
+    paper_id: str | None = None,
     sort_by: str = "submitted_at",
     order: str = "desc",
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    allowed_sort = {"submitted_at", "total_score", "name", "employee_id", "review_status"}
+    allowed_sort = {"submitted_at", "total_score", "name", "employee_id", "review_status", "paper_id"}
     sort_by = sort_by if sort_by in allowed_sort else "submitted_at"
     order = "ASC" if order.lower() == "asc" else "DESC"
 
@@ -255,6 +386,9 @@ def list_submissions(
     if review_status:
         sql += " AND review_status = ?"
         params.append(review_status)
+    if paper_id:
+        sql += " AND paper_id = ?"
+        params.append(paper_id)
     sql += f" ORDER BY {sort_by} {order} LIMIT ? OFFSET ?"
     params += [limit, offset]
 
@@ -263,24 +397,35 @@ def list_submissions(
         return [dict(r) for r in rows]
 
 
-def get_stats() -> dict[str, Any]:
+def get_stats(paper_id: str | None = None) -> dict[str, Any]:
+    where = ""
+    params: list[Any] = []
+    if paper_id:
+        where = " WHERE paper_id = ?"
+        params = [paper_id]
     with db_cursor() as conn:
-        total = conn.execute("SELECT COUNT(*) c FROM submissions").fetchone()["c"]
+        total = conn.execute(f"SELECT COUNT(*) c FROM submissions{where}", params).fetchone()["c"]
         if total == 0:
             return {
                 "submitted_count": 0, "avg_score": 0, "max_score": 0, "min_score": 0,
-                "pending_review": 0, "low_confidence_count": 0,
+                "pending_review": 0, "low_confidence_count": 0, "paper_id": paper_id,
             }
         agg = conn.execute(
-            "SELECT AVG(total_score) a, MAX(total_score) mx, MIN(total_score) mn FROM submissions"
+            f"SELECT AVG(total_score) a, MAX(total_score) mx, MIN(total_score) mn FROM submissions{where}",
+            params,
         ).fetchone()
-        pending = conn.execute(
-            """SELECT COUNT(*) c FROM submissions
-               WHERE review_status IN ('pending','need_review','low_confidence')"""
-        ).fetchone()["c"]
-        low = conn.execute(
-            "SELECT COUNT(*) c FROM submissions WHERE review_status = 'low_confidence'"
-        ).fetchone()["c"]
+        pending_sql = (
+            f"SELECT COUNT(*) c FROM submissions{where} "
+            + ("AND" if where else "WHERE")
+            + " review_status IN ('pending','need_review','low_confidence')"
+        )
+        pending = conn.execute(pending_sql, params).fetchone()["c"]
+        low_sql = (
+            f"SELECT COUNT(*) c FROM submissions{where} "
+            + ("AND" if where else "WHERE")
+            + " review_status = 'low_confidence'"
+        )
+        low = conn.execute(low_sql, params).fetchone()["c"]
         return {
             "submitted_count": total,
             "avg_score": round(agg["a"], 2),
@@ -288,14 +433,32 @@ def get_stats() -> dict[str, Any]:
             "min_score": round(agg["mn"], 2),
             "pending_review": pending,
             "low_confidence_count": low,
+            "paper_id": paper_id,
         }
 
 
-def duplicate_exists(employee_id: str) -> bool:
+def submission_count(paper_id: str | None = None) -> int:
     with db_cursor() as conn:
-        row = conn.execute(
-            "SELECT 1 FROM submissions WHERE employee_id = ? LIMIT 1", (employee_id,)
-        ).fetchone()
+        if paper_id:
+            row = conn.execute(
+                "SELECT COUNT(*) c FROM submissions WHERE paper_id = ?", (paper_id,)
+            ).fetchone()
+        else:
+            row = conn.execute("SELECT COUNT(*) c FROM submissions").fetchone()
+        return int(row["c"])
+
+
+def duplicate_exists(employee_id: str, paper_id: str | None = None) -> bool:
+    with db_cursor() as conn:
+        if paper_id:
+            row = conn.execute(
+                "SELECT 1 FROM submissions WHERE employee_id = ? AND paper_id = ? LIMIT 1",
+                (employee_id, paper_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT 1 FROM submissions WHERE employee_id = ? LIMIT 1", (employee_id,)
+            ).fetchone()
         return row is not None
 
 
@@ -485,25 +648,31 @@ def delete_submissions(submission_ids: list[int]) -> int:
 
 # ---------------- 考试会话 CRUD ----------------
 
-def upsert_exam_session(*, employee_id: str, started_at: str) -> None:
-    """记录或覆盖某员工的服务器端开始时间。"""
+def upsert_exam_session(*, employee_id: str, paper_id: str, started_at: str) -> None:
+    """记录或覆盖某员工在指定专业的服务器端开始时间。"""
     with db_cursor() as conn:
         conn.execute(
-            """INSERT INTO exam_sessions (employee_id, started_at, created_at)
-               VALUES (?, ?, ?)
-               ON CONFLICT(employee_id) DO UPDATE SET started_at = excluded.started_at, created_at = excluded.created_at""",
-            (employee_id, started_at, now_iso()),
+            """INSERT INTO exam_sessions (employee_id, paper_id, started_at, created_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(employee_id, paper_id) DO UPDATE SET
+                 started_at = excluded.started_at,
+                 created_at = excluded.created_at""",
+            (employee_id, paper_id, started_at, now_iso()),
         )
 
-def pop_exam_session(employee_id: str) -> str | None:
-    """读取并删除某员工的开始时间，返回 ISO 字符串或 None。"""
+def pop_exam_session(employee_id: str, paper_id: str) -> str | None:
+    """读取并删除某员工在指定专业的开始时间，返回 ISO 字符串或 None。"""
     with db_cursor() as conn:
         row = conn.execute(
-            "SELECT started_at FROM exam_sessions WHERE employee_id = ?", (employee_id,)
+            "SELECT started_at FROM exam_sessions WHERE employee_id = ? AND paper_id = ?",
+            (employee_id, paper_id),
         ).fetchone()
         if not row:
             return None
-        conn.execute("DELETE FROM exam_sessions WHERE employee_id = ?", (employee_id,))
+        conn.execute(
+            "DELETE FROM exam_sessions WHERE employee_id = ? AND paper_id = ?",
+            (employee_id, paper_id),
+        )
         return str(row["started_at"])
 
 def cleanup_exam_sessions(older_than_seconds: int = 86400) -> int:

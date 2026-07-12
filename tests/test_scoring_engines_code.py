@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from backend.scoring import CodeScoreWeights, ScoringMode, ScoringOptions, ScoringRequest
-from backend.scoring.engines import CodeHybridScorer
-from backend.scoring.engines.code_hybrid import CodeNormalizer, TreeSitterAstExtractor
+from subjective_scoring import CodeScoreWeights, ScoringMode, ScoringOptions, ScoringRequest
+from subjective_scoring.engines import CodeHybridScorer
+from subjective_scoring.engines.code_hybrid import CodeNormalizer, TreeSitterAstExtractor
 
 
 REF_PY = (

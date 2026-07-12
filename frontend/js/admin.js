@@ -1,6 +1,6 @@
 const API = '/api/admin';
 const PAGE_SIZE = 50;
-const ADMIN_VIEWS = ['overview', 'publish', 'submissions'];
+const ADMIN_VIEWS = ['overview', 'papers', 'publish', 'submissions'];
 
 let authToken = localStorage.getItem('admin_token') || '';
 let currentPage = 1;
@@ -88,7 +88,21 @@ function showView(view, options = {}) {
   } else if (view === 'overview') {
     loadStats().catch(e => toast(e.message));
   } else if (view === 'publish') {
-    loadExamLink().catch(e => toast(e.message));
+    if (window.PapersAdmin) {
+      window.PapersAdmin.loadPapersList()
+        .then(() => {
+          const sel = document.getElementById('publishPaperSelect');
+          if (sel && sel.value) return window.PapersAdmin.loadPublishFor(sel.value);
+          return window.PapersAdmin.loadPublishFor('');
+        })
+        .catch(e => toast(e.message));
+    } else {
+      loadExamLink().catch(e => toast(e.message));
+    }
+  } else if (view === 'papers') {
+    if (window.PapersAdmin) {
+      window.PapersAdmin.loadPapersList().catch(e => toast(e.message));
+    }
   }
 }
 
@@ -117,7 +131,10 @@ function showMainContent() {
   $('loginPanel').style.display = 'none';
   $('mainContent').style.display = 'grid';
   showView(currentView || 'overview', { refresh: false });
-  Promise.all([loadStats(), loadRows(), loadExamLink()]).catch(e => toast(e.message));
+  const tasks = [loadStats(), loadRows()];
+  if (window.PapersAdmin) tasks.push(window.PapersAdmin.loadPapersList());
+  else tasks.push(loadExamLink());
+  Promise.all(tasks).catch(e => toast(e.message));
 }
 
 async function doLogin() {
@@ -216,6 +233,7 @@ function renderRows(rows) {
     <td>${esc(r.id)}</td>
     <td>${esc(r.name)}</td>
     <td>${esc(r.employee_id)}</td>
+    <td>${esc(r.paper_name || r.paper_id || '')}</td>
     <td>${esc(r.department || '')}</td>
     <td>${esc(r.objective_score)}</td>
     <td>${esc(r.subjective_score_final)}</td>
@@ -234,6 +252,8 @@ async function loadRows() {
   const keyword = $('keyword').value.trim();
   if (keyword) params.set('keyword', keyword);
   if ($('status').value) params.set('review_status', $('status').value);
+  const paperFilter = $('filterPaper');
+  if (paperFilter && paperFilter.value) params.set('paper_id', paperFilter.value);
   params.set('limit', PAGE_SIZE);
   params.set('offset', (currentPage - 1) * PAGE_SIZE);
 
@@ -303,7 +323,11 @@ function copyLink() {
 
 async function exportData() {
   try {
-    const resp = await authFetch(`${API}/export`);
+    const params = new URLSearchParams();
+    const paperFilter = $('filterPaper');
+    if (paperFilter && paperFilter.value) params.set('paper_id', paperFilter.value);
+    const q = params.toString();
+    const resp = await authFetch(`${API}/export${q ? '?' + q : ''}`);
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(apiErrorMessage(data, '导出失败'));
@@ -330,6 +354,11 @@ function bindEvents() {
     if (e.key === 'Enter') doLogin();
   });
   $('searchBtn').addEventListener('click', () => {
+    currentPage = 1;
+    loadRows().catch(e => toast(e.message));
+  });
+  const filterPaper = $('filterPaper');
+  if (filterPaper) filterPaper.addEventListener('change', () => {
     currentPage = 1;
     loadRows().catch(e => toast(e.message));
   });
@@ -402,3 +431,7 @@ function bindEvents() {
 
 bindEvents();
 checkAuth();
+
+window.adminToast = toast;
+window.adminAuthFetch = authFetch;
+window.showView = showView;

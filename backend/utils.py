@@ -6,7 +6,7 @@ import io
 import math
 import re
 import socket
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any
 
 
@@ -59,13 +59,14 @@ def generate_qr_base64(text: str) -> str:
     """生成二维码 PNG 的 base64 data URI。失败时返回空字符串。"""
     try:
         import qrcode  # type: ignore
+        from qrcode.constants import ERROR_CORRECT_M
     except Exception:
         return ""
     try:
         # type: ignore: qrcode 的 stub 对 make_image().save 的 format 参数支持不全
         qr = qrcode.QRCode(
             version=1,
-            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            error_correction=ERROR_CORRECT_M,
             box_size=10,
             border=4,
         )

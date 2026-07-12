@@ -29,26 +29,29 @@ python main.py
 主观题多引擎评分已拆为独立库：
 
 - GitHub（public）：https://github.com/yhwyxy/subjective-scoring
-- 当前钉选版本：`v0.1.0`
-- 本地开发：`pyproject.toml` 中 `[tool.uv.sources]` 使用 path editable（`../subjective-scoring`）
-- 无本地克隆时改为 git 依赖：
+- 当前钉选版本：`v0.1.2`
+- 正常安装：`pyproject.toml` 固定使用 GitHub tag，确保构建可复现
 
 ```toml
 [tool.uv.sources]
-subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.0" }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.2" }
 ```
 
 ```bash
-pip install "subjective-scoring[text,sql,code] @ git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.0"
+pip install "subjective-scoring[text,sql,code,remote] @ git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.2"
 ```
 
 ```python
-# 推荐
 from subjective_scoring import SubjectiveScoringService
-
-# 兼容旧导入
-from backend.scoring import SubjectiveScoringService
 ```
+
+本地修改评分库时，可用相邻目录的 editable 安装临时覆盖固定版本：
+
+```bash
+uv pip install -e "../subjective-scoring[text,sql,code]"
+```
+
+此后修改 `../subjective-scoring` 会立即生效。执行 `uv sync` 会恢复 GitHub 固定版本；发布新的评分库 tag 后，在本项目中更新 tag 并重新执行 `uv lock`。
 
 更换 CrossEncoder：
 
@@ -62,8 +65,8 @@ SubjectiveScoringService(
 
 访问：
 
-- 员工考试端：http://localhost:8000/
-- 管理后台：http://localhost:8000/admin
+- 员工考试端：http://localhost:8000/exam?paper=专业编码（须由管理端发布）
+- 管理后台：http://localhost:8000/admin（试卷录入 / 分专业发布）
 - API 文档：http://localhost:8000/docs
 
 ## 安全配置
@@ -96,6 +99,17 @@ server:
 
 未安装或加载失败时自动回退词法相似度，提交流程不中断。
 
+无法下载本地模型时，可在项目根目录 `.env` 中启用 Cohere-compatible 云端 Reranker：
+
+```dotenv
+RERANK_USE_REMOTE=true
+RERANK_API_URL=https://router.tumuer.me/v1/rerank
+RERANK_API_KEY=your-api-key
+RERANK_MODEL=Pro/BAAI/bge-reranker-v2-m3
+```
+
+`.env` 会在本地启动时自动加载，已有 shell / Docker 环境变量不会被覆盖。`RERANK_USE_REMOTE` 未配置或设为 `false` 时使用本地模型；设为 `true` 时，另外三个云端变量必须同时设置。启用后文本题和代码题语义评分使用云端 API，并自动关闭本地 CrossEncoder 加载；SQL 结构评分不受影响。`.env` 已被 Git 忽略，API Key 不应写入其他受版本控制的文件。
+
 更换模型：
 
 ```python
@@ -109,9 +123,24 @@ set_subjective_service(SubjectiveScoringService(
 ```
 
 
-## 题库
+## 题库 / 多专业试卷
 
-题库文件位于 `data/questions.json`。员工端接口会自动移除 `answer` 与 `scoring_rubric`，避免答案泄露。
+系统按**专业**管理试卷：每个专业一份当前卷。
+
+```text
+data/papers/
+  index.json          # 专业索引与开考状态
+  mech.json           # 某专业试卷
+  elec.json
+```
+
+- 管理后台 → **试卷 / 专业**：新建专业、录入题目、保存整卷。
+- **发布考试**：按专业开考/结束，生成 `http://局域网IP:8000/exam?paper=专业编码` 链接与二维码。
+- **非考试阶段**（`closed`）可自由改题；**开考中**（`open`）禁止改题，须先结束考试。
+- 员工端必须通过带 `paper` 的链接进入；接口自动脱敏（移除 `answer` / `scoring_rubric` / `scoring_points`）。
+- 首次启动若仅有旧文件 `data/questions.json`，会迁移为 `papers/default.json`。
+- 同一工号可考多个专业；同一专业不可重复提交。
+
 
 ## 测试
 
@@ -137,7 +166,7 @@ docker compose up -d --build
 
 挂载说明：
 - `config.yaml`（只读）：宿主修改后需 `docker compose restart` 生效
-- `data/questions.json`（只读）：题库
+- `data/papers/`（可写）：多专业试卷；`data/exam.db`：成绩库
 - `exam-db` volume：SQLite `exam.db` 持久化，容器重建不丢数据
 
 ## 安全注意事项
@@ -146,4 +175,3 @@ docker compose up -d --build
 - CORS 默认 `allow_credentials=false`（Token 走 Authorization header，无需 cookie），避免 CSRF 凭证泄漏
 - 速率限制按 IP 维度，管理端独立配额（120/min）、考生端 60/min
 - 管理员 Token 为进程内存储，进程重启需重新登录
-

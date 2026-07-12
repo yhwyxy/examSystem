@@ -1,0 +1,44 @@
+{
+  "papers": [
+    {
+      "slug": "default",
+      "name": "企业内部考试",
+      "status": "closed",
+      "question_count": 4,
+      "total_score": 22.0,
+      "updated_at": "2026-07-11T09:01:06.175108+00:00"
+    },
+    {
+      "slug": "test",
+      "name": "test",
+      "status": "closed",
+      "question_count": 0,
+      "total_score": 0,
+      "updated_at": "2026-07-11T09:00:23.445588+00:00"
+    },
+    {
+      "slug": "text-scoring-specialist",
+      "name": "文本主观题评分专项卷",
+      "status": "closed",
+      "question_count": 5,
+      "total_score": 100,
+      "updated_at": "2026-07-12T00:00:00+00:00"
+    },
+    {
+      "slug": "sql-scoring-specialist",
+      "name": "SQL 主观题评分专项卷",
+      "status": "closed",
+      "question_count": 5,
+      "total_score": 100,
+      "updated_at": "2026-07-12T00:00:00+00:00"
+    },
+    {
+      "slug": "code-scoring-specialist",
+      "name": "Python 代码评分专项卷",
+      "status": "closed",
+      "question_count": 5,
+      "total_score": 100,
+      "updated_at": "2026-07-12T00:00:00+00:00"
+    }
+  ]
+}

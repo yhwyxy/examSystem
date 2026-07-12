@@ -93,7 +93,7 @@ def regrade_submission(submission_id: int) -> dict[str, Any]:
     old_details = _parse_detail(submission)
     old_by_qid = {d.get("question_id"): d for d in old_details}
     answers = _parse_answers(submission)
-    new_result = grade_submission(answers)
+    new_result = grade_submission(answers, paper_id=submission.get("paper_id") or "default")
     new_details = new_result["grading_detail"]
 
     for d in new_details:

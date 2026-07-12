@@ -1,4 +1,6 @@
-from backend.main import app
+from backend.main import app as app
+
+__all__ = ["app"]
 
 if __name__ == "__main__":
     import uvicorn

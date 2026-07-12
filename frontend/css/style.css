@@ -790,3 +790,19 @@ tbody tr:hover {
     width: 100%;
   }
 }
+
+
+/* multi-paper editor */
+.is-hidden { display: none !important; }
+.question-editor-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.question-editor-item {
+  display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start;
+  padding: 0.75rem 1rem; border: 1px solid #e5e7eb; border-radius: 10px; background: #fafafa;
+}
+.option-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; }
+.nested-panel { margin-top: 1rem; background: #fcfcff; }
+.paper-meta-grid { margin-bottom: 0.75rem; }
+.full-label { display: block; margin: 0.5rem 0 0.75rem; }
+.full-label textarea { width: 100%; }
+.code-answer { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.q-block { margin-top: 0.75rem; }

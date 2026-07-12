@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from backend.scoring import (
+from subjective_scoring import (
     IntermediateScoreResult,
     ReviewLevel,
     ScoringMode,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from backend.scoring import (
+from subjective_scoring import (
     CodeScoreWeights,
     IntermediateScoreResult,
     ManualReviewThresholds,

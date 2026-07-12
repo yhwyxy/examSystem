@@ -12,8 +12,19 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from dotenv import load_dotenv
 
-_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config.yaml"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_ENV_PATH = _PROJECT_ROOT / ".env"
+_CONFIG_PATH = _PROJECT_ROOT / "config.yaml"
+
+
+def load_environment(path: Path = _ENV_PATH) -> None:
+    """加载本地环境文件，不覆盖 shell 或部署平台已设置的变量。"""
+    load_dotenv(path, override=False)
+
+
+load_environment()
 
 
 # ---------------------------------------------------------------------------

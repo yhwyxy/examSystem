@@ -1,5 +1,6 @@
 const state = {
   exam: null,
+  paperId: null,
   startedAt: null,
   durationSeconds: 0,
   timerId: null,
@@ -17,6 +18,12 @@ function toast(msg) {
 
 function pad(n) { return String(n).padStart(2, '0'); }
 
+function getPaperIdFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const p = (params.get('paper') || '').trim();
+  return p || null;
+}
+
 function safeQuestionId(id) {
   const raw = String(id);
   if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(raw);
@@ -27,16 +34,37 @@ function questionControlSelector(q, suffix = '') {
   return `[name="${safeQuestionId(q.id)}"]${suffix}`;
 }
 
+function showFatal(message) {
+  $('title').textContent = '无法进入考试';
+  $('desc').textContent = message;
+  const login = $('login');
+  if (login) login.style.display = 'none';
+  const form = $('examForm');
+  if (form) form.style.display = 'none';
+}
+
 async function loadExam() {
-  const res = await fetch('/api/exam');
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail?.message || '考试加载失败');
+  state.paperId = getPaperIdFromUrl();
+  if (!state.paperId) {
+    showFatal('请使用管理员发放的专业考试链接（地址中需包含 paper 参数，例如 /exam?paper=mech）。');
+    throw new Error('缺少 paper 参数');
   }
 
-  state.exam = await res.json();
-  $('title').textContent = state.exam.exam_info?.title || state.exam.config?.title || '企业考试';
-  $('desc').textContent = state.exam.exam_info?.description || '';
+  const res = await fetch(`/api/exam?paper=${encodeURIComponent(state.paperId)}`);
+  const errBody = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const msg = errBody.detail?.message || errBody.message || '考试加载失败';
+    showFatal(msg);
+    throw new Error(msg);
+  }
+
+  state.exam = errBody;
+  state.paperId = state.exam.paper_id || state.paperId;
+  $('title').textContent = state.exam.exam_info?.title || state.exam.paper_name || '企业考试';
+  const descParts = [];
+  if (state.exam.paper_name) descParts.push(`专业：${state.exam.paper_name}`);
+  if (state.exam.exam_info?.description) descParts.push(state.exam.exam_info.description);
+  $('desc').textContent = descParts.join(' · ');
   state.durationSeconds = (state.exam.config?.duration_minutes || state.exam.duration_minutes || 60) * 60;
 }
 
@@ -80,80 +108,67 @@ function renderQuestion(q, idx) {
   } else {
     const ta = document.createElement('textarea');
     ta.name = String(q.id);
+    ta.rows = 6;
     ta.placeholder = '请输入答案';
+    if (q.scoring_mode === 'code' || q.code_language) {
+      ta.className = 'code-answer';
+      ta.placeholder = `请输入代码${q.code_language ? '（' + q.code_language + '）' : ''}`;
+    }
     box.appendChild(ta);
   }
-
   return box;
 }
 
-function renderExam() {
-  const container = $('questions');
-  container.textContent = '';
-  state.exam.questions.forEach((q, idx) => container.appendChild(renderQuestion(q, idx)));
-}
-
-function updateTimer(endAt) {
-  const left = Math.max(0, Math.floor((endAt - Date.now()) / 1000));
-  $('timer').textContent = `${pad(Math.floor(left / 60))}:${pad(left % 60)}`;
-  return left;
-}
-
-function startTimer(startedAt) {
-  state.startedAt = startedAt || new Date().toISOString();
-  const endAt = Date.now() + state.durationSeconds * 1000;
-  updateTimer(endAt);
-  state.timerId = setInterval(() => {
-    const left = updateTimer(endAt);
+function startTimer() {
+  const tick = () => {
+    const elapsed = Math.floor((Date.now() - state.startedAt) / 1000);
+    const left = Math.max(0, state.durationSeconds - elapsed);
+    const m = Math.floor(left / 60);
+    const s = left % 60;
+    $('timer').textContent = `${pad(m)}:${pad(s)}`;
     if (left <= 0) {
       clearInterval(state.timerId);
       const autoSubmit = state.exam.config?.auto_submit ?? state.exam.auto_submit ?? true;
       if (autoSubmit) submitExam();
       else $('submitBtn').disabled = true;
     }
-  }, 500);
+  };
+  tick();
+  state.timerId = setInterval(tick, 1000);
 }
 
 function collectAnswers() {
   const answers = {};
   for (const q of state.exam.questions) {
     if (q.type === 'multiple_choice') {
-      answers[q.id] = Array.from(document.querySelectorAll(`${questionControlSelector(q, ':checked')}`))
-        .map(x => x.value);
-    } else if (q.type === 'single_choice') {
-      const checked = document.querySelector(`${questionControlSelector(q, ':checked')}`);
-      answers[q.id] = checked ? checked.value : null;
+      answers[q.id] = [...document.querySelectorAll(questionControlSelector(q, ':checked'))].map(el => el.value);
     } else if (q.type === 'true_false') {
-      const checked = document.querySelector(`${questionControlSelector(q, ':checked')}`);
-      answers[q.id] = checked ? checked.value === 'true' : null;
+      const el = document.querySelector(questionControlSelector(q, ':checked'));
+      answers[q.id] = el ? (el.value === 'true') : null;
+    } else if (q.type === 'single_choice') {
+      const el = document.querySelector(questionControlSelector(q, ':checked'));
+      answers[q.id] = el ? el.value : null;
     } else {
-      answers[q.id] = document.querySelector(questionControlSelector(q))?.value || '';
+      const el = document.querySelector(questionControlSelector(q));
+      answers[q.id] = el ? el.value : '';
     }
   }
   return answers;
 }
 
-function showSubmitSuccess() {
-  const content = $('resultContent');
-  content.textContent = '';
-
-  const mark = document.createElement('div');
-  mark.className = 'success-mark';
-  mark.textContent = '✓';
-
-  const title = document.createElement('h2');
-  title.textContent = '提交成功';
-
-  const message = document.createElement('p');
-  message.textContent = '您的试卷已提交成功。';
-
-  const hint = document.createElement('p');
-  hint.className = 'muted';
-  hint.textContent = '成绩将在管理员复核后另行通知，请留意通知。';
-
-  content.append(mark, title, message, hint);
+function showSuccess() {
+  if (state.timerId) clearInterval(state.timerId);
+  $('login').style.display = 'none';
   $('examForm').style.display = 'none';
   $('successPanel').style.display = 'block';
+  const rc = $('resultContent');
+  rc.textContent = '';
+  const h2 = document.createElement('h2');
+  h2.textContent = '提交成功';
+  const p = document.createElement('p');
+  p.className = 'muted';
+  p.textContent = '系统已收到答卷，成绩由管理员复核后公布，请勿重复提交。';
+  rc.append(h2, p);
 }
 
 async function submitExam(evt) {
@@ -169,61 +184,59 @@ async function submitExam(evt) {
 
   state.submitting = true;
   $('submitBtn').disabled = true;
-
-  const payload = {
-    name,
-    employee_id: employeeId,
-    department: $('department').value.trim() || null,
-    started_at: state.startedAt,
-    answers: collectAnswers(),
-  };
-
   try {
+    const payload = {
+      name,
+      employee_id: employeeId,
+      paper_id: state.paperId,
+      department: ($('department').value || '').trim() || null,
+      answers: collectAnswers(),
+      started_at: state.startedAt ? new Date(state.startedAt).toISOString() : null,
+    };
     const res = await fetch('/api/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail?.message || '提交失败');
-
-    clearInterval(state.timerId);
-    showSubmitSuccess();
-  } catch (err) {
+    if (!res.ok) throw new Error(data.detail?.message || data.message || '提交失败');
+    showSuccess();
+  } catch (e) {
+    toast(e.message || '提交失败');
     state.submitting = false;
     $('submitBtn').disabled = false;
-    toast(err.message || '提交失败');
   }
 }
 
-$('startBtn').addEventListener('click', async () => {
+async function startExam() {
   const name = $('name').value.trim();
   const employeeId = $('employee_id').value.trim();
   if (!name || !employeeId) {
     toast('请填写姓名和工号');
     return;
   }
-
-  $('startBtn').disabled = true;
   try {
     const res = await fetch('/api/exam/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id: employeeId }),
+      body: JSON.stringify({ employee_id: employeeId, paper_id: state.paperId }),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail?.message || '考试开始失败');
+    if (!res.ok) throw new Error(data.detail?.message || '开始考试失败');
 
+    state.startedAt = Date.now();
     $('login').style.display = 'none';
     $('examForm').style.display = 'block';
-    renderExam();
-    startTimer(data.started_at);
-  } catch (err) {
-    toast(err.message || '考试开始失败');
-    $('startBtn').disabled = false;
+    const container = $('questions');
+    container.textContent = '';
+    state.exam.questions.forEach((q, idx) => container.appendChild(renderQuestion(q, idx)));
+    startTimer();
+  } catch (e) {
+    toast(e.message || '开始失败');
   }
-});
+}
 
+$('startBtn').addEventListener('click', startExam);
 $('examForm').addEventListener('submit', submitExam);
 
-loadExam().catch(err => toast(err.message));
+loadExam().catch(() => {});

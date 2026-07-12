@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from backend.scoring import ScoringMode, ScoringRequest
-from backend.scoring.engines import SQLStructureScorer
+from subjective_scoring import ScoringMode, ScoringRequest
+from subjective_scoring.engines import SQLStructureScorer
 
 
 def _req(ref: str, stu: str, max_score: float = 10) -> ScoringRequest:

@@ -1,0 +1,12 @@
+{
+  "paper_id": "code-scoring-specialist",
+  "name": "Python 代码评分专项卷",
+  "exam_info": {"title": "Python 代码评分专项卷", "description": "请提交 Python 函数实现。", "total_score": 100, "passing_score": 60},
+  "questions": [
+    {"id": "code-1", "type": "short_answer", "question": "实现 safe_divide(a, b)：b 为 0 时返回 None，否则返回 a / b。", "answer": "def safe_divide(a, b):\n    if b == 0:\n        return None\n    return a / b", "score": 20, "scoring_mode": "code", "code_language": "python"},
+    {"id": "code-2", "type": "short_answer", "question": "实现 unique_in_order(items)，去除重复元素并保持首次出现顺序，元素均可哈希。", "answer": "def unique_in_order(items):\n    seen = set()\n    result = []\n    for item in items:\n        if item not in seen:\n            seen.add(item)\n            result.append(item)\n    return result", "score": 20, "scoring_mode": "code", "code_language": "python"},
+    {"id": "code-3", "type": "short_answer", "question": "实现 is_valid_brackets(text)，判断只包含 ()[]{} 的字符串括号是否正确匹配。", "answer": "def is_valid_brackets(text):\n    pairs = {')': '(', ']': '[', '}': '{'}\n    stack = []\n    for char in text:\n        if char in '([{':\n            stack.append(char)\n        elif not stack or stack.pop() != pairs[char]:\n            return False\n    return not stack", "score": 20, "scoring_mode": "code", "code_language": "python"},
+    {"id": "code-4", "type": "short_answer", "question": "实现 merge_intervals(intervals)，合并所有重叠闭区间，输入为 [start, end] 列表。", "answer": "def merge_intervals(intervals):\n    if not intervals:\n        return []\n    intervals = sorted(intervals, key=lambda item: item[0])\n    merged = [intervals[0][:]]\n    for start, end in intervals[1:]:\n        if start <= merged[-1][1]:\n            merged[-1][1] = max(merged[-1][1], end)\n        else:\n            merged.append([start, end])\n    return merged", "score": 20, "scoring_mode": "code", "code_language": "python"},
+    {"id": "code-5", "type": "short_answer", "question": "实现 TTLCache：set(key, value, ttl, now) 保存过期时间 now+ttl；get(key, now) 在不存在或过期时返回 None，并删除过期项。", "answer": "class TTLCache:\n    def __init__(self):\n        self._data = {}\n\n    def set(self, key, value, ttl, now):\n        self._data[key] = (value, now + ttl)\n\n    def get(self, key, now):\n        item = self._data.get(key)\n        if item is None:\n            return None\n        value, expires_at = item\n        if now >= expires_at:\n            del self._data[key]\n            return None\n        return value", "score": 20, "scoring_mode": "code", "code_language": "python"}
+  ]
+}

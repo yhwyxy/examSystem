@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from backend.scoring import (
+from subjective_scoring import (
     EvidenceItem,
     IntermediateScoreResult,
     ManualReviewThresholds,
@@ -15,7 +15,7 @@ from backend.scoring import (
     ScoringOptions,
     ScoringRequest,
 )
-from backend.scoring.components import ScoreAggregatorComponent
+from subjective_scoring.components import ScoreAggregatorComponent
 
 
 @pytest.fixture

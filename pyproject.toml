@@ -12,7 +12,8 @@ dependencies = [
     "qrcode[pil]>=7.4",
     "openpyxl>=3.1",
     "httpx>=0.27",
-    "subjective-scoring",
+    "python-dotenv>=1.0",
+    "subjective-scoring[remote]",
 ]
 
 [project.optional-dependencies]
@@ -21,7 +22,7 @@ embedding = [
     "torch>=2.2",
 ]
 scoring = [
-    "subjective-scoring[text,sql,code]",
+    "subjective-scoring[text,sql,code,remote]",
 ]
 dev = [
     "pytest>=8.0",
@@ -31,4 +32,4 @@ dev = [
 package = false
 
 [tool.uv.sources]
-subjective-scoring = { path = "../subjective-scoring", editable = true }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.2" }

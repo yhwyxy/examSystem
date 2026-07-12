@@ -19,7 +19,7 @@ import backend.grader as grader_mod
 
 def _fake_scoring_result(score: float, confidence: float, review_level: str = "auto_pass"):
     """Build a ScoringResult-like object for grader integration tests."""
-    from backend.scoring import ReviewLevel, ScoringMode, ScoringResult
+    from subjective_scoring import ReviewLevel, ScoringMode, ScoringResult
 
     level = ReviewLevel(review_level)
     return ScoringResult(
@@ -70,7 +70,7 @@ def _fake_question_loader(monkeypatch):
     """Bypass question_loader for tests that need it."""
     monkeypatch.setattr(
         "backend.question_loader.load_questions",
-        lambda: {"questions": _FAKE_QUESTIONS},
+        lambda paper_id=None: {"questions": _FAKE_QUESTIONS, "paper_id": paper_id or "default"},
     )
 
 
@@ -249,11 +249,16 @@ class TestQuestionLoaderValidation:
                  "answer": True, "score": 5},
             ],
         }
-        p = tmp_path / "questions.json"
-        p.write_text(json.dumps(valid, ensure_ascii=False))
-        monkeypatch.setattr(question_loader, "QUESTIONS_PATH", p)
+        papers = tmp_path / "papers"
+        papers.mkdir()
+        (papers / "t1.json").write_text(json.dumps({**valid, "paper_id": "t1", "name": "T"}, ensure_ascii=False))
+        (papers / "index.json").write_text(json.dumps({
+            "papers": [{"slug": "t1", "name": "T", "status": "closed", "question_count": 2, "total_score": 10}]
+        }), encoding="utf-8")
+        monkeypatch.setattr(question_loader, "PAPERS_DIR", papers)
+        monkeypatch.setattr(question_loader, "INDEX_PATH", papers / "index.json")
         question_loader.clear_question_cache()
-        data = question_loader.load_questions()
+        data = question_loader.load_questions("t1")
         assert len(data["questions"]) == 2
 
     def test_duplicate_ids_fail_validation(self):
@@ -286,11 +291,15 @@ class TestQuestionLoaderValidation:
             validate_questions(data)
 
     def test_public_exam_payload_strips_answers(self):
-        from backend.question_loader import public_exam_payload
-        payload = public_exam_payload()
+        from backend.question_loader import public_exam_payload, ensure_papers_layout, list_papers
+        ensure_papers_layout()
+        papers = list_papers()
+        assert papers, "expected migrated default paper"
+        payload = public_exam_payload(papers[0]["slug"])
         for q in payload["questions"]:
             assert "answer" not in q
             assert "scoring_rubric" not in q
+            assert "scoring_points" not in q
 
 
 # ---------------------------------------------------------------------------
@@ -402,7 +411,7 @@ def test_build_scoring_request_from_question():
 @pytest.mark.usefixtures("_fake_question_loader")
 def test_real_subjective_service_smoke():
     """真实 SubjectiveScoringService（无模型）可跑通 short_answer。"""
-    from backend.scoring import SubjectiveScoringService
+    from subjective_scoring import SubjectiveScoringService
     grader_mod.set_subjective_service(SubjectiveScoringService(allow_model_load=False))
     try:
         result = asyncio.get_event_loop().run_until_complete(

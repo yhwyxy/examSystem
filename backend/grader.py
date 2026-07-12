@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import Any
@@ -17,22 +19,14 @@ from .question_loader import SUBJECTIVE_TYPES
 
 logger = logging.getLogger(__name__)
 
-try:
-    from subjective_scoring import (
-        ReviewLevel,
-        ScoringMode,
-        ScoringRequest,
-        ScoringResult,
-        SubjectiveScoringService,
-    )
-except ImportError:  # pragma: no cover - 兼容层
-    from backend.scoring import (
-        ReviewLevel,
-        ScoringMode,
-        ScoringRequest,
-        ScoringResult,
-        SubjectiveScoringService,
-    )
+from subjective_scoring import (
+    CohereRerankerPairScorer,
+    ReviewLevel,
+    ScoringMode,
+    ScoringRequest,
+    ScoringResult,
+    SubjectiveScoringService,
+)
 
 
 @dataclass
@@ -51,21 +45,73 @@ class GradingResult:
 # ---------------------------------------------------------------------------
 
 _subjective_service: SubjectiveScoringService | None = None
+_remote_reranker: CohereRerankerPairScorer | None = None
+_subjective_service_lock = threading.RLock()
+
+
+def validate_remote_reranker_config() -> dict[str, str] | None:
+    """读取并校验云端 Reranker 环境变量。"""
+    raw_enabled = os.environ.get("RERANK_USE_REMOTE", "").strip().lower()
+    if raw_enabled in {"", "false"}:
+        return None
+    if raw_enabled != "true":
+        raise RuntimeError("RERANK_USE_REMOTE 只能设置为 true 或 false")
+
+    remote_config = {
+        "RERANK_API_URL": os.environ.get("RERANK_API_URL", "").strip(),
+        "RERANK_API_KEY": os.environ.get("RERANK_API_KEY", "").strip(),
+        "RERANK_MODEL": os.environ.get("RERANK_MODEL", "").strip(),
+    }
+    configured = [name for name, value in remote_config.items() if value]
+    if len(configured) != len(remote_config):
+        missing = [name for name, value in remote_config.items() if not value]
+        raise RuntimeError(
+            "云端 Reranker 配置不完整，缺少环境变量: " + ", ".join(missing)
+        )
+    return remote_config
 
 
 def get_subjective_service() -> SubjectiveScoringService:
     """获取主观题评分服务单例。"""
-    global _subjective_service
-    if _subjective_service is None:
-        # 默认允许加载 CrossEncoder；无 semantic 依赖时库内回退词法相似度
-        _subjective_service = SubjectiveScoringService(allow_model_load=True)
-    return _subjective_service
+    global _remote_reranker, _subjective_service
+    with _subjective_service_lock:
+        if _subjective_service is None:
+            remote_config = validate_remote_reranker_config()
+            if remote_config is not None:
+                reranker = CohereRerankerPairScorer(
+                    url=remote_config["RERANK_API_URL"],
+                    api_key=remote_config["RERANK_API_KEY"],
+                    model=remote_config["RERANK_MODEL"],
+                )
+                try:
+                    _subjective_service = SubjectiveScoringService(
+                        allow_model_load=False,
+                        text_pair_scorer=reranker,
+                        code_pair_scorer=reranker,
+                    )
+                except Exception:
+                    reranker.close()
+                    raise
+                _remote_reranker = reranker
+            else:
+                # 默认允许加载 CrossEncoder；无 semantic 依赖时库内回退词法相似度
+                _subjective_service = SubjectiveScoringService(allow_model_load=True)
+        return _subjective_service
 
 
 def set_subjective_service(service: SubjectiveScoringService | None) -> None:
     """测试/运维注入自定义服务；传 None 恢复懒加载默认。"""
-    global _subjective_service
-    _subjective_service = service
+    global _remote_reranker, _subjective_service
+    with _subjective_service_lock:
+        if _remote_reranker is not None:
+            _remote_reranker.close()
+            _remote_reranker = None
+        _subjective_service = service
+
+
+def close_subjective_service() -> None:
+    """关闭评分服务持有的远端连接池。"""
+    set_subjective_service(None)
 
 
 # ---------------------------------------------------------------------------
@@ -324,11 +370,11 @@ def aggregate_review_status(details: list[dict[str, Any]]) -> str:
     return "reviewed"
 
 
-async def grade_submission(answers: dict[str, Any]) -> GradingResult:
-    """完整判分入口，返回 GradingResult。"""
+async def grade_submission(answers: dict[str, Any], paper_id: str | None = None) -> GradingResult:
+    """完整判分入口，返回 GradingResult。须指定 paper_id。"""
     from .question_loader import load_questions
 
-    data = load_questions()
+    data = load_questions(paper_id)
     questions = data.get("questions", [])
     q_map = {q["id"]: q for q in questions}
 

@@ -1,0 +1,12 @@
+{
+  "paper_id": "sql-scoring-specialist",
+  "name": "SQL 主观题评分专项卷",
+  "exam_info": {"title": "SQL 主观题评分专项卷", "description": "请仅提交符合题意的 SQL。", "total_score": 100, "passing_score": 60},
+  "questions": [
+    {"id": "sql-1", "type": "short_answer", "question": "表 employees(id, name, department_id, salary)。查询薪资大于 10000 的员工姓名和薪资，按薪资降序、姓名升序排列。", "answer": "SELECT name, salary FROM employees WHERE salary > 10000 ORDER BY salary DESC, name ASC;", "score": 20, "scoring_mode": "sql", "code_language": "sql"},
+    {"id": "sql-2", "type": "short_answer", "question": "表 orders(id, customer_id, amount, status, created_at)。统计 2026 年已支付订单中每位客户的订单数和总金额，只保留总金额超过 5000 的客户。", "answer": "SELECT customer_id, COUNT(*) AS order_count, SUM(amount) AS total_amount FROM orders WHERE status = 'paid' AND created_at >= '2026-01-01' AND created_at < '2027-01-01' GROUP BY customer_id HAVING SUM(amount) > 5000;", "score": 20, "scoring_mode": "sql", "code_language": "sql"},
+    {"id": "sql-3", "type": "short_answer", "question": "表 users(id, name) 与 orders(id, user_id, amount)。查询所有用户及其订单总金额，没有订单的用户显示 0。", "answer": "SELECT u.id, u.name, COALESCE(SUM(o.amount), 0) AS total_amount FROM users u LEFT JOIN orders o ON o.user_id = u.id GROUP BY u.id, u.name;", "score": 20, "scoring_mode": "sql", "code_language": "sql"},
+    {"id": "sql-4", "type": "short_answer", "question": "表 employees(id, name, department_id, salary)。查询薪资高于其所在部门平均薪资的员工。", "answer": "SELECT e.id, e.name, e.department_id, e.salary FROM employees e WHERE e.salary > (SELECT AVG(e2.salary) FROM employees e2 WHERE e2.department_id = e.department_id);", "score": 20, "scoring_mode": "sql", "code_language": "sql"},
+    {"id": "sql-5", "type": "short_answer", "question": "表 sales(id, department_id, employee_id, amount)。计算每个部门中员工销售总额的排名，并列使用相同名次。", "answer": "WITH totals AS (SELECT department_id, employee_id, SUM(amount) AS total_amount FROM sales GROUP BY department_id, employee_id) SELECT department_id, employee_id, total_amount, DENSE_RANK() OVER (PARTITION BY department_id ORDER BY total_amount DESC) AS sales_rank FROM totals;", "score": 20, "scoring_mode": "sql", "code_language": "sql"}
+  ]
+}

@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.concurrency import run_in_threadpool
 
-from . import database, exporter, grader, question_loader
+from . import database, exporter, grader, paper_store, question_loader
 from .config import get_config, reload_config
 from .utils import generate_qr_base64, get_lan_ip, parse_iso
 
@@ -50,7 +50,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cfg.allow_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "PUT", "PATCH", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Requested-With"],
 )
 
@@ -160,6 +160,7 @@ def _error(status: int, code: str, message: str) -> HTTPException:
 class SubmitRequest(BaseModel):
     name: str
     employee_id: str
+    paper_id: str
     department: str | None = None
     answers: dict[str, Any] = Field(default_factory=dict)
     started_at: str | None = None  # 保留字段，但不再用于时间校验
@@ -167,6 +168,26 @@ class SubmitRequest(BaseModel):
 
 class ExamStartRequest(BaseModel):
     employee_id: str
+    paper_id: str
+
+
+class CreatePaperRequest(BaseModel):
+    slug: str
+    name: str
+
+
+class SavePaperRequest(BaseModel):
+    name: str | None = None
+    exam_info: dict[str, Any] = Field(default_factory=dict)
+    questions: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class UpdatePaperMetaRequest(BaseModel):
+    name: str | None = None
+
+
+class ReorderQuestionsRequest(BaseModel):
+    ids: list[str]
 
 
 class ReviewRequest(BaseModel):
@@ -194,21 +215,21 @@ def _get_grading_executor() -> ThreadPoolExecutor:
     return _grading_executor
 
 
-def schedule_grading(submission_id: int, answers: dict[str, Any]) -> None:
+def schedule_grading(submission_id: int, answers: dict[str, Any], paper_id: str) -> None:
     """后台线程执行评分，保持提交接口快速返回。
 
     使用全局有界线程池（默认 4 workers）+ 复用单个事件循环模式，
-    避免每次提交新建线程/事件循环导致资源��尽。
+    避免每次提交新建线程/事件循环导致资源耗尽。
     队满时提交请求排队等待，不会丢失。
     """
-    def _background_grade(sub_id: int, submitted_answers: dict[str, Any]) -> None:
+    def _background_grade(sub_id: int, submitted_answers: dict[str, Any], pid: str) -> None:
         # 复用调用线程的事件循环：grader.grade_submission 是 async，
         # 但在线程池 worker 中无 running loop，新建一个并立即关闭。
         # 相比旧实现，线程数受 max_workers 约束，避免无界增长。
         import asyncio
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(grader.grade_submission(submitted_answers))
+            result = loop.run_until_complete(grader.grade_submission(submitted_answers, paper_id=pid))
             database.update_submission_grading_result(
                 submission_id=sub_id,
                 grading_detail=result.grading_detail,
@@ -220,9 +241,9 @@ def schedule_grading(submission_id: int, answers: dict[str, Any]) -> None:
                 },
                 review_status=result.review_status,
             )
-            logger.info("后台评分完成: submission_id=%d, status=%s", sub_id, result.review_status)
+            logger.info("后台评分完成: submission_id=%d paper=%s status=%s", sub_id, pid, result.review_status)
         except Exception:
-            logger.exception("后台评分失败: submission_id=%d", sub_id)
+            logger.exception("后台评分失败: submission_id=%d paper=%s", sub_id, pid)
             try:
                 database.update_submission_grading_result(
                     submission_id=sub_id,
@@ -237,11 +258,26 @@ def schedule_grading(submission_id: int, answers: dict[str, Any]) -> None:
             loop.close()
 
     try:
-        _get_grading_executor().submit(_background_grade, submission_id, answers)
+        _get_grading_executor().submit(_background_grade, submission_id, answers, paper_id)
     except RuntimeError:
         # executor 已关闭（如进程退出），降级同步评分避免丢任务
         logger.warning("评分线程池不可用，降级同步评分: submission_id=%d", submission_id)
-        _background_grade(submission_id, answers)
+        _background_grade(submission_id, answers, paper_id)
+
+
+def _shutdown_runtime() -> None:
+    """等待后台评分结束后关闭远端评分连接。"""
+    global _grading_executor
+    executor = _grading_executor
+    _grading_executor = None
+    try:
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=False)
+    finally:
+        grader.close_subjective_service()
+
+
+app.router.add_event_handler("shutdown", _shutdown_runtime)
 
 
 # ---------------------------------------------------------------------------
@@ -269,12 +305,21 @@ async def rate_limit_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/exam")
-def get_exam(request: Request) -> dict[str, Any]:
+def get_exam(paper: str | None = None) -> dict[str, Any]:
+    """获取指定专业的脱敏试卷。必须提供 paper 参数。"""
     _assert_global_time_window()
+    if not paper or not str(paper).strip():
+        raise _error(400, "PAPER_REQUIRED", "请使用管理员发放的专业考试链接（缺少 paper 参数）")
+    paper_id = question_loader.validate_slug(paper)
+    meta = question_loader.assert_paper_open(paper_id)
     cfg = get_config().exam
-    data = question_loader.public_exam_payload()
+    data = question_loader.public_exam_payload(paper_id)
+    if not data.get("questions"):
+        raise _error(400, "EMPTY_QUESTION_BANK", "该专业试卷暂无题目")
     server_time = datetime.now(timezone.utc).isoformat()
     return {
+        "paper_id": paper_id,
+        "paper_name": data.get("paper_name") or meta.get("name"),
         "exam_info": data["exam_info"],
         "questions": data["questions"],
         "server_time": server_time,
@@ -294,9 +339,17 @@ def exam_start(req: ExamStartRequest, request: Request) -> dict[str, Any]:
     employee_id = req.employee_id.strip()
     if not employee_id:
         raise _error(400, "INVALID_EMPLOYEE_ID", "请提供工号")
+    paper_id = question_loader.validate_slug(req.paper_id)
+    question_loader.assert_paper_open(paper_id)
     now = datetime.now(timezone.utc)
-    database.upsert_exam_session(employee_id=employee_id, started_at=now.isoformat())
-    return {"started_at": now.isoformat(), "server_time": now.isoformat()}
+    database.upsert_exam_session(
+        employee_id=employee_id, paper_id=paper_id, started_at=now.isoformat()
+    )
+    return {
+        "started_at": now.isoformat(),
+        "server_time": now.isoformat(),
+        "paper_id": paper_id,
+    }
 
 
 @app.post("/api/submit")
@@ -304,9 +357,12 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
     _assert_global_time_window()
     cfg = get_config().exam
 
-    # 使用服务器记录的开始时间进行超时校验，不信任客户端 started_at
     employee_id = req.employee_id.strip()
-    started_at_iso = database.pop_exam_session(employee_id)
+    paper_id = question_loader.validate_slug(req.paper_id)
+    meta = question_loader.assert_paper_open(paper_id)
+    paper_name = meta.get("name")
+
+    started_at_iso = database.pop_exam_session(employee_id, paper_id)
     if started_at_iso is None:
         raise _error(403, "EXAM_NOT_STARTED", "请先开始考试")
     server_start = parse_iso(started_at_iso)
@@ -318,11 +374,12 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
     if elapsed > cfg.duration_minutes * 60 + cfg.grace_period_seconds:
         raise _error(403, "EXAM_TIMEOUT", "考试已超时，提交被拒绝")
 
-    # 直接 INSERT，依赖数据库 UNIQUE 约束防止重复提交
     try:
         submission_id = database.insert_submission_pending(
             name=req.name.strip(),
             employee_id=employee_id,
+            paper_id=paper_id,
+            paper_name=paper_name,
             department=req.department.strip() if req.department else None,
             answers=req.answers,
             started_at=req.started_at,
@@ -331,16 +388,17 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
         )
     except Exception as e:
         if "UNIQUE" in str(e).upper():
-            raise _error(409, "DUPLICATE_SUBMISSION", "该员工已提交，不能重复提交")
+            raise _error(409, "DUPLICATE_SUBMISSION", "该员工已在本专业提交，不能重复提交")
         logger.exception("提交保存失败")
         raise _error(500, "SUBMIT_FAILED", "提交失败，请联系管理员")
 
-    schedule_grading(submission_id, req.answers)
+    schedule_grading(submission_id, req.answers, paper_id)
 
     return {
         "success": True,
         "submission_id": submission_id,
         "status": "grading",
+        "paper_id": paper_id,
         "message": "提交成功，系统正在评分中",
     }
 
@@ -396,26 +454,46 @@ def admin_login(req: LoginRequest) -> dict[str, Any]:
     return {"success": True, "token": token}
 
 
-@app.get("/api/admin/exam-link", dependencies=[Depends(require_admin)])
-def exam_link(request: Request) -> dict[str, Any]:
-    """返回考试链接和二维码，供管理员发布考试。"""
+def _exam_base_url(request: Request) -> str:
     cfg = get_config().server
     host = request.url.hostname or get_lan_ip()
     if host in {"127.0.0.1", "localhost"}:
         host = get_lan_ip()
-    url = f"http://{host}:{cfg.port}/exam"
-    return {"url": url, "qr_base64": generate_qr_base64(url)}
+    return f"http://{host}:{cfg.port}"
+
+
+@app.get("/api/admin/exam-link", dependencies=[Depends(require_admin)])
+def exam_link(request: Request, paper: str | None = None) -> dict[str, Any]:
+    """返回考试链接和二维码；建议传 paper 生成专业专属链接。"""
+    base = _exam_base_url(request)
+    if paper:
+        paper_id = question_loader.validate_slug(paper)
+        meta = question_loader.get_paper_meta(paper_id)
+        if not meta:
+            raise _error(404, "PAPER_NOT_FOUND", f"试卷不存在: {paper_id}")
+        url = f"{base}/exam?paper={paper_id}"
+        return {
+            "url": url,
+            "qr_base64": generate_qr_base64(url),
+            "paper_id": paper_id,
+            "paper_name": meta.get("name"),
+            "status": meta.get("status"),
+        }
+    # 兼容：无 paper 时返回提示性入口（不可直接作答）
+    url = f"{base}/exam"
+    return {"url": url, "qr_base64": generate_qr_base64(url), "message": "请为具体专业生成链接"}
 
 
 @app.get("/api/admin/stats", dependencies=[Depends(require_admin)])
-def admin_stats() -> dict[str, Any]:
-    return database.get_stats()
+def admin_stats(paper_id: str | None = None) -> dict[str, Any]:
+    return database.get_stats(paper_id=paper_id)
 
 
 @app.get("/api/admin/submissions", dependencies=[Depends(require_admin)])
 def admin_submissions(
     keyword: str | None = None,
     review_status: str | None = None,
+    paper_id: str | None = None,
     sort_by: str | None = None,
     order: str | None = None,
     limit: int = 100,
@@ -425,7 +503,7 @@ def admin_submissions(
     limit = max(1, min(limit, 500))
     offset = max(0, offset)
     return database.list_submissions(
-        keyword=keyword, review_status=review_status,
+        keyword=keyword, review_status=review_status, paper_id=paper_id,
         sort_by=sort_by or "submitted_at",
         order=order or "desc",
         limit=limit, offset=offset,
@@ -467,12 +545,12 @@ def admin_regrade(submission_id: int) -> dict[str, Any]:
         raise _error(404, "NOT_FOUND", "提交记录不存在")
 
     answers = submission.get("answers") or {}
-    cfg = get_config()
+    paper_id = submission.get("paper_id") or "default"
 
     import asyncio
     loop = asyncio.new_event_loop()
     try:
-        result = loop.run_until_complete(grader.grade_submission(answers))
+        result = loop.run_until_complete(grader.grade_submission(answers, paper_id=paper_id))
     finally:
         loop.close()
 
@@ -507,24 +585,117 @@ def admin_regrade(submission_id: int) -> dict[str, Any]:
 
 
 @app.get("/api/admin/export", dependencies=[Depends(require_admin)])
-def admin_export() -> Any:
+def admin_export(paper_id: str | None = None) -> Any:
     export_cfg = get_config().export
     if export_cfg.format == "xlsx":
         from fastapi.responses import Response
-        content = exporter.export_submissions_xlsx()
+        content = exporter.export_submissions_xlsx(paper_id=paper_id)
+        fname = f"exam_results_{paper_id}.xlsx" if paper_id else "exam_results.xlsx"
         return Response(
             content=content,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": "attachment; filename=exam_results.xlsx"},
+            headers={"Content-Disposition": f"attachment; filename={fname}"},
         )
     return {"message": "仅支持 xlsx 导出"}
 
 
+# ---------------------------------------------------------------------------
+# 管理端：多专业试卷
+# ---------------------------------------------------------------------------
+
+@app.get("/api/admin/papers", dependencies=[Depends(require_admin)])
+def admin_list_papers() -> list[dict[str, Any]]:
+    papers = paper_store.list_papers_with_status()
+    out = []
+    for p in papers:
+        item = dict(p)
+        slug = str(p.get("slug") or "")
+        item["submission_count"] = database.submission_count(slug) if slug else 0
+        out.append(item)
+    return out
+
+
+@app.post("/api/admin/papers", dependencies=[Depends(require_admin)])
+def admin_create_paper(req: CreatePaperRequest) -> dict[str, Any]:
+    meta = paper_store.create_paper(slug=req.slug, name=req.name)
+    return {"success": True, "paper": meta}
+
+
+@app.get("/api/admin/papers/{slug}", dependencies=[Depends(require_admin)])
+def admin_get_paper(slug: str) -> dict[str, Any]:
+    return paper_store.get_paper_full(slug)
+
+
+@app.put("/api/admin/papers/{slug}", dependencies=[Depends(require_admin)])
+def admin_save_paper(slug: str, req: SavePaperRequest) -> dict[str, Any]:
+    return paper_store.save_paper(slug, {
+        "name": req.name,
+        "exam_info": req.exam_info,
+        "questions": req.questions,
+    })
+
+
+@app.patch("/api/admin/papers/{slug}/meta", dependencies=[Depends(require_admin)])
+def admin_patch_paper_meta(slug: str, req: UpdatePaperMetaRequest) -> dict[str, Any]:
+    return paper_store.update_meta(slug, name=req.name)
+
+
+@app.delete("/api/admin/papers/{slug}", dependencies=[Depends(require_admin)])
+def admin_delete_paper(slug: str) -> dict[str, Any]:
+    has = database.submission_count(slug) > 0
+    paper_store.delete_paper(slug, has_submissions=has)
+    return {"success": True}
+
+
+@app.post("/api/admin/papers/{slug}/questions", dependencies=[Depends(require_admin)])
+def admin_add_question(slug: str, question: dict[str, Any]) -> dict[str, Any]:
+    q = paper_store.add_question(slug, question)
+    return {"success": True, "question": q}
+
+
+@app.put("/api/admin/papers/{slug}/questions/{question_id}", dependencies=[Depends(require_admin)])
+def admin_update_question(slug: str, question_id: str, question: dict[str, Any]) -> dict[str, Any]:
+    q = paper_store.update_question(slug, question_id, question)
+    return {"success": True, "question": q}
+
+
+@app.delete("/api/admin/papers/{slug}/questions/{question_id}", dependencies=[Depends(require_admin)])
+def admin_delete_question(slug: str, question_id: str) -> dict[str, Any]:
+    paper_store.delete_question(slug, question_id)
+    return {"success": True}
+
+
+@app.put("/api/admin/papers/{slug}/questions/reorder", dependencies=[Depends(require_admin)])
+def admin_reorder_questions(slug: str, req: ReorderQuestionsRequest) -> dict[str, Any]:
+    return paper_store.reorder_questions(slug, req.ids)
+
+
+@app.post("/api/admin/papers/{slug}/open", dependencies=[Depends(require_admin)])
+def admin_open_paper(slug: str) -> dict[str, Any]:
+    meta = paper_store.set_status(slug, question_loader.PAPER_STATUS_OPEN)
+    return {"success": True, "paper": meta}
+
+
+@app.post("/api/admin/papers/{slug}/close", dependencies=[Depends(require_admin)])
+def admin_close_paper(slug: str) -> dict[str, Any]:
+    meta = paper_store.set_status(slug, question_loader.PAPER_STATUS_CLOSED)
+    return {"success": True, "paper": meta}
+
+
+@app.get("/api/admin/papers/{slug}/exam-link", dependencies=[Depends(require_admin)])
+def admin_paper_exam_link(slug: str, request: Request) -> dict[str, Any]:
+    return exam_link(request, paper=slug)
+
+
 @app.post("/api/admin/reload-questions", dependencies=[Depends(require_admin)])
-def reload_questions_api() -> dict[str, Any]:
+def reload_questions_api(paper: str | None = None) -> dict[str, Any]:
     try:
-        data = question_loader.reload_questions()
-        return {"success": True, "count": len(data["questions"])}
+        if paper:
+            data = question_loader.reload_questions(paper)
+            return {"success": True, "paper_id": paper, "count": len(data.get("questions") or [])}
+        question_loader.reload_questions()
+        papers = question_loader.list_papers()
+        return {"success": True, "papers": len(papers)}
     except HTTPException:
         raise
     except Exception:
@@ -572,11 +743,15 @@ app.mount("/js", StaticFiles(directory=str(FRONTEND_DIR / "js")), name="js")
 
 
 def _preflight_check() -> None:
-    """启动时对关键配置做静默预检，仅记录日志不阻塞启动。
+    """启动时预检关键配置。
 
     将「运行时才崩」的配置错误（如 admin 启用认证但未设密码）
-    前置到启动日志，便于运维第一时间发现。
+    前置到启动日志。云端 Reranker 配置不完整时阻止启动，其他现有
+    检查仍只记录日志。
     """
+    grader.validate_remote_reranker_config()
+    grader.get_subjective_service()
+
     try:
         cfg = get_config()
     except Exception:
@@ -601,6 +776,13 @@ def _preflight_check() -> None:
                 logger.warning("配置预检：考试时间窗口结束时间早于开始时间")
         except Exception:
             logger.warning("配置预检：考试时间窗口时间格式无法解析")
+
+    # 试卷目录 / 旧卷迁移
+    try:
+        question_loader.ensure_papers_layout()
+        logger.info("试卷目录就绪，共 %d 份专业卷", len(question_loader.list_papers()))
+    except Exception:
+        logger.exception("配置预检：试卷目录初始化失败")
 
     # DB 初始化
     try:

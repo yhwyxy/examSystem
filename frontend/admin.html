@@ -29,6 +29,7 @@
       </div>
       <nav class="nav-list" aria-label="后台导航">
         <button class="nav-item active" type="button" data-view="overview">总览</button>
+        <button class="nav-item" type="button" data-view="papers">试卷 / 专业</button>
         <button class="nav-item" type="button" data-view="publish">发布考试</button>
         <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
         <a class="nav-item" href="/">考试端</a>
@@ -65,6 +66,164 @@
           </section>
         </section>
 
+
+        <section class="view-panel" id="view-papers" data-view="papers">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">PAPERS</p>
+              <h1>试卷 / 专业</h1>
+              <p class="muted">每个专业一份当前试卷；非考试阶段可自由改题。</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn" id="createPaperBtn" type="button">新建专业</button>
+            </div>
+          </header>
+
+          <section class="panel" id="papersListPanel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">LIST</p>
+                <h2>专业列表</h2>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>编码</th>
+                    <th>状态</th>
+                    <th>题量</th>
+                    <th>满分</th>
+                    <th>提交数</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody id="papersTbody"></tbody>
+              </table>
+            </div>
+            <p id="papersState" class="muted"></p>
+          </section>
+
+          <section class="panel is-hidden" id="paperEditorPanel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">EDITOR</p>
+                <h2 id="paperEditorTitle">编辑试卷</h2>
+                <p class="muted" id="paperEditorStatus"></p>
+              </div>
+              <div class="toolbar">
+                <button class="btn secondary" id="backToPapersBtn" type="button">返回列表</button>
+                <button class="btn" id="savePaperBtn" type="button">保存整卷</button>
+              </div>
+            </div>
+
+            <div class="form-grid paper-meta-grid">
+              <label>专业名称
+                <input id="editPaperName" type="text">
+              </label>
+              <label>考试标题
+                <input id="editExamTitle" type="text">
+              </label>
+              <label>及格分
+                <input id="editPassingScore" type="number" min="0" step="0.5">
+              </label>
+              <label>满分（自动）
+                <input id="editTotalScore" type="number" disabled>
+              </label>
+            </div>
+            <label class="full-label">考试说明
+              <textarea id="editExamDesc" rows="2"></textarea>
+            </label>
+
+            <div class="section-head" style="margin-top:1.2rem">
+              <div>
+                <p class="eyebrow">QUESTIONS</p>
+                <h2>题目列表</h2>
+              </div>
+              <button class="btn secondary" id="addQuestionBtn" type="button">新增题目</button>
+            </div>
+            <div id="questionList" class="question-editor-list"></div>
+
+            <div class="panel nested-panel is-hidden" id="questionFormPanel">
+              <div class="section-head">
+                <div>
+                  <p class="eyebrow">QUESTION</p>
+                  <h3 id="questionFormTitle">编辑题目</h3>
+                </div>
+                <button class="btn secondary" id="cancelQuestionBtn" type="button">取消</button>
+              </div>
+              <div class="form-grid">
+                <label>题型
+                  <select id="qType">
+                    <option value="single_choice">单选题</option>
+                    <option value="multiple_choice">多选题</option>
+                    <option value="true_false">判断题</option>
+                    <option value="short_answer">简答题</option>
+                    <option value="essay">论述题</option>
+                  </select>
+                </label>
+                <label>分值
+                  <input id="qScore" type="number" min="0.5" step="0.5" value="5">
+                </label>
+                <label>题目 ID（可选）
+                  <input id="qId" type="text" placeholder="留空自动生成">
+                </label>
+              </div>
+              <label class="full-label">题干
+                <textarea id="qStem" rows="3"></textarea>
+              </label>
+
+              <div id="qOptionsBlock" class="q-block">
+                <div class="section-head">
+                  <h3>选项</h3>
+                  <button class="btn secondary" id="addOptionBtn" type="button">加选项</button>
+                </div>
+                <div id="qOptionsList"></div>
+              </div>
+
+              <div id="qTrueFalseBlock" class="q-block is-hidden">
+                <label>正确答案
+                  <select id="qTrueFalseAnswer">
+                    <option value="true">正确</option>
+                    <option value="false">错误</option>
+                  </select>
+                </label>
+              </div>
+
+              <div id="qSubjectiveBlock" class="q-block is-hidden">
+                <label class="full-label">参考答案
+                  <textarea id="qAnswer" rows="5" class="code-answer"></textarea>
+                </label>
+                <div class="form-grid">
+                  <label>评分模式
+                    <select id="qScoringMode">
+                      <option value="text">文本</option>
+                      <option value="sql">SQL</option>
+                      <option value="code">代码</option>
+                    </select>
+                  </label>
+                  <label>代码语言
+                    <input id="qCodeLang" type="text" placeholder="python / sql / java ...">
+                  </label>
+                </div>
+                <label class="full-label">文本评分标准（可选，也可用下方评分点）
+                  <textarea id="qRubric" rows="2" placeholder="资源导向 3 分；HTTP 方法 2 分"></textarea>
+                </label>
+                <div class="section-head">
+                  <h3>评分点</h3>
+                  <button class="btn secondary" id="addPointBtn" type="button">加评分点</button>
+                </div>
+                <div id="qPointsList"></div>
+              </div>
+
+              <div class="toolbar" style="margin-top:1rem">
+                <button class="btn" id="applyQuestionBtn" type="button">应用到列表</button>
+              </div>
+            </div>
+          </section>
+        </section>
+
         <section class="view-panel" id="view-publish" data-view="publish">
           <header class="topbar">
             <div>
@@ -77,13 +236,25 @@
             <div class="section-head">
               <div>
                 <p class="eyebrow">LINK</p>
-                <h2>考试入口</h2>
+                <h2>按专业发布</h2>
               </div>
+            </div>
+            <div class="form-grid">
+              <label>选择专业
+                <select id="publishPaperSelect"></select>
+              </label>
+              <label>状态
+                <input id="publishStatus" type="text" disabled>
+              </label>
+            </div>
+            <div class="toolbar" style="margin:0.8rem 0">
+              <button class="btn" id="openExamBtn" type="button">开考</button>
+              <button class="btn secondary" id="closeExamBtn" type="button">结束考试</button>
               <button class="btn secondary" id="copyLinkBtn" type="button">复制链接</button>
             </div>
             <div class="publish-layout">
               <div class="link-box">
-                <p class="muted">将考试链接或二维码发送给考生即可开始答题。</p>
+                <p class="muted">一专业一链接：仅开放中的专业可被考生打开。</p>
                 <a id="examLink" class="exam-link" href="#" target="_blank" rel="noreferrer"></a>
               </div>
               <div>
@@ -111,6 +282,7 @@
                 <h2>提交记录</h2>
               </div>
               <div class="filters">
+                <select id="filterPaper"><option value="">全部专业</option></select>
                 <input id="keyword" type="text" placeholder="搜索姓名或工号">
                 <select id="status">
                   <option value="">全部状态</option>
@@ -134,6 +306,7 @@
                     <th>ID</th>
                     <th>姓名</th>
                     <th>工号</th>
+                  <th>专业</th>
                     <th>部门</th>
                     <th>客观分</th>
                     <th>主观分</th>
@@ -154,6 +327,7 @@
   </div>
 
   <div class="toast" id="toast"></div>
+  <script src="/js/papers.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>
