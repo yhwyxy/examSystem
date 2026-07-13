@@ -29,16 +29,16 @@ python main.py
 主观题多引擎评分已拆为独立库：
 
 - GitHub（public）：https://github.com/yhwyxy/subjective-scoring
-- 当前钉选版本：`v0.1.2`
+- 当前钉选版本：`v0.1.4`
 - 正常安装：`pyproject.toml` 固定使用 GitHub tag，确保构建可复现
 
 ```toml
 [tool.uv.sources]
-subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.2" }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.4" }
 ```
 
 ```bash
-pip install "subjective-scoring[text,sql,code,remote] @ git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.2"
+pip install "subjective-scoring[text,sql,code,remote] @ git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.4"
 ```
 
 ```python

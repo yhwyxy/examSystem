@@ -41,6 +41,7 @@ def test_render_markdown_formats_confidence_without_duplicate_keyword():
 
 def test_submission_polling_waits_long_enough_to_avoid_rate_limit(monkeypatch):
     sleeps: list[float] = []
+    resets: list[bool] = []
 
     class Response:
         def __init__(self, status):
@@ -60,6 +61,11 @@ def test_submission_polling_waits_long_enough_to_avoid_rate_limit(monkeypatch):
 
     monkeypatch.setattr(validation.time, "sleep", sleeps.append)
     monkeypatch.setattr(
+        validation,
+        "_reset_isolated_rate_limit_state",
+        lambda: resets.append(True),
+    )
+    monkeypatch.setattr(
         validation.review_service,
         "get_submission_detail",
         lambda submission_id: {"id": submission_id},
@@ -67,6 +73,7 @@ def test_submission_polling_waits_long_enough_to_avoid_rate_limit(monkeypatch):
 
     assert validation._wait_for_submission(Client(), 1) == {"id": 1}
     assert sleeps and min(sleeps) >= 0.5
+    assert len(resets) == 2
 
 
 def test_specialized_papers_have_three_quality_cases():

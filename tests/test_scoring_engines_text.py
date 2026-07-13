@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from subjective_scoring import ScoringMode, ScoringRequest
+from subjective_scoring import PointRelation, ScoringMode, ScoringRequest
 from subjective_scoring.engines import RuleInterceptor, TextRerankerScorer
 
 
@@ -32,15 +32,18 @@ def test_scores_points_with_injected_similarity():
 
     assert result.scorer == "TextRerankerScorer"
     assert result.scoring_mode is ScoringMode.TEXT
-    assert result.score == 5.5  # 0.9*5 + 0.2*5
+    assert result.score == 4.5  # 低于支持阈值的评分点不再贡献残余分
     assert len(result.matched_evidence) == 1
     assert result.matched_evidence[0].point_id == "p1"
     assert result.missed_evidence[0].point_id == "p2"
+    assert result.matched_evidence[0].relation is PointRelation.SUPPORTED
+    assert result.missed_evidence[0].relation is PointRelation.UNKNOWN
+    assert result.missed_evidence[0].score == 0.0
     assert result.force_manual_review is False
     assert result.metadata["model"] == "injected"
 
 
-def test_negation_conflict_penalizes_point_and_forces_review():
+def test_negation_conflict_zeros_point_and_forces_review():
     def sim(student: str, point: str) -> float:
         return 0.95
 
@@ -52,8 +55,9 @@ def test_negation_conflict_penalizes_point_and_forces_review():
         )
     )
 
-    assert 0.0 < result.score < 5.0
+    assert result.score == 0.0
     assert result.force_manual_review is True
+    assert result.missed_evidence[0].relation is PointRelation.CONTRADICTED
     assert any("否定" in w for w in result.warnings)
     diagnostic = result.metadata["point_diagnostics"][0]
     assert diagnostic["raw_similarity"] == 0.95

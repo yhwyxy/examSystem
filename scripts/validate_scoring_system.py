@@ -440,6 +440,7 @@ def _wait_for_submission(client: TestClient, submission_id: int, timeout: float 
     deadline = time.monotonic() + timeout
     last_status = "grading"
     while time.monotonic() < deadline:
+        _reset_isolated_rate_limit_state()
         response = client.get(f"/api/submission/{submission_id}/status")
         response.raise_for_status()
         last_status = str(response.json().get("status"))
