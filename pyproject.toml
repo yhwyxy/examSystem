@@ -32,4 +32,4 @@ dev = [
 package = false
 
 [tool.uv.sources]
-subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.4" }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.5" }
