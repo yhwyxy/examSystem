@@ -21,6 +21,7 @@ env/
 # Local sandbox / agent metadata
 .aionrs/
 .codex/
+.worktrees/
 
 # Local logs / runtime
 *.log
