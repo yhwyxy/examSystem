@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+import argparse
+import json
 import re
+import subprocess
+import tempfile
+from collections import Counter
+from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 OFFICECLI_PATH_RE = re.compile(r"^\s*\[/[^\n]*\]\]\s*")
@@ -263,3 +269,165 @@ def parse_exam_lines(source_name: str, lines: list[str]) -> ParseResult:
         "questions": questions,
     }
     return ParseResult(paper=paper, issues=issues)
+
+
+CommandRunner = Callable[..., Any]
+Extractor = Callable[[Path, Path], str]
+Validator = Callable[[dict[str, Any]], None]
+
+
+def extract_with_officecli(
+    source: Path,
+    temp_dir: Path,
+    *,
+    runner: CommandRunner = subprocess.run,
+) -> str:
+    office_source = source
+    if source.suffix.lower() == ".doc":
+        office_source = temp_dir / f"{source.stem}.docx"
+        runner(
+            [
+                "textutil",
+                "-convert",
+                "docx",
+                "-output",
+                str(office_source),
+                str(source),
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    result = runner(
+        ["officecli", "view", str(office_source), "text"],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return str(result.stdout)
+
+
+def _atomic_write_json(path: Path, data: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = path.with_suffix(f"{path.suffix}.tmp")
+    temporary_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    temporary_path.replace(path)
+
+
+def _system_validator(paper: dict[str, Any]) -> None:
+    from backend.question_loader import validate_questions
+
+    validate_questions(paper)
+
+
+def _report_entry(source: Path, result: ParseResult, output: Path) -> dict[str, Any]:
+    questions = result.paper["questions"]
+    return {
+        "source": source.name,
+        "output": output.name,
+        "status": "pending",
+        "question_count": len(questions),
+        "total_score": result.paper["exam_info"]["total_score"],
+        "type_counts": dict(Counter(question["type"] for question in questions)),
+        "issues": [asdict(issue) for issue in result.issues],
+    }
+
+
+def convert_directory(
+    source_dir: Path,
+    output_dir: Path,
+    *,
+    extractor: Extractor = extract_with_officecli,
+    validator: Validator | None = None,
+) -> dict[str, Any]:
+    validator = validator or _system_validator
+    output_dir.mkdir(parents=True, exist_ok=True)
+    entries: list[dict[str, Any]] = []
+    sources = sorted(
+        (
+            path
+            for path in source_dir.iterdir()
+            if path.is_file() and path.suffix.lower() in {".doc", ".docx"}
+        ),
+        key=lambda path: path.name,
+    )
+
+    with tempfile.TemporaryDirectory(prefix="word-exam-converter-") as temp_name:
+        temp_dir = Path(temp_name)
+        for source in sources:
+            output = output_dir / f"{source.stem}.json"
+            try:
+                extracted = extractor(source, temp_dir)
+                result = parse_exam_lines(
+                    source.name,
+                    normalize_extracted_lines(extracted),
+                )
+            except Exception as exc:
+                entries.append(
+                    {
+                        "source": source.name,
+                        "output": output.name,
+                        "status": "extraction_failed",
+                        "question_count": 0,
+                        "total_score": 0,
+                        "type_counts": {},
+                        "issues": [str(exc)],
+                    }
+                )
+                continue
+
+            entry = _report_entry(source, result, output)
+            if result.issues:
+                entry["status"] = "needs_review"
+                entries.append(entry)
+                continue
+
+            try:
+                validator(result.paper)
+            except Exception as exc:
+                entry["status"] = "invalid"
+                entry["issues"] = [str(exc)]
+                entries.append(entry)
+                continue
+
+            _atomic_write_json(output, result.paper)
+            entry["status"] = "valid"
+            entries.append(entry)
+
+    report = {
+        "source_directory": str(source_dir),
+        "output_directory": str(output_dir),
+        "file_count": len(entries),
+        "files": entries,
+    }
+    _atomic_write_json(output_dir / "conversion-report.json", report)
+    return report
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="使用 officecli 将 Word 试卷转换为系统 JSON。"
+    )
+    parser.add_argument("source_dir", type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    args = parser.parse_args(argv)
+    report = convert_directory(args.source_dir, args.output)
+    status_counts = Counter(entry["status"] for entry in report["files"])
+    print(
+        json.dumps(
+            {
+                "file_count": report["file_count"],
+                "status_counts": dict(status_counts),
+                "report": str(args.output / "conversion-report.json"),
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

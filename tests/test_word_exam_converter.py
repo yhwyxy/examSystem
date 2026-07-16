@@ -1,4 +1,10 @@
+import json
+from types import SimpleNamespace
+
+from scripts import word_exam_converter as converter
 from scripts.word_exam_converter import (
+    convert_directory,
+    extract_with_officecli,
     normalize_extracted_lines,
     parse_answer_token,
     parse_exam_lines,
@@ -103,3 +109,136 @@ def test_parse_exam_lines_accepts_multiple_choice_answer_list():
 
     assert result.paper["questions"][0]["answer"] == ["A", "C"]
     assert result.issues == []
+
+
+def test_extract_with_officecli_reads_docx_directly(tmp_path):
+    source = tmp_path / "试卷.docx"
+    calls = []
+
+    def runner(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(stdout="[/body/p[1]] 标题\n")
+
+    text = extract_with_officecli(source, tmp_path, runner=runner)
+
+    assert text == "[/body/p[1]] 标题\n"
+    assert calls[0][0] == ["officecli", "view", str(source), "text"]
+
+
+def test_extract_with_officecli_converts_doc_before_reading(tmp_path):
+    source = tmp_path / "旧试卷.doc"
+    calls = []
+
+    def runner(args, **kwargs):
+        calls.append((args, kwargs))
+        return SimpleNamespace(stdout="[/body/p[1]] 标题\n")
+
+    extract_with_officecli(source, tmp_path, runner=runner)
+
+    converted = tmp_path / "旧试卷.docx"
+    assert calls[0][0] == [
+        "textutil",
+        "-convert",
+        "docx",
+        "-output",
+        str(converted),
+        str(source),
+    ]
+    assert calls[1][0] == ["officecli", "view", str(converted), "text"]
+
+
+def test_convert_directory_writes_valid_utf8_json(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "json"
+    source_dir.mkdir()
+    (source_dir / "试卷（化工）.docx").touch()
+    extracted = "\n".join(
+        [
+            "[/body/p[1]] 化工试卷",
+            "[/body/p[2]] 一、判断题（每题1分）",
+            "[/body/p[3]] 1、理想气体混合物是一种理想溶液。（√）",
+        ]
+    )
+
+    report = convert_directory(
+        source_dir,
+        output_dir,
+        extractor=lambda source, temp_dir: extracted,
+        validator=lambda paper: None,
+    )
+
+    output = output_dir / "试卷（化工）.json"
+    paper = json.loads(output.read_text(encoding="utf-8"))
+    assert paper["exam_info"]["title"] == "化工试卷"
+    assert "化工试卷" in output.read_text(encoding="utf-8")
+    assert report["files"][0]["status"] == "valid"
+
+
+def test_convert_directory_reports_needs_review_without_writing_paper(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "json"
+    source_dir.mkdir()
+    (source_dir / "试卷（软件）.docx").touch()
+    extracted = "\n".join(
+        [
+            "[/body/p[1]] 软件试卷",
+            "[/body/p[2]] 一、单选题（每题2分）",
+            "[/body/p[3]] 1、HTTP 默认端口是（ ） A.80 B.443",
+        ]
+    )
+
+    report = convert_directory(
+        source_dir,
+        output_dir,
+        extractor=lambda source, temp_dir: extracted,
+        validator=lambda paper: None,
+    )
+
+    assert report["files"][0]["status"] == "needs_review"
+    assert not (output_dir / "试卷（软件）.json").exists()
+
+
+def test_convert_directory_records_validator_failure(tmp_path):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "json"
+    source_dir.mkdir()
+    (source_dir / "试卷（化工）.docx").touch()
+    extracted = "\n".join(
+        [
+            "[/body/p[1]] 化工试卷",
+            "[/body/p[2]] 一、判断题（每题1分）",
+            "[/body/p[3]] 1、理想气体混合物是一种理想溶液。（√）",
+        ]
+    )
+
+    def invalid(_paper):
+        raise ValueError("invalid paper")
+
+    report = convert_directory(
+        source_dir,
+        output_dir,
+        extractor=lambda source, temp_dir: extracted,
+        validator=invalid,
+    )
+
+    assert report["files"][0]["status"] == "invalid"
+    assert report["files"][0]["issues"] == ["invalid paper"]
+
+
+def test_main_passes_source_and_output_to_converter(tmp_path, monkeypatch):
+    source_dir = tmp_path / "source"
+    output_dir = tmp_path / "json"
+    source_dir.mkdir()
+    received = {}
+
+    def fake_convert(source, output):
+        received["source"] = source
+        received["output"] = output
+        return {"file_count": 0, "files": []}
+
+    monkeypatch.setattr(converter, "convert_directory", fake_convert)
+
+    exit_code = converter.main([str(source_dir), "--output", str(output_dir)])
+
+    assert exit_code == 0
+    assert received == {"source": source_dir, "output": output_dir}
