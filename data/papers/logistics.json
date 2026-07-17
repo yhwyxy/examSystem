@@ -1,0 +1,1132 @@
+{
+  "paper_id": "logistics",
+  "name": "物流管理",
+  "exam_info": {
+    "title": "大学生入职试卷(物流管理)A卷",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "可以"
+        },
+        {
+          "key": "B",
+          "text": "不可以"
+        },
+        {
+          "key": "C",
+          "text": "有时可以"
+        },
+        {
+          "key": "D",
+          "text": "未来可以"
+        }
+      ],
+      "question": "物流的流通加工取代正常的生产加工活动。\n.",
+      "id": "q1"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "流通领域"
+        },
+        {
+          "key": "B",
+          "text": "生产领域"
+        },
+        {
+          "key": "C",
+          "text": "再生产中"
+        },
+        {
+          "key": "D",
+          "text": "销售领域"
+        }
+      ],
+      "question": "流通加工是对商品在的完善和补充。\n.",
+      "id": "q2"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "运送"
+        },
+        {
+          "key": "B",
+          "text": "报价与询价"
+        },
+        {
+          "key": "C",
+          "text": "报销"
+        },
+        {
+          "key": "D",
+          "text": "交易"
+        }
+      ],
+      "question": "商流是商品的。\n.",
+      "id": "q3"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "物流"
+        },
+        {
+          "key": "B",
+          "text": "商流"
+        },
+        {
+          "key": "C",
+          "text": "流通"
+        },
+        {
+          "key": "D",
+          "text": "再生产"
+        }
+      ],
+      "question": "商品的所有权转让属于范畴。\n.",
+      "id": "q4"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "时间效用"
+        },
+        {
+          "key": "B",
+          "text": "空间效用"
+        },
+        {
+          "key": "C",
+          "text": "所有权效用"
+        },
+        {
+          "key": "D",
+          "text": "使用价值和商品价值"
+        }
+      ],
+      "question": "商流活动创造商品的。\n.",
+      "id": "q5"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "商物合一"
+        },
+        {
+          "key": "B",
+          "text": "配送"
+        },
+        {
+          "key": "C",
+          "text": "商物分离"
+        },
+        {
+          "key": "D",
+          "text": "现代经济"
+        }
+      ],
+      "question": "由于理论的形成,物流从流通中分离出来,形成独立的学科。\n.",
+      "id": "q6"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "职能实现"
+        },
+        {
+          "key": "B",
+          "text": "作业程序"
+        },
+        {
+          "key": "C",
+          "text": "不清楚部分"
+        },
+        {
+          "key": "D",
+          "text": "成本分析"
+        }
+      ],
+      "question": "“物流冰山说”是关于物流的理论。\n.",
+      "id": "q7"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "总成本"
+        },
+        {
+          "key": "B",
+          "text": "成本节省"
+        },
+        {
+          "key": "C",
+          "text": "外付成本"
+        },
+        {
+          "key": "D",
+          "text": "企业内部消耗的物流成本"
+        }
+      ],
+      "question": "物流冰山中的水下部分是物流的所在。\n.",
+      "id": "q8"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "物流成本可缩性大"
+        },
+        {
+          "key": "B",
+          "text": "物流的不确定性"
+        },
+        {
+          "key": "C",
+          "text": "物流尚待开发的领域,也是物流潜力所在"
+        },
+        {
+          "key": "D",
+          "text": "物流成本永"
+        }
+      ],
+      "question": "“物流冰山说”指。\n.\n.",
+      "id": "q9"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "生产"
+        },
+        {
+          "key": "B",
+          "text": "流通"
+        },
+        {
+          "key": "C",
+          "text": "运输"
+        },
+        {
+          "key": "D",
+          "text": "仓储"
+        }
+      ],
+      "question": "物流对有最后实现的决定性作用。\n.",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "方便"
+        },
+        {
+          "key": "B",
+          "text": "快速"
+        },
+        {
+          "key": "C",
+          "text": "成本节省"
+        },
+        {
+          "key": "D",
+          "text": "A和C"
+        }
+      ],
+      "question": "物流能给客户带来。\n.\n.",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "仓储"
+        },
+        {
+          "key": "B",
+          "text": "港口"
+        },
+        {
+          "key": "C",
+          "text": "铁路"
+        },
+        {
+          "key": "D",
+          "text": "集装箱运输"
+        }
+      ],
+      "question": "物流业在沿海城市集中体现在物流。\n.",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "单一的"
+        },
+        {
+          "key": "B",
+          "text": "多样化的"
+        },
+        {
+          "key": "C",
+          "text": "灵活的"
+        },
+        {
+          "key": "D",
+          "text": "全方位的"
+        }
+      ],
+      "question": "现代物流服务功能是。\n.",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "市场间隔"
+        },
+        {
+          "key": "B",
+          "text": "时间间隔"
+        },
+        {
+          "key": "C",
+          "text": "空间间隔"
+        },
+        {
+          "key": "D",
+          "text": "产品间隔"
+        }
+      ],
+      "question": "生产季节性商品企业采用在淡季生产储备商品以调节旺季市场大量需求的方法,这种储备克服了。\n.",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "生产"
+        },
+        {
+          "key": "B",
+          "text": "分配"
+        },
+        {
+          "key": "C",
+          "text": "交换"
+        },
+        {
+          "key": "D",
+          "text": "流通"
+        }
+      ],
+      "question": "商物分离的理论使物流可以完全从中分化出来成为独立的系统。\n.",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "与流通"
+        },
+        {
+          "key": "B",
+          "text": "与生产"
+        },
+        {
+          "key": "C",
+          "text": "供需方"
+        },
+        {
+          "key": "D",
+          "text": "若干功能要素"
+        }
+      ],
+      "question": "“效益背反”指的是物流之间存在损益的矛盾。\n.",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "运输"
+        },
+        {
+          "key": "B",
+          "text": "保管"
+        },
+        {
+          "key": "C",
+          "text": "配送"
+        },
+        {
+          "key": "D",
+          "text": "运输和保管"
+        }
+      ],
+      "question": "物流活动中最主要的功能要素是。\n.",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "基本活动"
+        },
+        {
+          "key": "B",
+          "text": "辅助活动"
+        },
+        {
+          "key": "C",
+          "text": "重要活动"
+        },
+        {
+          "key": "D",
+          "text": "次要活动"
+        }
+      ],
+      "question": "采购属于企业价值链中的。\n.",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "市场开始"
+        },
+        {
+          "key": "B",
+          "text": "客户满意"
+        },
+        {
+          "key": "C",
+          "text": "成本效益"
+        },
+        {
+          "key": "D",
+          "text": "市场占有率"
+        }
+      ],
+      "question": "现代物流是以为出发点的服务,强调一切以客户为中心。\n.",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "经济效益"
+        },
+        {
+          "key": "B",
+          "text": "市场份额"
+        },
+        {
+          "key": "C",
+          "text": "客户满意度"
+        },
+        {
+          "key": "D",
+          "text": "成本花费"
+        }
+      ],
+      "question": "客户服务是衡量物流系统创造时间和空间效用的。\n.",
+      "id": "q20"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "客户满意"
+        },
+        {
+          "key": "B",
+          "text": "降低成本"
+        },
+        {
+          "key": "C",
+          "text": "规模经济"
+        },
+        {
+          "key": "D",
+          "text": "速度经济"
+        },
+        {
+          "key": "E",
+          "text": "减少污染"
+        }
+      ],
+      "question": "物流的目标是。\n.",
+      "id": "q21"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "企业物流"
+        },
+        {
+          "key": "B",
+          "text": "生产物流"
+        },
+        {
+          "key": "C",
+          "text": "国民经济物流"
+        },
+        {
+          "key": "D",
+          "text": "全球物流"
+        },
+        {
+          "key": "E",
+          "text": "粮食物流"
+        }
+      ],
+      "question": "下列活动属于微观物流。\n.",
+      "id": "q22"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "需求"
+        },
+        {
+          "key": "B",
+          "text": "供应"
+        },
+        {
+          "key": "C",
+          "text": "渠道"
+        },
+        {
+          "key": "D",
+          "text": "价格"
+        },
+        {
+          "key": "E",
+          "text": "空间"
+        }
+      ],
+      "question": "物流的动态性表现为随着的变化,系统内的要素及系统的运行经常发生变化。\n.",
+      "id": "q23"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "国际物流"
+        },
+        {
+          "key": "B",
+          "text": "国内物流"
+        },
+        {
+          "key": "C",
+          "text": "区域物流"
+        },
+        {
+          "key": "D",
+          "text": "国民经济物流"
+        },
+        {
+          "key": "E",
+          "text": "企业经济物流"
+        }
+      ],
+      "question": "从物流活动的空间范围角度可将其划分为。\n.",
+      "id": "q24"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "企业供应物流"
+        },
+        {
+          "key": "B",
+          "text": "生产物流"
+        },
+        {
+          "key": "C",
+          "text": "销售物流"
+        },
+        {
+          "key": "D",
+          "text": "回收物流"
+        },
+        {
+          "key": "E",
+          "text": "供应链物流"
+        }
+      ],
+      "question": "企业物流可以划分为不同典型的具体物流活动如。\n.",
+      "id": "q25"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "买方物流"
+        },
+        {
+          "key": "B",
+          "text": "卖方物流"
+        },
+        {
+          "key": "C",
+          "text": "供应链集成者"
+        },
+        {
+          "key": "D",
+          "text": "能够提出整体的供应链解决方案"
+        },
+        {
+          "key": "E",
+          "text": "需求方物流"
+        }
+      ],
+      "question": "第四方物流是。\n.\n.",
+      "id": "q26"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "D",
+        "E"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "买方"
+        },
+        {
+          "key": "B",
+          "text": "销售者"
+        },
+        {
+          "key": "C",
+          "text": "生产者"
+        },
+        {
+          "key": "D",
+          "text": "专业化物流服务商"
+        },
+        {
+          "key": "E",
+          "text": "买卖双方之外的第三方"
+        }
+      ],
+      "question": "第三方物流是由组织的物流活动。\n.",
+      "id": "q27"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "自动存储系统"
+        },
+        {
+          "key": "B",
+          "text": "自动导引车"
+        },
+        {
+          "key": "C",
+          "text": "电子扫描器"
+        },
+        {
+          "key": "D",
+          "text": "条形码"
+        },
+        {
+          "key": "E",
+          "text": "地理信息系统"
+        }
+      ],
+      "question": "是物流自动化系统中主要组成部分。\n.",
+      "id": "q28"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "有形的实体"
+        },
+        {
+          "key": "B",
+          "text": "无形的服务"
+        },
+        {
+          "key": "C",
+          "text": "有偿的服务"
+        },
+        {
+          "key": "D",
+          "text": "无偿的服务"
+        },
+        {
+          "key": "E",
+          "text": "精神"
+        }
+      ],
+      "question": "物流中的物包括。\n.",
+      "id": "q29"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "正确的时间"
+        },
+        {
+          "key": "B",
+          "text": "正确的数量"
+        },
+        {
+          "key": "C",
+          "text": "正确的价格"
+        },
+        {
+          "key": "D",
+          "text": "正确的运送方式"
+        },
+        {
+          "key": "E",
+          "text": "正确的结束"
+        }
+      ],
+      "question": "好的物流服务由一系列“正确行为”为保证,它们是指。\n.",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "计划"
+        },
+        {
+          "key": "B",
+          "text": "领导"
+        },
+        {
+          "key": "C",
+          "text": "实施"
+        },
+        {
+          "key": "D",
+          "text": "协调与控制"
+        },
+        {
+          "key": "E",
+          "text": "反馈"
+        }
+      ],
+      "question": "对物流的认识存在于对物流活动全过程中各环节的。\n.",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "工场物流"
+        },
+        {
+          "key": "B",
+          "text": "设施物流"
+        },
+        {
+          "key": "C",
+          "text": "企业物流"
+        },
+        {
+          "key": "D",
+          "text": "供应链物流"
+        },
+        {
+          "key": "E",
+          "text": "世界物流"
+        }
+      ],
+      "question": "物流发展经历了阶段。\n.",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "在高度工业化背景下,社会生产集聚是在经济发展冲动地区首先实现"
+        },
+        {
+          "key": "B",
+          "text": "作为增长极发展及作用基础的产业被称为关键产业"
+        },
+        {
+          "key": "C",
+          "text": "增长极通过极化和扩散两个过程作用于周围地区"
+        },
+        {
+          "key": "D",
+          "text": "在增长极发展演化的中后期,以\"渗漏\"作用为主"
+        },
+        {
+          "key": "E",
+          "text": "社会经济增长是跳跃式地前进"
+        }
+      ],
+      "question": "增长极思想的要点是。\n.\n.\n.\n.\n.",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "费人"
+        },
+        {
+          "key": "B",
+          "text": "费事"
+        },
+        {
+          "key": "C",
+          "text": "费时"
+        },
+        {
+          "key": "D",
+          "text": "费成本"
+        },
+        {
+          "key": "E",
+          "text": "什么都不费"
+        }
+      ],
+      "question": "与商流相比,物流的特点是。\n.",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "灵活"
+        },
+        {
+          "key": "B",
+          "text": "机动"
+        },
+        {
+          "key": "C",
+          "text": "活跃"
+        },
+        {
+          "key": "D",
+          "text": "相对成本低"
+        },
+        {
+          "key": "E",
+          "text": "相对成本高"
+        }
+      ],
+      "question": "与物流相比,商流的特点是。\n.",
+      "id": "q35"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "速度经济被进一步明确表示为快速反应的能力,是指企业在竞争环境的突变中,能否迅速做出反应的能力。",
+      "id": "q36"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "创造消费者价值和满意是物流消费者经济价值的核心所在。",
+      "id": "q37"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "商流流动的是“商品所有权证书”。",
+      "id": "q38"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "商流的特点是:费人、费事、费成本。",
+      "id": "q39"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "物流的特点是:灵活、机动、活跃、相对成本低。",
+      "id": "q40"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "商流与物流运作责任人的分离,是网络经济时代商物分离的一个标志。",
+      "id": "q41"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "配送已成为许多人公认的既是商流又是物流的概念。",
+      "id": "q42"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "流通是经济领域里的黑暗大陆。",
+      "id": "q43"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "人类历史上曾经有过两个大量提供利润的领域,一是人力资源,二是动力资源。",
+      "id": "q44"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "人力领域习惯上被称为“第一利润源”。",
+      "id": "q45"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "资源领域习惯上被称为“第二利润源”。",
+      "id": "q46"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": true,
+      "question": "物流领域习惯上称为“第三利润源”。",
+      "id": "q47"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "第一利润源的挖掘对象是生产力中的劳动者。",
+      "id": "q48"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "第二利润源的挖掘对象是生产力中的劳动对象。",
+      "id": "q49"
+    },
+    {
+      "type": "true_false",
+      "score": 2.0,
+      "answer": false,
+      "question": "第三利润源的挖掘对象是生产力要素中的劳动工具的潜力。",
+      "id": "q50"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "大幅,你好!我是指导员,如果下雨,为了保护产品,请关舱停止作业。",
+      "answer": "HELLO!CHIEF OFFICER!I’M FOREMAN.IF IT IS RAINING, PLEASE CLOSE HATCH COVER AND STOP LOADING IN ORDER TO PROTECT THE PRODUCT.",
+      "id": "q51"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "船长,为了保持船体平衡,我们要换3、5舱作业, 请打开舱口。",
+      "answer": "CAPTAIN! IN ORDER TO KEEP SHIP’S BALANCE,  WE WILL SHIFT TO HOLD NO.3&5,PLEASE OPEN HATCH COVER.",
+      "id": "q52"
+    }
+  ]
+}

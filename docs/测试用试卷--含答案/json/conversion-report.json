@@ -1,0 +1,257 @@
+{
+  "source_directory": "/Users/yhw/Code/Github/examSystem/docs/测试用试卷--含答案",
+  "output_directory": "docs/测试用试卷--含答案/json",
+  "file_count": 18,
+  "files": [
+    {
+      "source": "试卷（仪器仪表）.docx",
+      "output": "试卷（仪器仪表）.json",
+      "status": "valid",
+      "question_count": 42,
+      "total_score": 80.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 2
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（冶金专业）.docx",
+      "output": "试卷（冶金专业）.json",
+      "status": "valid",
+      "question_count": 43,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 3
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（化学分析）.docx",
+      "output": "试卷（化学分析）.json",
+      "status": "valid",
+      "question_count": 43,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 3
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（化学工程与工艺）.docx",
+      "output": "试卷（化学工程与工艺）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（安全管理）.docx",
+      "output": "试卷（安全管理）.json",
+      "status": "valid",
+      "question_count": 43,
+      "total_score": 100.0,
+      "type_counts": {
+        "single_choice": 20,
+        "true_false": 10,
+        "multiple_choice": 10,
+        "short_answer": 3
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（机械专业）.docx",
+      "output": "试卷（机械专业）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "true_false": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（材料专业）.docx",
+      "output": "试卷（材料专业）.json",
+      "status": "valid",
+      "question_count": 43,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 3
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（法务）.docx",
+      "output": "试卷（法务）.json",
+      "status": "valid",
+      "question_count": 39,
+      "total_score": 91.0,
+      "type_counts": {
+        "single_choice": 15,
+        "multiple_choice": 19,
+        "essay": 5
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（焊接专业）.docx",
+      "output": "试卷（焊接专业）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "true_false": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（物流管理）.docx",
+      "output": "试卷（物流管理）.json",
+      "status": "valid",
+      "question_count": 52,
+      "total_score": 100.0,
+      "type_counts": {
+        "single_choice": 20,
+        "multiple_choice": 15,
+        "true_false": 15,
+        "short_answer": 2
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（环保专业）.docx",
+      "output": "试卷（环保专业）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（电气）.docx",
+      "output": "试卷（电气）.json",
+      "status": "valid",
+      "question_count": 43,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 3
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（矿物加工）.docx",
+      "output": "试卷（矿物加工）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（能源与动力工程）.docx",
+      "output": "试卷（能源与动力工程）.json",
+      "status": "valid",
+      "question_count": 43,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 3
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（财务管理）.doc",
+      "output": "试卷（财务管理）.json",
+      "status": "valid",
+      "question_count": 30,
+      "total_score": 60.0,
+      "type_counts": {
+        "single_choice": 10,
+        "multiple_choice": 10,
+        "true_false": 10
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（软件开发）.docx",
+      "output": "试卷（软件开发）.json",
+      "status": "valid",
+      "question_count": 21,
+      "total_score": 100.0,
+      "type_counts": {
+        "multiple_choice": 7,
+        "single_choice": 8,
+        "short_answer": 4,
+        "essay": 2
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（通信工程）.doc",
+      "output": "试卷（通信工程）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    },
+    {
+      "source": "试卷（金属材料专业）.docx",
+      "output": "试卷（金属材料专业）.json",
+      "status": "valid",
+      "question_count": 44,
+      "total_score": 100.0,
+      "type_counts": {
+        "true_false": 10,
+        "single_choice": 20,
+        "multiple_choice": 10,
+        "short_answer": 4
+      },
+      "issues": []
+    }
+  ]
+}

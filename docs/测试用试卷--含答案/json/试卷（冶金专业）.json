@@ -1,0 +1,838 @@
+{
+  "paper_id": "冶金专业",
+  "name": "冶金专业",
+  "exam_info": {
+    "title": "大学生入职笔试卷(冶金专业)",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "钢中碳含量增加会增加钢的强度,提高钢的塑性。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "使用活性石灰,可以降低化渣所需要的FeO含量,使炉渣泡沫化程度增大。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "炉渣中碱性氧化物浓度总和与酸性氧化物浓度总和之比称为炉渣碱度。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "碱度小于1.0的溶渣称为酸性渣。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "硅是转炉炼钢过程中发热元素之一。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "硅含量过高将会使渣料和消耗增加。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "铁水锰含量高对冶炼有利。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": ".转炉炼钢使用增碳剂粒度越小越好。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "萤石是转炉炼钢的助熔剂之一。",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "使用生白云石的目的主要是利用其CACO3分解产生的CAO造渣。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "SiMnCFePV"
+        },
+        {
+          "key": "B",
+          "text": "SiCMnFeVP"
+        },
+        {
+          "key": "C",
+          "text": "SiCVMnPFe"
+        },
+        {
+          "key": "D",
+          "text": "CSiMnFePV"
+        }
+      ],
+      "question": "1400°C-1530°C铁液中元素的氧化顺序是。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "20"
+        },
+        {
+          "key": "B",
+          "text": "200"
+        },
+        {
+          "key": "C",
+          "text": "2000"
+        },
+        {
+          "key": "D",
+          "text": "2.0"
+        }
+      ],
+      "question": "钢水终点[P]为0.020%,钢水中[P]为ppm。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "SiO2、MnO"
+        },
+        {
+          "key": "B",
+          "text": "MgO、CaO"
+        },
+        {
+          "key": "C",
+          "text": "SiO2、P2O5"
+        }
+      ],
+      "question": "下列氧化物中是酸性氧化物。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "先强后弱"
+        },
+        {
+          "key": "B",
+          "text": "先弱后强"
+        },
+        {
+          "key": "C",
+          "text": "两者都可以"
+        }
+      ],
+      "question": "脱氧剂的加入顺序为有利于夹杂物的去除。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "二氧化硅"
+        },
+        {
+          "key": "B",
+          "text": "三氧化二铝、五氧化二磷和氧化镁"
+        },
+        {
+          "key": "C",
+          "text": "氧化钙和氧化锰"
+        }
+      ],
+      "question": "炉渣中含量大对脱硫有利。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "吸热"
+        },
+        {
+          "key": "B",
+          "text": "放热"
+        },
+        {
+          "key": "C",
+          "text": "不吸热也不放热"
+        }
+      ],
+      "question": "[FeO]+[C]=[Fe]+{CO}是反应。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "高"
+        },
+        {
+          "key": "B",
+          "text": "低"
+        },
+        {
+          "key": "C",
+          "text": "相近"
+        }
+      ],
+      "question": "氧气顶吹转炉操作中,兑入炉内的铁水其物理热于化学热。",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "[C]+[O]={CO}"
+        },
+        {
+          "key": "B",
+          "text": "[C]+2[O]={CO2}"
+        },
+        {
+          "key": "C",
+          "text": "[CO]+[O]={CO2}"
+        }
+      ],
+      "question": "真空脱碳反应式为。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "分子"
+        },
+        {
+          "key": "B",
+          "text": "原子"
+        },
+        {
+          "key": "C",
+          "text": "离子"
+        }
+      ],
+      "question": "氢与氮在钢液中都是以",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "裂纹"
+        },
+        {
+          "key": "B",
+          "text": "异物"
+        },
+        {
+          "key": "C",
+          "text": "渣子"
+        }
+      ],
+      "question": "钢中“白点”是金属的内部。",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "萤石"
+        },
+        {
+          "key": "B",
+          "text": "活性石灰"
+        },
+        {
+          "key": "C",
+          "text": "矿石"
+        }
+      ],
+      "question": "向转炉中加入可以暂时提高炉渣氧化性。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "相差不大"
+        },
+        {
+          "key": "B",
+          "text": "弱的多"
+        },
+        {
+          "key": "C",
+          "text": "严重的多"
+        }
+      ],
+      "question": "镇静钢在钢包中回磷现象比沸腾钢和半镇静钢。",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "沉淀脱氧"
+        },
+        {
+          "key": "B",
+          "text": "扩散脱氧"
+        },
+        {
+          "key": "C",
+          "text": "真空下脱氧"
+        }
+      ],
+      "question": "转炉出完钢后喂铝线的脱氧方法是。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "Fe2O3和Fe3O4"
+        },
+        {
+          "key": "B",
+          "text": "FeO和Fe3O4"
+        },
+        {
+          "key": "C",
+          "text": "FeO和Fe2O3"
+        }
+      ],
+      "question": "铁矿石的主要成分是。",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "氧气"
+        },
+        {
+          "key": "B",
+          "text": "被侵蚀的炉衬"
+        },
+        {
+          "key": "C",
+          "text": "氧气和炉衬"
+        }
+      ],
+      "question": "物料平衡计算中,加入炉内参与炼钢过程的全部物料,除铁水、废钢、渣料外,还包括。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "0.0025"
+        },
+        {
+          "key": "B",
+          "text": "0.025"
+        },
+        {
+          "key": "C",
+          "text": "0.25"
+        }
+      ],
+      "question": "碳氧乘积m=[%C]·[%O],在一定温度下的m是一个常数,它表示金属熔池中碳氧的数量关系。在t=1600°C,Pco=0.1MPa时,m=。",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "CaO·SiO2"
+        },
+        {
+          "key": "B",
+          "text": "2CaO·SiO2"
+        },
+        {
+          "key": "C",
+          "text": "3CaO·2SiO2"
+        }
+      ],
+      "question": "炉渣中下列化合物熔点最高的是",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "让液态钢水通过"
+        },
+        {
+          "key": "B",
+          "text": "便于保护渣形成渣膜"
+        },
+        {
+          "key": "C",
+          "text": "承接钢水"
+        }
+      ],
+      "question": "连铸结晶器的主要作用是。",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "磷"
+        },
+        {
+          "key": "B",
+          "text": "硫"
+        },
+        {
+          "key": "C",
+          "text": "碳"
+        },
+        {
+          "key": "D",
+          "text": "锰"
+        }
+      ],
+      "question": "元素能降低硅钢的铁损,改善电磁性能。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "钢水过热"
+        },
+        {
+          "key": "B",
+          "text": "凝固潜热"
+        },
+        {
+          "key": "C",
+          "text": "物理显热"
+        },
+        {
+          "key": "D",
+          "text": "潜热和显热"
+        }
+      ],
+      "question": "为了利用铸坯切割后的,开发了铸坯热送和连铸连轧工艺。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "熔化;"
+        },
+        {
+          "key": "B",
+          "text": "氧化;"
+        },
+        {
+          "key": "C",
+          "text": "还原;"
+        },
+        {
+          "key": "D",
+          "text": "出钢"
+        }
+      ],
+      "question": "传统氧化法冶炼工艺师电炉炼钢法的基础,其操作过程包括补炉、装料、",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "炉衬的种类、性质和质量;"
+        },
+        {
+          "key": "B",
+          "text": "高温电弧辐射和熔渣的化学浸蚀"
+        },
+        {
+          "key": "C",
+          "text": "吹氧操作与渣、钢等机械冲刷以及装料的冲击;"
+        },
+        {
+          "key": "D",
+          "text": "人的操作行为"
+        }
+      ],
+      "question": "影响炉衬寿命的“三要素”包括哪些?",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "脱磷;"
+        },
+        {
+          "key": "B",
+          "text": "脱碳;"
+        },
+        {
+          "key": "C",
+          "text": "去除气、去夹杂;"
+        },
+        {
+          "key": "D",
+          "text": "升温"
+        }
+      ],
+      "question": "冶炼过程的氧化期的主要任务有哪些?",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "脱氧;"
+        },
+        {
+          "key": "B",
+          "text": "脱硫;"
+        },
+        {
+          "key": "C",
+          "text": "合金化;"
+        },
+        {
+          "key": "D",
+          "text": "调温"
+        }
+      ],
+      "question": "冶炼过程的还原期的主要任务有哪些?",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "有死角"
+        },
+        {
+          "key": "B",
+          "text": "搅拌强度大"
+        },
+        {
+          "key": "C",
+          "text": "能去夹杂"
+        },
+        {
+          "key": "D",
+          "text": "电弧加热会增碳"
+        }
+      ],
+      "question": "炉外精炼吹氩搅拌的特点是。",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "搅拌强度小"
+        },
+        {
+          "key": "B",
+          "text": "无死角"
+        },
+        {
+          "key": "C",
+          "text": "回磷少"
+        },
+        {
+          "key": "D",
+          "text": "会降温"
+        }
+      ],
+      "question": "炼钢电磁搅拌的特点是。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "减少数量"
+        },
+        {
+          "key": "B",
+          "text": "改善分布"
+        },
+        {
+          "key": "C",
+          "text": "减小颗粒"
+        },
+        {
+          "key": "D",
+          "text": "改变形态"
+        }
+      ],
+      "question": "夹杂变性的目的是。",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "侵蚀炉衬"
+        },
+        {
+          "key": "B",
+          "text": "增加夹杂"
+        },
+        {
+          "key": "C",
+          "text": "吸热喷溅"
+        },
+        {
+          "key": "D",
+          "text": "吸收气体"
+        }
+      ],
+      "question": "炼钢炉渣的有害作用有。",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "单氧化铁"
+        },
+        {
+          "key": "B",
+          "text": "全氧法"
+        },
+        {
+          "key": "C",
+          "text": "全铁法"
+        },
+        {
+          "key": "D",
+          "text": "氧化亚铁和三氧化二铁之和"
+        }
+      ],
+      "question": "炉渣氧化性表示方法有。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "气态氧"
+        },
+        {
+          "key": "B",
+          "text": "渣中氧"
+        },
+        {
+          "key": "C",
+          "text": "钢中溶解氧"
+        },
+        {
+          "key": "D",
+          "text": "耐火材料氧"
+        }
+      ],
+      "question": "转炉炼钢炉内有等种氧形态与金属液发生反应。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "氩气通过透气砖吹入钢包,强烈搅拌钢水,其作用和目的是什么?",
+      "answer": "1、均匀钢水成分; 2、均匀钢水温度; 3、促使夹杂物碰撞上浮;",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "结晶器保护渣的作用有哪些?",
+      "answer": "绝热保温,防止钢液面结壳;隔绝空气,防止二次氧化; 吸收钢水中夹杂物; 改善润滑及结晶器传热",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 20.0,
+      "scoring_mode": "text",
+      "question": "精炼钢水[Mn]和[Si]的调整,计算条件为:",
+      "answer": "•   钢水总重量为:100 吨(t)\n•   硅锰合金(Si:17%,Mn:65%)、硅铁(Si:72%)\n•   硅的收得率80%,锰的收得率92%\n•   电炉/转炉出钢成分为[Mn]:0.05% ,[Si]:0.00%\n•   合金化目标: [Mn]:0.50% ,[Si]:0.18%\n计算精炼过程硅锰、硅铁合金的加入量。(保留整数位)\n753KG/135KG。",
+      "id": "q43"
+    }
+  ]
+}

@@ -1,0 +1,882 @@
+{
+  "paper_id": "safety-management",
+  "name": "安全管理",
+  "exam_info": {
+    "title": "大学生入职专业试卷(A卷)",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "行政责任和刑事责任"
+        },
+        {
+          "key": "B",
+          "text": "宪法责任、行政责任和刑事责任"
+        },
+        {
+          "key": "C",
+          "text": "行政责任、民事责任和刑事责任"
+        },
+        {
+          "key": "D",
+          "text": "宪法责任、民事责任和刑事责任"
+        }
+      ],
+      "question": "《中华人民共和国安全生产法》规定的安全生产违法行为的法律责任形式,包括",
+      "id": "q1"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "进行处罚"
+        },
+        {
+          "key": "B",
+          "text": "予以警告"
+        },
+        {
+          "key": "C",
+          "text": "拒绝执行"
+        },
+        {
+          "key": "D",
+          "text": "协商处理"
+        }
+      ],
+      "question": "《中华人民共和国劳动法》规定,劳动者对用人单位管理人员违章指挥、强令冒险作业有权",
+      "id": "q2"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "清洗伤口后加以包裹"
+        },
+        {
+          "key": "B",
+          "text": "用布料直接包裹,制止出血"
+        },
+        {
+          "key": "C",
+          "text": "用药棉将流出的血液吸去"
+        }
+      ],
+      "question": "因事故导致严重的外部出血时,应。",
+      "id": "q3"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "使用各种水源"
+        },
+        {
+          "key": "B",
+          "text": "划定警戒区,实行局部交通管制"
+        },
+        {
+          "key": "C",
+          "text": "利用临近建筑物和有关设施"
+        },
+        {
+          "key": "D",
+          "text": "放弃人员生命"
+        }
+      ],
+      "question": "火灾现场总指挥根据扑救火灾的需要,没有权力决定。",
+      "id": "q4"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "消火栓系统"
+        },
+        {
+          "key": "B",
+          "text": "自动灭火系统"
+        },
+        {
+          "key": "C",
+          "text": "灭火器"
+        },
+        {
+          "key": "D",
+          "text": "防烟排烟系统"
+        }
+      ],
+      "question": "下列不属于消防设施的是。",
+      "id": "q5"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "安全负责人"
+        },
+        {
+          "key": "B",
+          "text": "技术负责人"
+        },
+        {
+          "key": "C",
+          "text": "主要负责人"
+        },
+        {
+          "key": "D",
+          "text": "安全管理人"
+        }
+      ],
+      "question": "生产经营单位的对本单位事故隐患排查治理工作全面负责。",
+      "id": "q6"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "人体接受电流遭到电击"
+        },
+        {
+          "key": "B",
+          "text": "烧伤"
+        },
+        {
+          "key": "C",
+          "text": "电休克"
+        }
+      ],
+      "question": "触电事故中,绝大部分是导致人身伤亡。",
+      "id": "q7"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "触电事故"
+        },
+        {
+          "key": "B",
+          "text": "电压波动"
+        },
+        {
+          "key": "C",
+          "text": "电荷超负荷"
+        }
+      ],
+      "question": "漏电保护器的使用是防止 。",
+      "id": "q8"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "帆布"
+        },
+        {
+          "key": "B",
+          "text": "橡胶"
+        },
+        {
+          "key": "C",
+          "text": "棉布"
+        },
+        {
+          "key": "D",
+          "text": "绝缘"
+        }
+      ],
+      "question": "进行腐蚀品的装卸作业应该戴手套",
+      "id": "q9"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "固体可燃物粉碎越细,其自燃点越高"
+        },
+        {
+          "key": "B",
+          "text": "液体可燃物受热分解析出的可燃气体越多,其自燃点越低"
+        },
+        {
+          "key": "C",
+          "text": "一般情况下燃点越低,火灾危险性越小"
+        },
+        {
+          "key": "D",
+          "text": "一般情况下,密度越小,闪点越高且自燃点越低"
+        }
+      ],
+      "question": "下列关于火灾参数的说法中,正确的有。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "用灭火器喷灭"
+        },
+        {
+          "key": "B",
+          "text": "就地打滚,或用厚衣物覆盖压灭火苗"
+        },
+        {
+          "key": "C",
+          "text": "使劲拍打"
+        },
+        {
+          "key": "D",
+          "text": "往身上浇水"
+        }
+      ],
+      "question": "身上着火时,应。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "锅炉司炉工"
+        },
+        {
+          "key": "B",
+          "text": "厂内机车驾驶人员"
+        },
+        {
+          "key": "C",
+          "text": "钳工"
+        },
+        {
+          "key": "D",
+          "text": "起重司素作业人员"
+        }
+      ],
+      "question": "下列不属于特种作业人员。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "实验室"
+        },
+        {
+          "key": "B",
+          "text": "员工宿舍"
+        },
+        {
+          "key": "C",
+          "text": "操作室"
+        },
+        {
+          "key": "D",
+          "text": "应急器材室"
+        }
+      ],
+      "question": "生产、经营、储存、使用危险物品的建筑物内,不可以设置。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "尼龙工作服"
+        },
+        {
+          "key": "B",
+          "text": "棉布工作服"
+        },
+        {
+          "key": "C",
+          "text": "防静电服"
+        },
+        {
+          "key": "D",
+          "text": "耐高温鞋"
+        }
+      ],
+      "question": "在易燃易爆场所作业不得穿戴。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "矽尘"
+        },
+        {
+          "key": "B",
+          "text": "面粉"
+        },
+        {
+          "key": "C",
+          "text": "沙土"
+        },
+        {
+          "key": "D",
+          "text": "石灰"
+        }
+      ],
+      "question": "下列尘埃对人体危害最大。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "戒指"
+        },
+        {
+          "key": "B",
+          "text": "手套"
+        },
+        {
+          "key": "C",
+          "text": "手表"
+        },
+        {
+          "key": "D",
+          "text": "手镯"
+        }
+      ],
+      "question": "操作转动的机器设备时,不能佩戴。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "options": [
+        {
+          "key": "A",
+          "text": "隐蔽的地方"
+        },
+        {
+          "key": "B",
+          "text": "易于取用的地方"
+        },
+        {
+          "key": "C",
+          "text": "远离生产车间的地方"
+        },
+        {
+          "key": "D",
+          "text": "安全通道上"
+        }
+      ],
+      "answer": "B",
+      "question": "灭火器应放置在。",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "乙炔银"
+        },
+        {
+          "key": "B",
+          "text": "叠氮铅"
+        },
+        {
+          "key": "C",
+          "text": "TNT"
+        },
+        {
+          "key": "D",
+          "text": "环氧乙烷"
+        }
+      ],
+      "question": "在危险化学品的爆炸分类中,危险化学品的爆炸可按爆炸反应物质分为简单分解爆炸、复杂分解爆炸和爆炸性混合物爆炸。下列属于复杂分解爆炸的危险化学品的是。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "氯气"
+        },
+        {
+          "key": "B",
+          "text": "沼气"
+        },
+        {
+          "key": "C",
+          "text": "氮气"
+        },
+        {
+          "key": "D",
+          "text": "氧气"
+        }
+      ],
+      "question": "下列哪一种是易燃气体。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "应当认定"
+        },
+        {
+          "key": "B",
+          "text": "可以认定"
+        },
+        {
+          "key": "C",
+          "text": "应当视同"
+        },
+        {
+          "key": "D",
+          "text": "可以视同"
+        }
+      ],
+      "question": "依据《工伤保险条例》的规定,在上下班途中,受到机动车事故伤害的,为工伤。",
+      "id": "q20"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "企业对应当淘汰的危及生产安全的落后工艺、设备,可采取加强管理和加强安全教育措施后继续使用。",
+      "id": "q21"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "生产经营单位不得因安全生产管理人员依法履行职责而降低其工资、福利等待遇或者解除与其订立的劳动合同。",
+      "id": "q22"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "冶金企业可以与从业人员协商,从而以协商结果与从业人员订立协议,免除或者减轻其对从业人员因生产安全事故伤亡依法应承担的责任。",
+      "id": "q23"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "把作业场所和工作岗位存在的危险因素如实告知从业人员,会有负面影响,引起恐慌,增加思想负担,不利于安全生产。",
+      "id": "q24"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "生产经营单位应当在有较大危险因素的生产经营场所和有关设施、设备上,设置明显的安全警示标志。",
+      "id": "q25"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "劳动防护用品不同于一般的商品,直接涉及到劳动者的生命安全和身体健康,故要求其必须符合国家标准或者行业标准。",
+      "id": "q26"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "安全生产工作应当以人为本,坚持安全发展,坚持安全第一、预防为主、综合治理的方针,强化和落实生产经营单位的主体责任,建立生产经营单位负责、职工参与、政府监管、行业自律和社会监督的机制。",
+      "id": "q27"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "生产经营单位使用被派遣劳动者的,不必对被派遣劳动者进行岗位安全操作规程和安全操作技能的教育和培训。",
+      "id": "q28"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "触电事故发生后,有的会有“假死”的现象,在没有医生诊断之前,不能放弃抢救。",
+      "id": "q29"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "依照《中华人民共和国安全生产法》规定,生产经营单位的从业人员享有紧急情况下的停止作业和紧急撤离权。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "发生一般事故的,处上一年年收入百分之三十的罚款"
+        },
+        {
+          "key": "B",
+          "text": "发生较大事故的,处上一年年收入百分之四十的罚款"
+        },
+        {
+          "key": "C",
+          "text": "发生重大事故的,处上一年年收入百分之五十的罚款"
+        },
+        {
+          "key": "D",
+          "text": "发生特别重大事故的,处上一年年收入百分六十的罚款"
+        }
+      ],
+      "question": "生产经营单位的主要负责人未履行安全生产管理职责,导致发生生产安全事故的,由安全生产监督管理部门依照规定处以罚款。下列说法正确的是。",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "检查"
+        },
+        {
+          "key": "B",
+          "text": "检测"
+        },
+        {
+          "key": "C",
+          "text": "评估"
+        },
+        {
+          "key": "D",
+          "text": "监控"
+        }
+      ],
+      "question": "生产经营单位对重大危险源应当登记建档,进行定期,并制定应急预案,告知从业人员和相关人员在紧急情况下应采取的应急措施。",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "上岗前"
+        },
+        {
+          "key": "B",
+          "text": "在岗期间"
+        },
+        {
+          "key": "C",
+          "text": "离岗时"
+        },
+        {
+          "key": "D",
+          "text": "下岗期间"
+        }
+      ],
+      "question": "依照《职业病防治法》规定,对从事接触职业病危害的作业的劳动者,用人单位应当按照规定组织的职业健康检查。",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "法律、行政法规"
+        },
+        {
+          "key": "B",
+          "text": "国家标准"
+        },
+        {
+          "key": "C",
+          "text": "行业标准"
+        },
+        {
+          "key": "D",
+          "text": "地方性法规"
+        }
+      ],
+      "question": "依据《安全生产法》的规定,生产经营单位应当具备的安全生产条件由规定。",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "矿山井下劳动"
+        },
+        {
+          "key": "B",
+          "text": "国家规定的第三级体力劳动强度的劳动"
+        },
+        {
+          "key": "C",
+          "text": "国家规定的第四级体力劳动强度的劳动"
+        },
+        {
+          "key": "D",
+          "text": "电焊作业劳动"
+        }
+      ],
+      "question": "依据《劳动法》的规定,禁止用人单位安排女工从事的劳动有。",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "在工作时间和工作岗位因本人违章作业而造成伤害的"
+        },
+        {
+          "key": "B",
+          "text": "在工作岗位突发心脏病三天后死亡的"
+        },
+        {
+          "key": "C",
+          "text": "在工作时间之外参加本单位事故应急救援受到伤害的"
+        },
+        {
+          "key": "D",
+          "text": "在上下班途中受到非本人主要责任的电动车事故伤害的"
+        }
+      ],
+      "question": "依据《工伤保险条例》,下列用人单位职工伤亡的情形中,可以认定为工伤的有。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "制定严格的设备运行规章制度"
+        },
+        {
+          "key": "B",
+          "text": "加强职工安全素质教育"
+        },
+        {
+          "key": "C",
+          "text": "提供合格的劳动防护用品"
+        },
+        {
+          "key": "D",
+          "text": "严格执行信号和联络制度"
+        }
+      ],
+      "question": "机械伤害事故预防与控制主要技术措施。",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "温度"
+        },
+        {
+          "key": "B",
+          "text": "助燃剂"
+        },
+        {
+          "key": "C",
+          "text": "可燃物"
+        },
+        {
+          "key": "D",
+          "text": "引火源"
+        }
+      ],
+      "question": "燃烧必须有几个条件,这几个条件缺任何一个,燃烧都不能发生,因此将它们称为燃烧要素,燃烧要素为。",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "物理爆炸"
+        },
+        {
+          "key": "B",
+          "text": "化学爆炸"
+        },
+        {
+          "key": "C",
+          "text": "核爆炸"
+        },
+        {
+          "key": "D",
+          "text": "锅炉爆炸"
+        }
+      ],
+      "question": "、爆炸可以分为3类,即:。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "交通标志"
+        },
+        {
+          "key": "B",
+          "text": "防护栏"
+        },
+        {
+          "key": "C",
+          "text": "照明设施"
+        },
+        {
+          "key": "D",
+          "text": "电子收费设施"
+        }
+      ],
+      "question": "道路交通安全设施主要有。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "提高自身安全素质应具备哪些要素?",
+      "answer": "应掌握安全意识、懂得安全知识、熟知有关安全的规章制度和操作规程、掌握安全技能,遵守和维护公共秩序、培养和提高紧急避险能力",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "什么是三违?",
+      "answer": "领导和管理人员的(违章指挥);操作人员的(违规操作)和违反劳动纪律,统称为“三违”行为。",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 20.0,
+      "scoring_mode": "text",
+      "question": "《安全生产法》明确了员工的八大权利,请简要说明。",
+      "answer": "知情权,建议权,批评、检举、控告权,拒绝权,紧急避险权,要求赔偿权,获得符合国家标准或者行业标准劳动保护用品的权利,获得安全生产教育和培训的权利。",
+      "id": "q43"
+    }
+  ]
+}

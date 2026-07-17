@@ -213,6 +213,15 @@ class TestObjectiveGraderModule:
         from backend.objective_grader import grade_true_false
         assert grade_true_false(False, False, 2.0)["score"] == 2
 
+    @pytest.mark.parametrize("student_answer", [None, "", "   ", "\n\t"])
+    def test_grade_true_false_unanswered_does_not_match_false_reference(self, student_answer):
+        from backend.objective_grader import grade_true_false
+
+        result = grade_true_false(student_answer, False, 2.0)
+
+        assert result["score"] == 0
+        assert result["is_correct"] is False
+
     def test_grade_multiple_choice_partial(self):
         from backend.objective_grader import grade_multiple_choice
         assert grade_multiple_choice(["A", "C"], ["A", "C", "D"], 9.0)["score"] == 6

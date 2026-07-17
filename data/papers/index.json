@@ -39,6 +39,150 @@
       "question_count": 5,
       "total_score": 100,
       "updated_at": "2026-07-12T00:00:00+00:00"
+    },
+    {
+      "slug": "instrumentation",
+      "name": "仪器仪表",
+      "status": "closed",
+      "question_count": 42,
+      "total_score": 80.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "metallurgy",
+      "name": "冶金专业",
+      "status": "closed",
+      "question_count": 43,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "chemical-analysis",
+      "name": "化学分析",
+      "status": "closed",
+      "question_count": 43,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "chemical-engineering",
+      "name": "化学工程与工艺",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "safety-management",
+      "name": "安全管理",
+      "status": "closed",
+      "question_count": 43,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "mechanical",
+      "name": "机械专业",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "materials",
+      "name": "材料专业",
+      "status": "closed",
+      "question_count": 43,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "legal",
+      "name": "法务",
+      "status": "closed",
+      "question_count": 39,
+      "total_score": 91.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "welding",
+      "name": "焊接专业",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "logistics",
+      "name": "物流管理",
+      "status": "closed",
+      "question_count": 52,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "environmental",
+      "name": "环保专业",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "electrical",
+      "name": "电气",
+      "status": "closed",
+      "question_count": 43,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "mineral-processing",
+      "name": "矿物加工",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "energy-power",
+      "name": "能源与动力工程",
+      "status": "closed",
+      "question_count": 43,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "finance",
+      "name": "财务管理",
+      "status": "closed",
+      "question_count": 30,
+      "total_score": 60.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "software-development",
+      "name": "软件开发",
+      "status": "closed",
+      "question_count": 21,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "communications",
+      "name": "通信工程",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+    },
+    {
+      "slug": "metal-materials",
+      "name": "金属材料专业",
+      "status": "closed",
+      "question_count": 44,
+      "total_score": 100.0,
+      "updated_at": "2026-07-17T01:26:30.889948+00:00"
     }
   ]
 }

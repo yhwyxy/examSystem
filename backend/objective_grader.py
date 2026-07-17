@@ -26,6 +26,8 @@ def grade_single_choice(student: Any, reference: Any, max_score: float) -> dict[
 
 
 def grade_true_false(student: Any, reference: Any, max_score: float) -> dict[str, Any]:
+    if student is None or (isinstance(student, str) and not student.strip()):
+        return {"is_correct": False, "score": 0.0}
     correct = _norm_bool(student) == _norm_bool(reference)
     return {"is_correct": correct, "score": max_score if correct else 0.0}
 

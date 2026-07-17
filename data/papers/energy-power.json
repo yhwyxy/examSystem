@@ -1,0 +1,877 @@
+{
+  "paper_id": "energy-power",
+  "name": "能源与动力工程",
+  "exam_info": {
+    "title": "大学生入职试卷(能源与动力工程)",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "焓是工质的状态参数,它代表工质沿流动方向向前方传递的总能量。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "纯水是无色、无味、电导率为1的透明液体。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "水位表看不到水位,低水位报警器响,应迅速加水。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "在热机的热力循环中,不可能将热源所提供的能量,全部变为机械能。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "炉水的蒸发主要发生在省煤器阶段。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "锅炉负荷越高,则锅炉的效率就越高。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "锅炉水冷壁结渣,排烟温度升高,锅炉效率降低。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "省煤器中的水自下而上流动, 可排出水中的气体, 避免造成管内的局部氧腐蚀。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "采用回热循环可以减少不可避免的冷源损失,以提高循环效率。",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "功率是指力与位移的乘积。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "原水"
+        },
+        {
+          "key": "B",
+          "text": "补给水"
+        },
+        {
+          "key": "C",
+          "text": "自来水"
+        }
+      ],
+      "question": "未经任何处理的天然水称为",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "易燃;"
+        },
+        {
+          "key": "B",
+          "text": "流动性好;"
+        },
+        {
+          "key": "C",
+          "text": "易压缩;"
+        },
+        {
+          "key": "D",
+          "text": "粘度低。"
+        }
+      ],
+      "question": "液体与气体的共同点是。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "液体;"
+        },
+        {
+          "key": "B",
+          "text": "气体;"
+        },
+        {
+          "key": "C",
+          "text": "固体;"
+        },
+        {
+          "key": "D",
+          "text": "胶体。"
+        }
+      ],
+      "question": "下列物质状态中,分子间隙最大的是。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "稀HCL中和"
+        },
+        {
+          "key": "B",
+          "text": "醋酸清洗"
+        },
+        {
+          "key": "C",
+          "text": "稀NaOH清洗"
+        },
+        {
+          "key": "D",
+          "text": "清水清洗"
+        }
+      ],
+      "question": "酸、碱一旦见到眼睛或皮肤上,首先应采取的的方法进行救护。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "传热增强,壁温升高;"
+        },
+        {
+          "key": "B",
+          "text": "传热减弱,管壁温度降低;"
+        },
+        {
+          "key": "C",
+          "text": "传热减弱,管壁温度升高。"
+        }
+      ],
+      "question": "锅炉水冷壁管内壁结垢后可造成",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "焦耳;"
+        },
+        {
+          "key": "B",
+          "text": "兆帕;"
+        },
+        {
+          "key": "C",
+          "text": "瓦特;"
+        },
+        {
+          "key": "D",
+          "text": "牛顿。"
+        }
+      ],
+      "question": "热量的单位是 。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "增加"
+        },
+        {
+          "key": "B",
+          "text": "减少"
+        },
+        {
+          "key": "C",
+          "text": "不变"
+        }
+      ],
+      "question": "在蒸汽压力、汽包尺寸及锅水含盐量一定的条件下,蒸汽带水量是随着锅炉负荷的增加 而的。",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "热能;"
+        },
+        {
+          "key": "B",
+          "text": "动能;"
+        },
+        {
+          "key": "C",
+          "text": "内能;"
+        },
+        {
+          "key": "D",
+          "text": "机械能。"
+        }
+      ],
+      "question": "物体由于运动而具有的能为。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "申请停炉"
+        },
+        {
+          "key": "B",
+          "text": "紧急停炉"
+        },
+        {
+          "key": "C",
+          "text": "通知检修"
+        }
+      ],
+      "question": "锅炉所有水位计损坏时应",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "加强汽水分离"
+        },
+        {
+          "key": "B",
+          "text": "对蒸汽彻底清洗"
+        },
+        {
+          "key": "C",
+          "text": "加强排污"
+        },
+        {
+          "key": "D",
+          "text": "提高给水品质"
+        }
+      ],
+      "question": "提高蒸汽品质的根本方法是",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "高"
+        },
+        {
+          "key": "B",
+          "text": "低"
+        },
+        {
+          "key": "C",
+          "text": "一样高"
+        }
+      ],
+      "question": "汽包内饱和水的温度与饱和蒸汽的温度相比是。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "汽耗量;"
+        },
+        {
+          "key": "B",
+          "text": "汽耗率;"
+        },
+        {
+          "key": "C",
+          "text": "热耗量;"
+        },
+        {
+          "key": "D",
+          "text": "热耗率。"
+        }
+      ],
+      "question": "每生产1kw•h的电能所需要的热量,称为汽轮发电机组的。",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "连通器原理"
+        },
+        {
+          "key": "B",
+          "text": "水位差原理"
+        },
+        {
+          "key": "C",
+          "text": "水汽分离原理"
+        },
+        {
+          "key": "D",
+          "text": "虹吸原理"
+        }
+      ],
+      "question": "锅炉水位计是根据来制成的。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "焦耳;"
+        },
+        {
+          "key": "B",
+          "text": "兆帕;"
+        },
+        {
+          "key": "C",
+          "text": "瓦特;"
+        },
+        {
+          "key": "D",
+          "text": "牛顿。"
+        }
+      ],
+      "question": "以下哪一个是功的单位。",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "降低新蒸汽温度;"
+        },
+        {
+          "key": "B",
+          "text": "提高新蒸汽温度和压力;"
+        },
+        {
+          "key": "C",
+          "text": "提高排汽压力;"
+        },
+        {
+          "key": "D",
+          "text": "增大新蒸汽流量。"
+        }
+      ],
+      "question": ",可以提高机组的循环热效率。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "小于1;"
+        },
+        {
+          "key": "B",
+          "text": "大于1;"
+        },
+        {
+          "key": "C",
+          "text": "等于1;"
+        },
+        {
+          "key": "D",
+          "text": "等于0。"
+        }
+      ],
+      "question": "任意一个热力循环的循环热效率都。",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "锅炉的效率低"
+        },
+        {
+          "key": "B",
+          "text": "汽机排汽热损失"
+        },
+        {
+          "key": "C",
+          "text": "发电机效率低"
+        },
+        {
+          "key": "D",
+          "text": "汽轮机械损失"
+        }
+      ],
+      "question": "造成火力发电厂效率低的主要原因是。",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "热变功;"
+        },
+        {
+          "key": "B",
+          "text": "功变热;"
+        },
+        {
+          "key": "C",
+          "text": "自由膨胀;"
+        },
+        {
+          "key": "D",
+          "text": "汽液混合。"
+        }
+      ],
+      "question": "在自然界中,过程不能自动进行。",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "朗肯;"
+        },
+        {
+          "key": "B",
+          "text": "卡诺;"
+        },
+        {
+          "key": "C",
+          "text": "回热;"
+        },
+        {
+          "key": "D",
+          "text": "中间再热。"
+        }
+      ],
+      "question": "发电厂最简单的热力循环是循环。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "等容过程;"
+        },
+        {
+          "key": "B",
+          "text": "等焓过程;"
+        },
+        {
+          "key": "C",
+          "text": "等压过程;"
+        },
+        {
+          "key": "D",
+          "text": "绝热过程。"
+        }
+      ],
+      "question": "高压加热器内水的加热过程可以看作是。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "热传导"
+        },
+        {
+          "key": "B",
+          "text": "热对流"
+        },
+        {
+          "key": "C",
+          "text": "热蒸发"
+        },
+        {
+          "key": "D",
+          "text": "热辐射"
+        }
+      ],
+      "question": "传热学中,热交换的基本方式有。",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "防止锅炉超压运行"
+        },
+        {
+          "key": "B",
+          "text": "防止过热"
+        },
+        {
+          "key": "C",
+          "text": "防止水击"
+        },
+        {
+          "key": "D",
+          "text": "充气满中"
+        }
+      ],
+      "question": "防止锅炉爆炸的措施包括",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "正常停炉"
+        },
+        {
+          "key": "B",
+          "text": "脱硫停炉"
+        },
+        {
+          "key": "C",
+          "text": "事故停炉"
+        },
+        {
+          "key": "D",
+          "text": "热交换停炉"
+        }
+      ],
+      "question": "锅炉机组额定参数停炉一般分为",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "轴"
+        },
+        {
+          "key": "B",
+          "text": "叶轮"
+        },
+        {
+          "key": "C",
+          "text": "动叶栅"
+        },
+        {
+          "key": "D",
+          "text": "联轴器"
+        }
+      ],
+      "question": "下列属于汽轮机的转动部分是。",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "及时发现缺陷"
+        },
+        {
+          "key": "B",
+          "text": "延长锅炉使用寿命"
+        },
+        {
+          "key": "C",
+          "text": "保证锅炉连续和经济运行"
+        },
+        {
+          "key": "D",
+          "text": "保证锅炉安全运行"
+        }
+      ],
+      "question": "锅炉定期检验的目的包括",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "大、强"
+        },
+        {
+          "key": "B",
+          "text": "大、弱"
+        },
+        {
+          "key": "C",
+          "text": "小、强"
+        },
+        {
+          "key": "D",
+          "text": "小、弱"
+        }
+      ],
+      "question": "物体导热系数越则它的导热能力也越(\t)。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "锅炉定期排污"
+        },
+        {
+          "key": "B",
+          "text": "锅炉连续排污"
+        },
+        {
+          "key": "C",
+          "text": "部分蒸汽损耗"
+        },
+        {
+          "key": "D",
+          "text": "车间的冷凝水回收不足"
+        }
+      ],
+      "question": "锅炉水汽系统是一套循环系统,哪些会导致锅炉水量损失",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "汽缸"
+        },
+        {
+          "key": "B",
+          "text": "隔板"
+        },
+        {
+          "key": "C",
+          "text": "喷嘴"
+        },
+        {
+          "key": "D",
+          "text": "叶轮"
+        }
+      ],
+      "question": "汽轮机本体由静止和转动两大部分组成。静止部分包括。",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "蒸汽锅炉"
+        },
+        {
+          "key": "B",
+          "text": "汽轮机"
+        },
+        {
+          "key": "C",
+          "text": "凝汽器"
+        },
+        {
+          "key": "D",
+          "text": "给水泵"
+        }
+      ],
+      "question": "朗肯循环的主要设备是。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "排烟温度"
+        },
+        {
+          "key": "B",
+          "text": "排烟量"
+        },
+        {
+          "key": "C",
+          "text": "煤气量"
+        },
+        {
+          "key": "D",
+          "text": "蒸汽量"
+        }
+      ],
+      "question": "影响排烟损失的主要因素是",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "简述余热锅炉的汽水流程",
+      "answer": "给水泵——省煤器——汽包——下降管——水冷壁——汽包——(汽水分离)——过热器——过热器集箱",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 20.0,
+      "scoring_mode": "text",
+      "question": "锅炉发生严重缺水时为什么不允许盲目补水?",
+      "answer": "锅炉发生严重缺水时必须紧急停炉,而不允许往锅炉内补水。这主要是因为:当锅炉发生严重缺水时,汽包水位究竟低到什么程度是不知道的,可能汽包内已完全无水,或水冷壁已部 分烧干、过热。在这种情况下,如果强行往锅炉内补水,由于温差过大,会产生巨大的热应力,而使设备损坏。同时,水遇到灼热的金属表面,瞬间会蒸发大量蒸汽,使汽压突然升高,甚至造成爆管或更严重的爆炸事故。因此,发生严重缺水时,必须严格地按照规程的规定去处理,决不允许盲目地上水。",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "按启动前汽轮机汽缸温度分,汽轮机启动有几种方式?",
+      "answer": "冷态启动;温态启动;热态启动;极热态启动。",
+      "id": "q43"
+    }
+  ]
+}

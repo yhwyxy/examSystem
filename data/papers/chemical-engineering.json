@@ -1,0 +1,908 @@
+{
+  "paper_id": "chemical-engineering",
+  "name": "化学工程与工艺",
+  "exam_info": {
+    "title": "化学工程与工艺专业考试试卷(A)",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "理想气体混合物就是一种理想溶液。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "溶剂萃取法是基于不同的溶液相中分配系数不同,而达到组分的富集与分离。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "催化剂既能加速热力学上可能进行的化学反应,又能加速热力学上无法进行的反应。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "通常情况下随着聚合温度、压力升高,集合物分子量提高。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "物质的溶解过程,就是溶质分子或离子克服它们相互间的吸引力向溶剂分子之间扩散的过程,所以说溶解过程是物理变化。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "在气体的吸收中,对于同一种气体而言,温度越高,溶解度越小,分压越高,溶解度越大。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "烃类在碳数相同时,易氧化的顺序是正构烷烃<环烷烃<烯烃<异构烷烃<芳香烃。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "将塔顶蒸汽冷凝后又全部回流到塔内的操作称为全回流,此时塔顶产品很少。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "在一定温度和压力条件下,单位时间内通过管道某一界面的量叫流量。",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "影响化学平衡移动的因素有浓度、压力和温度。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "升高"
+        },
+        {
+          "key": "B",
+          "text": "降低"
+        },
+        {
+          "key": "C",
+          "text": "不变"
+        },
+        {
+          "key": "D",
+          "text": "改变"
+        }
+      ],
+      "question": "对于吸热反应,一般反应温度有利于反应的进行。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "温度,压力,原料配比和浓度"
+        },
+        {
+          "key": "B",
+          "text": "温度,原料配比和浓度"
+        },
+        {
+          "key": "C",
+          "text": "温度,压力,原料配比和停留时间"
+        },
+        {
+          "key": "D",
+          "text": "温度,压力和停留时间"
+        }
+      ],
+      "question": "影响反应过程的基本原因有。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "温度"
+        },
+        {
+          "key": "B",
+          "text": "浓度"
+        },
+        {
+          "key": "C",
+          "text": "反应物特性"
+        },
+        {
+          "key": "D",
+          "text": "活化能"
+        }
+      ],
+      "question": "化学反应速率和下列因素中的无关。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "裂解"
+        },
+        {
+          "key": "B",
+          "text": "裂化"
+        },
+        {
+          "key": "C",
+          "text": "蒸馏"
+        },
+        {
+          "key": "D",
+          "text": "精馏"
+        }
+      ],
+      "question": "凡是有机化合物在高温下分子链发生断裂的过程称为",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "某一测量使与其算术平均值之差"
+        },
+        {
+          "key": "B",
+          "text": "含有误差之值与真值之差"
+        },
+        {
+          "key": "C",
+          "text": "测量值与其真值之差"
+        },
+        {
+          "key": "D",
+          "text": "错误值与其真值之差"
+        }
+      ],
+      "question": "误差的正确定义是",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "弱酸"
+        },
+        {
+          "key": "B",
+          "text": "强酸"
+        },
+        {
+          "key": "C",
+          "text": "弱碱"
+        },
+        {
+          "key": "D",
+          "text": "强碱"
+        }
+      ],
+      "question": "碘量法滴定的酸度条件为。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "3.17"
+        },
+        {
+          "key": "B",
+          "text": "10.1"
+        },
+        {
+          "key": "C",
+          "text": "5.3"
+        },
+        {
+          "key": "D",
+          "text": "8.2"
+        }
+      ],
+      "question": "pH=5和pH=3的两种盐酸以1:2体积比混合,混合溶液的pH是",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "盐效应"
+        },
+        {
+          "key": "B",
+          "text": "同离子效应"
+        },
+        {
+          "key": "C",
+          "text": "酸效应"
+        },
+        {
+          "key": "D",
+          "text": "配位效应"
+        }
+      ],
+      "question": "往AgCl沉淀中加入浓氨水,沉淀消失,这是因为。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "烷烃"
+        },
+        {
+          "key": "B",
+          "text": "环烷烃"
+        },
+        {
+          "key": "C",
+          "text": "烯烃"
+        },
+        {
+          "key": "D",
+          "text": "芳烃"
+        }
+      ],
+      "question": "碳原子数相同的下列烃中,密度最大。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "寿命"
+        },
+        {
+          "key": "B",
+          "text": "活化周期"
+        },
+        {
+          "key": "C",
+          "text": "局限性"
+        },
+        {
+          "key": "D",
+          "text": "选择性"
+        }
+      ],
+      "question": "催化剂使用一段时间后,因活性下降,需要活化再生,这个使用时间称作催化剂的。",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "加热"
+        },
+        {
+          "key": "B",
+          "text": "对流"
+        },
+        {
+          "key": "C",
+          "text": "气化和冷凝"
+        },
+        {
+          "key": "D",
+          "text": "溶解"
+        }
+      ],
+      "question": "蒸馏过程的主要环节是。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "1"
+        },
+        {
+          "key": "B",
+          "text": "2"
+        },
+        {
+          "key": "C",
+          "text": "3"
+        },
+        {
+          "key": "D",
+          "text": "4"
+        }
+      ],
+      "question": "一个P2O5分子转化成正磷酸需要个水分子。",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "绝对压力"
+        },
+        {
+          "key": "B",
+          "text": "相对压力"
+        },
+        {
+          "key": "C",
+          "text": "工程压力"
+        },
+        {
+          "key": "D",
+          "text": "真空度"
+        }
+      ],
+      "question": "压力表指示的是。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "左手捏于稍低于玻璃珠近旁"
+        },
+        {
+          "key": "B",
+          "text": "左手捏于稍高于玻璃珠近旁"
+        },
+        {
+          "key": "C",
+          "text": "右手捏于稍低于玻璃珠近旁"
+        },
+        {
+          "key": "D",
+          "text": "右手捏于稍高于玻璃珠近旁"
+        }
+      ],
+      "question": "使用碱式滴定管正确的操作是。",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "提高精密度"
+        },
+        {
+          "key": "B",
+          "text": "消除偶然误差"
+        },
+        {
+          "key": "C",
+          "text": "提高准确度,消除系统误差"
+        },
+        {
+          "key": "D",
+          "text": "消除过失误差"
+        }
+      ],
+      "question": "在分析中做空白实验的目的是。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "铬酸钾"
+        },
+        {
+          "key": "B",
+          "text": "铬黑T"
+        },
+        {
+          "key": "C",
+          "text": "酚酞"
+        },
+        {
+          "key": "D",
+          "text": "淀粉"
+        }
+      ],
+      "question": "标定碘溶液时,选用下列哪一种指示剂。",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "正烷烃"
+        },
+        {
+          "key": "B",
+          "text": "异烷烃"
+        },
+        {
+          "key": "C",
+          "text": "环烷烃"
+        },
+        {
+          "key": "D",
+          "text": "芳烃"
+        }
+      ],
+      "question": "各族烃中热裂解难度最大的是。",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "化学反应力"
+        },
+        {
+          "key": "B",
+          "text": "范德华力"
+        },
+        {
+          "key": "C",
+          "text": "静电力"
+        },
+        {
+          "key": "D",
+          "text": "引力"
+        }
+      ],
+      "question": "化学吸附是由于吸附剂表面与吸附质分子间的。",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "温室效应与气候变暖"
+        },
+        {
+          "key": "B",
+          "text": "有毒物质污染"
+        },
+        {
+          "key": "C",
+          "text": "水土流失和土地沙漠化"
+        },
+        {
+          "key": "D",
+          "text": "臭氧层破坏与酸雨"
+        }
+      ],
+      "question": "生态环境破坏是由于人类对自然资源的不合理开发和利用引起的,如。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "降低"
+        },
+        {
+          "key": "B",
+          "text": "升高"
+        },
+        {
+          "key": "C",
+          "text": "不变"
+        },
+        {
+          "key": "D",
+          "text": "先降后升"
+        }
+      ],
+      "question": "精馏塔自塔底至塔顶温度逐级,轻组分浓度逐级升高。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "设计能力"
+        },
+        {
+          "key": "B",
+          "text": "查定能力"
+        },
+        {
+          "key": "C",
+          "text": "现有能力"
+        },
+        {
+          "key": "D",
+          "text": "固有能力"
+        }
+      ],
+      "question": "生产能力又分为",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "低温水"
+        },
+        {
+          "key": "B",
+          "text": "盐水"
+        },
+        {
+          "key": "C",
+          "text": "有机物"
+        },
+        {
+          "key": "D",
+          "text": "氨"
+        }
+      ],
+      "question": "在化工生产中,常用的冷却介质有",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "煤化工"
+        },
+        {
+          "key": "B",
+          "text": "天然气化工"
+        },
+        {
+          "key": "C",
+          "text": "精细化工"
+        },
+        {
+          "key": "D",
+          "text": "石油化工"
+        }
+      ],
+      "question": "化学工艺按原料的不同来分类包括下列。",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "天然气"
+        },
+        {
+          "key": "B",
+          "text": "空气"
+        },
+        {
+          "key": "C",
+          "text": "乙烯"
+        },
+        {
+          "key": "D",
+          "text": "金属矿"
+        }
+      ],
+      "question": "在下列物质中,属于常用化工生产基础原料的是。",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "塑料"
+        },
+        {
+          "key": "B",
+          "text": "尼龙"
+        },
+        {
+          "key": "C",
+          "text": "橡胶"
+        },
+        {
+          "key": "D",
+          "text": "纤维"
+        }
+      ],
+      "question": "下列物质不一定是合成材料的是。",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "孔结构"
+        },
+        {
+          "key": "B",
+          "text": "吸附质"
+        },
+        {
+          "key": "C",
+          "text": "吸附条件"
+        },
+        {
+          "key": "D",
+          "text": "孔体积"
+        }
+      ],
+      "question": "影响活性炭吸附性能的主要因素有。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "单位时间"
+        },
+        {
+          "key": "B",
+          "text": "所有时间"
+        },
+        {
+          "key": "C",
+          "text": "所有体积"
+        },
+        {
+          "key": "D",
+          "text": "单位体积"
+        }
+      ],
+      "question": "反应速率是指反应系统中,某一物质在内的反应量。",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "均相"
+        },
+        {
+          "key": "B",
+          "text": "非均相"
+        },
+        {
+          "key": "C",
+          "text": "催化"
+        },
+        {
+          "key": "D",
+          "text": "非催化"
+        },
+        {
+          "key": "E",
+          "text": "氧化还原"
+        }
+      ],
+      "question": "下列属于化学反应种类的是。",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "悬浮物"
+        },
+        {
+          "key": "B",
+          "text": "温度"
+        },
+        {
+          "key": "C",
+          "text": "浊度"
+        },
+        {
+          "key": "D",
+          "text": "PH值"
+        }
+      ],
+      "question": "固体污染物常用()和()两个指标来表示。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "反应类型"
+        },
+        {
+          "key": "B",
+          "text": "催化剂的组成"
+        },
+        {
+          "key": "C",
+          "text": "催化剂的大小"
+        },
+        {
+          "key": "D",
+          "text": "催化剂的制法"
+        }
+      ],
+      "question": "影响催化剂寿命的因素有。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "通过哪些途径可以提高化学反应的效果?",
+      "answer": "控制反应的温度,压力,反应时间在适宜的范围之内,恰当的催化剂。",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "影响氧化还原反应速率的主要因素有哪些?如何加速反应的进行?",
+      "answer": "影响氧化还原反应速率的主要因素有反应物的浓度,温度,催化剂,诱导作用;\n增加反应物浓度,或升高溶液温度,或加入正催化剂,或有诱导反应存在等都可加速反应的完成。",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "催化剂在化工产品工业生产上有何意义?",
+      "answer": "催化剂在工业生产上可以加快主反应速度、减少副反应。使反应定向进行,缓和反应条件,降低对设备的要求,从而提高设备的生产能力和降低产品成本。",
+      "id": "q43"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "怎样用一种试剂区别失去标签的四种物质?这四种物质是氯化钠,硫酸钠,氯化铵,硫酸铵,并注明鉴别现象。",
+      "answer": "选用Ba(OH)2试剂。\n将四种未知试剂配成溶液,分装在四个试管中,分别加入Ba(OH)2溶液并加热\n(1)出现白色沉淀,产生刺激性气味气体的是硫酸铵;\n(2)没有白色沉淀,但产生刺激性气味气体的是氯化铵;\n(3)只有白色沉淀的物质是硫酸钠。\n(4)没有白色沉淀,也不产生刺激性气味气体的是氯化钠。",
+      "id": "q44"
+    }
+  ]
+}

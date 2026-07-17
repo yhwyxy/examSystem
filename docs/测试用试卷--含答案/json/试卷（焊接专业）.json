@@ -1,0 +1,896 @@
+{
+  "paper_id": "焊接专业",
+  "name": "焊接专业",
+  "exam_info": {
+    "title": "大学生入职专业试卷(焊接A卷)",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "机械"
+        },
+        {
+          "key": "B",
+          "text": "电能"
+        },
+        {
+          "key": "C",
+          "text": "化学"
+        },
+        {
+          "key": "D",
+          "text": "气"
+        }
+      ],
+      "question": "气焊是将能转变为热能的一种熔焊工艺方法。",
+      "id": "q1"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "0.01%"
+        },
+        {
+          "key": "B",
+          "text": "0.015%"
+        },
+        {
+          "key": "C",
+          "text": "0.03%"
+        },
+        {
+          "key": "D",
+          "text": "0.5%"
+        }
+      ],
+      "question": "气体保护焊产生气孔的氮的体积分数约为",
+      "id": "q2"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "点状"
+        },
+        {
+          "key": "B",
+          "text": "线状"
+        },
+        {
+          "key": "C",
+          "text": "面状"
+        },
+        {
+          "key": "D",
+          "text": "立体"
+        }
+      ],
+      "question": "在厚度为110mm以上的钢板上进行电渣焊时,其热源可以看成是热源。",
+      "id": "q3"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "先中央后两侧"
+        },
+        {
+          "key": "B",
+          "text": "先两侧后中央"
+        },
+        {
+          "key": "C",
+          "text": "由一端向另一端"
+        },
+        {
+          "key": "D",
+          "text": "逐步后退"
+        }
+      ],
+      "question": "焊后锤击焊道表面可以改善焊缝的二次组织。通常多采用风铲锤击,锤击的方向应依次进行。",
+      "id": "q4"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "5%"
+        },
+        {
+          "key": "B",
+          "text": "8%"
+        },
+        {
+          "key": "C",
+          "text": "11%"
+        },
+        {
+          "key": "D",
+          "text": "14%"
+        }
+      ],
+      "question": "用Ar+O2的混合气体进行焊接时,为得到喷射过渡和指状熔深,通常含氧量(体积分数)总是被限制在以下。",
+      "id": "q5"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "细实线"
+        },
+        {
+          "key": "B",
+          "text": "粗实线"
+        },
+        {
+          "key": "C",
+          "text": "虚线"
+        },
+        {
+          "key": "D",
+          "text": "以上都可以"
+        }
+      ],
+      "question": "机械制图图纸上的图框必须用画出。",
+      "id": "q6"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "长度"
+        },
+        {
+          "key": "B",
+          "text": "颜色"
+        },
+        {
+          "key": "C",
+          "text": "宽度"
+        },
+        {
+          "key": "D",
+          "text": "黑度"
+        }
+      ],
+      "question": "同一图纸中同类图线的应基本一致。",
+      "id": "q7"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "焊接电流"
+        },
+        {
+          "key": "B",
+          "text": "电弧弧长"
+        },
+        {
+          "key": "C",
+          "text": "焊接速度"
+        },
+        {
+          "key": "D",
+          "text": "电源极性"
+        }
+      ],
+      "question": "C02气体保护焊电弧电压的大小决定和熔滴过渡形式,它对焊缝成形、飞溅、焊接缺陷及焊缝力学性能影响很大。",
+      "id": "q8"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "冷裂纹"
+        },
+        {
+          "key": "B",
+          "text": "热裂纹"
+        },
+        {
+          "key": "C",
+          "text": "再热裂纹"
+        }
+      ],
+      "question": "母材(或焊条)中硫含量较高时,易产生。",
+      "id": "q9"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "I级"
+        },
+        {
+          "key": "B",
+          "text": "II级"
+        },
+        {
+          "key": "C",
+          "text": "III级"
+        },
+        {
+          "key": "D",
+          "text": "IV级"
+        }
+      ],
+      "question": "级焊缝内不准有裂纹,未熔合、未焊透和条状夹渣。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "凹形"
+        },
+        {
+          "key": "B",
+          "text": "凸形"
+        },
+        {
+          "key": "C",
+          "text": "等腰平行"
+        },
+        {
+          "key": "D",
+          "text": "不等腰平行"
+        }
+      ],
+      "question": "承受动载荷的角焊缝,其截面形状以承载能力最低。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "疲劳强度"
+        },
+        {
+          "key": "B",
+          "text": "动载强度"
+        },
+        {
+          "key": "C",
+          "text": "静载强度"
+        }
+      ],
+      "question": "应力集中对结构的影响不大。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "能改善焊缝的化学成份和力学性能"
+        },
+        {
+          "key": "B",
+          "text": "能加快焊缝的冷却速度"
+        },
+        {
+          "key": "C",
+          "text": "能熔化焊渣"
+        },
+        {
+          "key": "D",
+          "text": "能大量熔化焊剂"
+        }
+      ],
+      "question": "焊剂的主要作用之一是。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "冷脆性"
+        },
+        {
+          "key": "B",
+          "text": "热脆性"
+        },
+        {
+          "key": "C",
+          "text": "氢脆性"
+        },
+        {
+          "key": "D",
+          "text": "热塑性"
+        }
+      ],
+      "question": "焊接低碳钢时,造成钢的塑性严重下降的主要原因是。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "单面焊"
+        },
+        {
+          "key": "B",
+          "text": "单面焊双面成形"
+        },
+        {
+          "key": "C",
+          "text": "双面焊"
+        },
+        {
+          "key": "D",
+          "text": "电阻焊"
+        }
+      ],
+      "question": "对于重要焊件,不宜使用带垫板的接头,则应使用焊接工艺。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "防止焊瘤"
+        },
+        {
+          "key": "B",
+          "text": "防止焊穿"
+        },
+        {
+          "key": "C",
+          "text": "防止咬边"
+        },
+        {
+          "key": "D",
+          "text": "防止塌陷"
+        }
+      ],
+      "question": "对于厚度较大的板材,应开坡口后再进行焊接,由于埋弧焊的特点,采用较厚的钝边的目的是。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "焊件厚度"
+        },
+        {
+          "key": "B",
+          "text": "焊丝直径"
+        },
+        {
+          "key": "C",
+          "text": "喷嘴直径"
+        },
+        {
+          "key": "D",
+          "text": "焊接速度"
+        }
+      ],
+      "question": "钨极氩弧焊时,氩气流量的大小决定于",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "防止焊瘤"
+        },
+        {
+          "key": "B",
+          "text": "防止焊穿"
+        },
+        {
+          "key": "C",
+          "text": "防止咬边"
+        },
+        {
+          "key": "D",
+          "text": "防止塌陷"
+        }
+      ],
+      "question": "对于厚度较大的板材,应开坡口后再进行焊接,由于埋弧焊的特点,采用较厚的钝边的目的是。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "U=α+bL"
+        },
+        {
+          "key": "B",
+          "text": "U=α-bL"
+        },
+        {
+          "key": "C",
+          "text": "U=α+b"
+        },
+        {
+          "key": "D",
+          "text": "U=α-L"
+        }
+      ],
+      "question": "弧拄电压降在一定的介质条件下和弧拄长度成正比,所以弧拄电压U可表示为。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "Ac1"
+        },
+        {
+          "key": "B",
+          "text": "Ac3"
+        },
+        {
+          "key": "C",
+          "text": "AC CM"
+        },
+        {
+          "key": "D",
+          "text": "Arcm"
+        }
+      ],
+      "question": "钢件淬火后,再加热到点以下温度,保温到一定时间,然后冷却到室温的热处理工艺称为回火。",
+      "id": "q20"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "触电和火灾"
+        },
+        {
+          "key": "B",
+          "text": "坠落"
+        },
+        {
+          "key": "C",
+          "text": "爆炸"
+        },
+        {
+          "key": "D",
+          "text": "金属飞溅"
+        },
+        {
+          "key": "E",
+          "text": "机械伤害"
+        }
+      ],
+      "question": "在焊工焊接与切割作业时主要需预防等公伤事故。",
+      "id": "q21"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "防尘"
+        },
+        {
+          "key": "B",
+          "text": "防毒"
+        },
+        {
+          "key": "C",
+          "text": "放射线和噪声"
+        },
+        {
+          "key": "D",
+          "text": "皮肤病"
+        }
+      ],
+      "question": "在焊工作业时主要需预防的职业病危害是。",
+      "id": "q22"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "预防工伤事故的发生"
+        },
+        {
+          "key": "B",
+          "text": "预防职业病的危害"
+        },
+        {
+          "key": "C",
+          "text": "保证产品质量"
+        },
+        {
+          "key": "D",
+          "text": "保证工程进度"
+        }
+      ],
+      "question": "安全生产包括等几个方面的内容。",
+      "id": "q23"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D",
+        "E"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "金属烟尘"
+        },
+        {
+          "key": "B",
+          "text": "有毒气体"
+        },
+        {
+          "key": "C",
+          "text": "弧光辐射"
+        },
+        {
+          "key": "D",
+          "text": "高频电磁场"
+        },
+        {
+          "key": "E",
+          "text": "噪声和射线"
+        }
+      ],
+      "question": "金属材料在焊接过程中产生的有害素主要分为类。",
+      "id": "q24"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "二氧化碳"
+        },
+        {
+          "key": "B",
+          "text": "泡沫"
+        },
+        {
+          "key": "C",
+          "text": "干粉"
+        },
+        {
+          "key": "D",
+          "text": "水"
+        }
+      ],
+      "question": "乙炔着火可用的灭火器是。",
+      "id": "q25"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "可燃物质"
+        },
+        {
+          "key": "B",
+          "text": "助燃物质"
+        },
+        {
+          "key": "C",
+          "text": "着火源"
+        }
+      ],
+      "question": "发生燃烧同时具备的条件。",
+      "id": "q26"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "火烤"
+        },
+        {
+          "key": "B",
+          "text": "热水"
+        },
+        {
+          "key": "C",
+          "text": "锤击瓶阀"
+        },
+        {
+          "key": "D",
+          "text": "水蒸气"
+        }
+      ],
+      "question": "冬季使用气瓶时,若气瓶结冰,应选用的方法解冻。",
+      "id": "q27"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "直立放置"
+        },
+        {
+          "key": "B",
+          "text": "横躺卧放"
+        },
+        {
+          "key": "C",
+          "text": "与地面成60度斜放"
+        },
+        {
+          "key": "D",
+          "text": "与地面成20度斜放"
+        }
+      ],
+      "question": "下列乙炔瓶放置正确的是。",
+      "id": "q28"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "动作缓慢"
+        },
+        {
+          "key": "B",
+          "text": "站在气体出口方向正面"
+        },
+        {
+          "key": "C",
+          "text": "站在气体出口方向侧面"
+        }
+      ],
+      "question": "开启氧气瓶阀应注意事项。",
+      "id": "q29"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "火灾爆炸"
+        },
+        {
+          "key": "B",
+          "text": "触电"
+        },
+        {
+          "key": "C",
+          "text": "烟尘毒气"
+        },
+        {
+          "key": "D",
+          "text": "弧光辐射"
+        }
+      ],
+      "question": "手工电弧焊应主要预防哪些危害因素。",
+      "id": "q30"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "乙炔导管必须从回火防止器出口接出,禁止直接与乙炔发生器出口连接。",
+      "id": "q31"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "焊接接地良好,能够大大降低高频电流,对人体的危害越小。",
+      "id": "q32"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "电焊机起火时,未断电之前可以用泡沫灭火机灭火。",
+      "id": "q33"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "氧气.氢气.乙炔气都是可燃气体,并且具有爆炸的危险。",
+      "id": "q34"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "粉尘爆炸属于物理爆炸范畴。",
+      "id": "q35"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "发生燃烧的三个条件是;可燃物.助燃物和火源,防止火灾的措施就是消除或控制其中的一个条件。",
+      "id": "q36"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "进入容器内采用气焊时,点火与熄火应该在容器内进行。",
+      "id": "q37"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "登高工作人员严禁从高处乱扔焊条头和杂物。",
+      "id": "q38"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "在生产过程中,对可燃管道及容器进行抢修使,一定要队整个生产系统安全隔离,防止可燃气体相互串通。",
+      "id": "q39"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "一台电焊机具有无数条外特性曲线。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 13.0,
+      "scoring_mode": "text",
+      "question": "焊条的选用原则有哪些?",
+      "answer": "1.根据焊件木材的类型选用焊条\n2.根据焊缝的使用环境选用焊条\n3.根据焊条的抗裂性要求选用焊条\n4.根据焊接工艺要求选用焊条\n5.根据设备和施工条件选用焊条\n6.根据经济性选用焊条",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 7.0,
+      "scoring_mode": "text",
+      "question": "试述焊接的主要缺陷有哪些?",
+      "answer": "未焊透、裂纹、夹渣、气孔、咬边、焊瘤、烧穿",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "消除焊接残余应力的方法有哪些?",
+      "answer": "1.整体高温回火\n2.局部高温回火\n3.机械拉伸法\n4.温差拉伸法\n5.振动法",
+      "id": "q43"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "焊条型号E4315的含义是什么?",
+      "answer": "E表示焊条;43表示熔敷金属抗拉强度的最小值430Mpa;1表示焊条使用于全位置焊接;5表示焊条药皮为低氢纳型,采用直流反接电源",
+      "id": "q44"
+    }
+  ]
+}

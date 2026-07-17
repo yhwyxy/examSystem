@@ -1,0 +1,891 @@
+{
+  "paper_id": "chemical-analysis",
+  "name": "化学分析",
+  "exam_info": {
+    "title": "大学生入职试卷(化学分析)A卷",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "盐酸、硝酸、硫酸、高氯酸都是具有氧化性的强酸。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "电位法的依据是能斯特方程。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "增加平行测定次数可消除偶然误差。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "测定结果精密度好,准确度不一定好。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "在络合滴定中,一般使用金属指示剂指示滴定终点。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "用0.01mol/LHCl滴定0.01mol/LNaOH溶液时,滴定终点的PH值为7。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "为方便操作,可以直接在量筒或量杯中配制溶液。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "比色分析中显色时间越长越好。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "朗伯-比尔定律表明,当一束单色光通过均匀有色溶液时,其吸光度与溶液的浓度和吸收皿厚度成正比",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "直接法配制标准溶液必需使用基准试剂。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "2:1"
+        },
+        {
+          "key": "B",
+          "text": "3:1"
+        },
+        {
+          "key": "C",
+          "text": "1:2"
+        },
+        {
+          "key": "D",
+          "text": "1: 3"
+        }
+      ],
+      "question": "王水中硝酸与盐酸的体积比为。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "0.05%"
+        },
+        {
+          "key": "B",
+          "text": "0.5%"
+        },
+        {
+          "key": "C",
+          "text": "0.005%"
+        },
+        {
+          "key": "D",
+          "text": "0.0005%"
+        }
+      ],
+      "question": "50ml滴定管读数误差为0.01mL,如果滴定时用去20.00mL相对误差是。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "饱和"
+        },
+        {
+          "key": "B",
+          "text": "电离度"
+        },
+        {
+          "key": "C",
+          "text": "溶解平衡"
+        },
+        {
+          "key": "D",
+          "text": "溶解度"
+        }
+      ],
+      "question": "在一定温度下,某物质在100克溶剂里达到平衡状态时所溶解的克数叫。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "络合物"
+        },
+        {
+          "key": "B",
+          "text": "无机物"
+        },
+        {
+          "key": "C",
+          "text": "化合物"
+        },
+        {
+          "key": "D",
+          "text": "有机物"
+        }
+      ],
+      "question": "高氯酸应避免与接触",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "化学式"
+        },
+        {
+          "key": "B",
+          "text": "原子式"
+        },
+        {
+          "key": "C",
+          "text": "分子式"
+        },
+        {
+          "key": "D",
+          "text": "离子式"
+        }
+      ],
+      "question": "配制标准滴定溶液的基准试剂的组成应与它的 完全符合(包括结晶水)。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "浓盐酸"
+        },
+        {
+          "key": "B",
+          "text": "氢氟酸"
+        },
+        {
+          "key": "C",
+          "text": "浓硝酸"
+        },
+        {
+          "key": "D",
+          "text": "王水"
+        }
+      ],
+      "question": "洗涤铂器皿不可使用。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "绿色"
+        },
+        {
+          "key": "B",
+          "text": "蓝色"
+        },
+        {
+          "key": "C",
+          "text": "黄色"
+        },
+        {
+          "key": "D",
+          "text": "红色"
+        }
+      ],
+      "question": "实验室中常用的“分析纯”化学试剂标签颜色是。",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "移液管"
+        },
+        {
+          "key": "B",
+          "text": "容量瓶"
+        },
+        {
+          "key": "C",
+          "text": "量筒"
+        },
+        {
+          "key": "D",
+          "text": "烧杯"
+        }
+      ],
+      "question": "要准确移取一定量的液体应选用。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "玻璃容器"
+        },
+        {
+          "key": "B",
+          "text": "瓷器皿"
+        },
+        {
+          "key": "C",
+          "text": "石英器皿"
+        },
+        {
+          "key": "D",
+          "text": "铂制器皿"
+        }
+      ],
+      "question": "进行有关氢氟酸的分析,应在容器中进行。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "精密度"
+        },
+        {
+          "key": "B",
+          "text": "准确度"
+        },
+        {
+          "key": "C",
+          "text": "重复性(r)"
+        },
+        {
+          "key": "D",
+          "text": "再现性(R)"
+        }
+      ],
+      "question": "不同的操作者,在不同的条件下,用相同的方法获得的单个结果之间的一致程度。称为。",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "腐蚀性物质"
+        },
+        {
+          "key": "B",
+          "text": "剧毒物质"
+        },
+        {
+          "key": "C",
+          "text": "易挥发的物质"
+        },
+        {
+          "key": "D",
+          "text": "易潮解,易吸收CO2或易氧化的物质"
+        }
+      ],
+      "question": "递减称量法最适合于称量是。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "装满水利用水柱的压力压出"
+        },
+        {
+          "key": "B",
+          "text": "用细铁丝通并用水洗"
+        },
+        {
+          "key": "C",
+          "text": "热水中浸泡并用力下抖"
+        },
+        {
+          "key": "D",
+          "text": "用洗耳球对吸"
+        }
+      ],
+      "question": "酸式滴定管尖部出口被润滑油酯堵塞,快速有效的处理方法是。\n答案:",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "绝对误差"
+        },
+        {
+          "key": "B",
+          "text": "相对偏差"
+        },
+        {
+          "key": "C",
+          "text": "标准偏差"
+        },
+        {
+          "key": "D",
+          "text": "绝对偏差"
+        }
+      ],
+      "question": "对某试样进行多次平行测定,得到平均值,其中某个别测定值与平均值之差为该次测定的。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "绿色"
+        },
+        {
+          "key": "B",
+          "text": "蓝色"
+        },
+        {
+          "key": "C",
+          "text": "黄色"
+        },
+        {
+          "key": "D",
+          "text": "红色"
+        }
+      ],
+      "question": "实验室中常用的“分析纯”化学试剂标签颜色是。",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "对照试验"
+        },
+        {
+          "key": "B",
+          "text": "预试验"
+        },
+        {
+          "key": "C",
+          "text": "平行试验"
+        },
+        {
+          "key": "D",
+          "text": "空白试验"
+        }
+      ],
+      "question": "在不加样品的情况下,用测定样品同样的方法、步骤,对空白样品进行定量分析,称之为。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "减小"
+        },
+        {
+          "key": "B",
+          "text": "可大可小"
+        },
+        {
+          "key": "C",
+          "text": "不影响"
+        },
+        {
+          "key": "D",
+          "text": "增大"
+        }
+      ],
+      "question": "实验室用水的电导率的测定要注意避免空气中的二氧化碳溶于水,使水的电导率。",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "比色皿外壁有水珠"
+        },
+        {
+          "key": "B",
+          "text": "手捏比色皿的磨光面"
+        },
+        {
+          "key": "C",
+          "text": "手捏比色皿的毛面"
+        },
+        {
+          "key": "D",
+          "text": "用报纸去擦比色皿外壁的水"
+        }
+      ],
+      "question": "下述操作中正确的是 。",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "水碱"
+        },
+        {
+          "key": "B",
+          "text": "烧碱"
+        },
+        {
+          "key": "C",
+          "text": "纯碱"
+        },
+        {
+          "key": "D",
+          "text": "小苏打"
+        }
+      ],
+      "question": "碳酸氢钠俗称为。",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "进行对照试验"
+        },
+        {
+          "key": "B",
+          "text": "进行空白试验"
+        },
+        {
+          "key": "C",
+          "text": "进行仪器检准"
+        },
+        {
+          "key": "D",
+          "text": "增加平行试验次数"
+        }
+      ],
+      "question": "可用下法中 方法减小分析测定中的偶然误差。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "浓硫酸"
+        },
+        {
+          "key": "B",
+          "text": "浓盐酸"
+        },
+        {
+          "key": "C",
+          "text": "铬酸洗液"
+        },
+        {
+          "key": "D",
+          "text": "浓硝酸"
+        }
+      ],
+      "question": "比色皿中的油渍用洗涤。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "提高精密度和准确度"
+        },
+        {
+          "key": "B",
+          "text": "消除系统误差"
+        },
+        {
+          "key": "C",
+          "text": "消除偶然误差"
+        },
+        {
+          "key": "D",
+          "text": "消除过失误差"
+        }
+      ],
+      "question": "一般化学分析中空白实验的目的是 。",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "木材着火"
+        },
+        {
+          "key": "B",
+          "text": "可燃性化学试剂着火"
+        },
+        {
+          "key": "C",
+          "text": "可燃性金属着火"
+        },
+        {
+          "key": "D",
+          "text": "带电设备着火"
+        }
+      ],
+      "question": "下列物质着火,不宜用泡沫灭火器灭火的是。",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "Fe(OH)3沉淀吸附的NH4Cl"
+        },
+        {
+          "key": "B",
+          "text": "NaCl(NH4HCO3)"
+        },
+        {
+          "key": "C",
+          "text": "BaSO4沉淀夹带的BaCl2"
+        },
+        {
+          "key": "D",
+          "text": "SiO2(Fe2O3)"
+        }
+      ],
+      "question": "加热或灼烧可除去下列物质中少量杂质(括号中为杂质)的有。",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "优级纯"
+        },
+        {
+          "key": "B",
+          "text": "分析纯"
+        },
+        {
+          "key": "C",
+          "text": "化学纯"
+        },
+        {
+          "key": "D",
+          "text": "光谱纯"
+        }
+      ],
+      "question": "我国现行化学试剂的等级通常用GR、AR和CP表示,它们分别代表纯度的试剂。",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "硅胶"
+        },
+        {
+          "key": "B",
+          "text": "CaO"
+        },
+        {
+          "key": "C",
+          "text": "Ca(OH)2"
+        },
+        {
+          "key": "D",
+          "text": "盐酸"
+        }
+      ],
+      "question": "下列物质可作为干燥剂的有。",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "操作失误"
+        },
+        {
+          "key": "B",
+          "text": "环境温度变化"
+        },
+        {
+          "key": "C",
+          "text": "方法误差"
+        },
+        {
+          "key": "D",
+          "text": "仪器误差"
+        }
+      ],
+      "question": "系统误差包括。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "直接滴定法"
+        },
+        {
+          "key": "B",
+          "text": "返滴定法"
+        },
+        {
+          "key": "C",
+          "text": "置换滴定法"
+        },
+        {
+          "key": "D",
+          "text": "间接滴定法"
+        }
+      ],
+      "question": "滴定分析根据滴定方式不同可以分为 。",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "滴定管"
+        },
+        {
+          "key": "B",
+          "text": "容量瓶"
+        },
+        {
+          "key": "C",
+          "text": "烧杯"
+        },
+        {
+          "key": "D",
+          "text": "量杯"
+        }
+      ],
+      "question": "滴定分析中,下面哪种器具可用来准确测量液体体积?",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "光源"
+        },
+        {
+          "key": "B",
+          "text": "单色器"
+        },
+        {
+          "key": "C",
+          "text": "吸收池"
+        },
+        {
+          "key": "D",
+          "text": "检测器及测量系统"
+        }
+      ],
+      "question": "分光光度计的主要部件包括。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "电线上洒有腐蚀性药品,可以不进行处理。"
+        },
+        {
+          "key": "B",
+          "text": "能升华的物质都可以放入烘箱内烘干"
+        },
+        {
+          "key": "C",
+          "text": "电器设备电线不宜通过潮湿的地方。"
+        },
+        {
+          "key": "D",
+          "text": "电器仪器应按说明书规定进行操作。"
+        }
+      ],
+      "question": "有关电器设备防护知识正确的是。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "滴定分析法的基本原理是什么?",
+      "answer": "滴定分析是基于物质相互反应完全时,其物质的量满足一定的化学计量关系,根据消耗滴定剂的量与被测物质的量满足摩尔比关系,计算被测物质的含量。",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "实验室如何用浓硫酸配置稀硫酸?为什么要这样操作?",
+      "answer": "纯H2SO4与水反应时放出大量热,故在配制稀H2SO4时应将浓H2SO4徐徐加入水中并加以搅拌以散热,切不可反向进行,否则放出大量的热,水迅速蒸发飞溅带出浓H2SO4伤人。",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 20.0,
+      "scoring_mode": "text",
+      "question": "用0.2369 g无水碳酸钠标定盐酸标准滴定溶液的浓度,消耗22.35mL盐酸溶液:1写出反应方程式,并配平2试计算该盐酸溶液的物质的量浓度?(Na2CO3的相对分子质量为106.0)",
+      "answer": "12HCl+ Na2CO3→2NaCl+H2O+CO2↑\n2\n[OLE: Equation.3]\n该盐酸溶液的物质的量浓度为0.2000 mol/L 。",
+      "id": "q43"
+    }
+  ]
+}

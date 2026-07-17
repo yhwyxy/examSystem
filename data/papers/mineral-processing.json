@@ -1,0 +1,821 @@
+{
+  "paper_id": "mineral-processing",
+  "name": "矿物加工",
+  "exam_info": {
+    "title": "矿物加工工程专业考试试卷(一)(A)答案",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "泰勒标准筛为筛孔数目/1英寸(2.54cm)长度。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "溢流型球磨机(Overflow mill)排矿轴颈比给矿的大。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "溢流型球磨机内镶有与磨机转向相同的螺旋叶片防止小球和粗粒矿排出,而矿浆可通过中空轴颈下缘自动溢流出去。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "原矿的破碎、筛分、磨矿、分级等工序,其作用是有、无用矿物分类完全。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "当细磨物料层完全为水所饱和,即超过最大毛细水含量之后,超过的水分能为\n毛细管引力所保持,而只能受重力的支配沿着矿粒间孔隙向下移动,这种水叫做重力水。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "润湿是自然界中常的现象,是由于液体固体表面排挤在固体表面所产生的一种界面的作用。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "液体在固体表面展开和不展开的现象称为 润湿现象。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "易被润湿的表面称为 亲水 表面。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "三相润湿周边是指当气泡附着浸入水中的矿物表面,达到润湿平衡时,气泡在矿物表面所形成三相接触点围成的周边 。",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "当接触角θ<90o时,δSW < δSA 矿物表面不易被水润湿,具有疏水表面,其矿物具有疏水性, 可浮性好。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "有害"
+        },
+        {
+          "key": "B",
+          "text": "有益"
+        },
+        {
+          "key": "C",
+          "text": "无用"
+        }
+      ],
+      "question": "重力水在成球过程中是的。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "机械水"
+        },
+        {
+          "key": "B",
+          "text": "薄膜水"
+        },
+        {
+          "key": "C",
+          "text": "原子水"
+        }
+      ],
+      "question": "矿粒面上的吸附水、、毛细水和重力水的总和称为全水量。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "重力水"
+        },
+        {
+          "key": "B",
+          "text": "吸附水"
+        },
+        {
+          "key": "C",
+          "text": "毛细水"
+        }
+      ],
+      "question": "各种水在造球过程中的作用:能将矿粒拉向水滴而成球。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "机械力"
+        },
+        {
+          "key": "B",
+          "text": "界面张力"
+        },
+        {
+          "key": "C",
+          "text": "范德瓦尔斯力"
+        }
+      ],
+      "question": "能使矿粒粘粘附在一起。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "重力水"
+        },
+        {
+          "key": "B",
+          "text": "吸附水"
+        },
+        {
+          "key": "C",
+          "text": "毛细水"
+        }
+      ],
+      "question": "在形成生球过程中起主导作用。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "重力水"
+        },
+        {
+          "key": "B",
+          "text": "原子水"
+        },
+        {
+          "key": "C",
+          "text": "分子水"
+        }
+      ],
+      "question": "在某种程度上能增加生球的机械强度。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "烧结矿"
+        },
+        {
+          "key": "B",
+          "text": "石灰石"
+        },
+        {
+          "key": "C",
+          "text": "白云石"
+        },
+        {
+          "key": "D",
+          "text": "焦炭"
+        }
+      ],
+      "question": "高炉主要的含铁原料是",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "焦粉"
+        },
+        {
+          "key": "B",
+          "text": "石灰"
+        },
+        {
+          "key": "C",
+          "text": "氧气"
+        }
+      ],
+      "question": "烧结目前厂用的燃料是",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "无烟煤"
+        },
+        {
+          "key": "B",
+          "text": "褐煤"
+        },
+        {
+          "key": "C",
+          "text": "烟煤"
+        }
+      ],
+      "question": "在抽风烧结中禁止使用作固体燃料。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "选项分子力"
+        },
+        {
+          "key": "B",
+          "text": "表面张力"
+        },
+        {
+          "key": "C",
+          "text": "吸附力"
+        }
+      ],
+      "question": "毛细水是靠的作用将颗粒拉拢在一起的。",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "易于成球"
+        },
+        {
+          "key": "B",
+          "text": "易于混合"
+        },
+        {
+          "key": "C",
+          "text": "易于混合和成球"
+        }
+      ],
+      "question": "亲水性好的物料。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "铁矿石"
+        },
+        {
+          "key": "B",
+          "text": "陨铁"
+        },
+        {
+          "key": "C",
+          "text": "海绵铁"
+        }
+      ],
+      "question": "人类最早发现和使用的铁是",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "磁铁矿"
+        },
+        {
+          "key": "B",
+          "text": "赤铁矿"
+        },
+        {
+          "key": "C",
+          "text": "褐铁矿"
+        }
+      ],
+      "question": "铁矿石中亲水性比较差的是。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "5-0"
+        },
+        {
+          "key": "B",
+          "text": "6.3-0"
+        },
+        {
+          "key": "C",
+          "text": "6.3-5"
+        }
+      ],
+      "question": "筛分指数是指烧结矿试样筛下mm粒级的量与原始试样量的百分比",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "分子结合水"
+        },
+        {
+          "key": "B",
+          "text": "毛细水"
+        },
+        {
+          "key": "C",
+          "text": "动水"
+        }
+      ],
+      "question": "在成球过程中起主导作用。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "有助于树立良好形象"
+        },
+        {
+          "key": "B",
+          "text": "将增加企业的成本"
+        },
+        {
+          "key": "C",
+          "text": "对企业没有影响"
+        }
+      ],
+      "question": "对于企业来说,遵守诚实守信",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "B",
+          "text": "<1"
+        },
+        {
+          "key": "C",
+          "text": "=1"
+        }
+      ],
+      "question": "烧结最佳运行平衡系数为\nA>1",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "安培"
+        },
+        {
+          "key": "B",
+          "text": "千瓦"
+        },
+        {
+          "key": "C",
+          "text": "千瓦时"
+        }
+      ],
+      "question": "电能的单位是",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "代替石灰石"
+        },
+        {
+          "key": "B",
+          "text": "调节碱度"
+        },
+        {
+          "key": "C",
+          "text": "强化制粒"
+        }
+      ],
+      "question": "混合料中加入消石灰的目的是。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "快"
+        },
+        {
+          "key": "B",
+          "text": "慢"
+        },
+        {
+          "key": "C",
+          "text": "适中"
+        }
+      ],
+      "question": "燃料粒度细,在烧结过程中燃烧速度,达不到烧结应有的温度。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "磁赤铁矿"
+        },
+        {
+          "key": "B",
+          "text": "钛铁矿"
+        },
+        {
+          "key": "C",
+          "text": "褐铁矿"
+        },
+        {
+          "key": "D",
+          "text": "菱铁矿"
+        }
+      ],
+      "question": "复杂难选铁矿石的种类及性质含铁矿物种类繁多,目前已发现的铁矿物和含铁矿物约300余种,其中常见的有170余种。但在当前技术条件下,具有工业利用价值的主要是等",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "磷"
+        },
+        {
+          "key": "B",
+          "text": "铅"
+        },
+        {
+          "key": "C",
+          "text": "铜"
+        },
+        {
+          "key": "D",
+          "text": "钒"
+        }
+      ],
+      "question": "铁矿石中的有害杂质是指那些对冶炼有妨碍或使冶炼不易获得优质产品的元素,通常有等",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "工艺适应性强;"
+        },
+        {
+          "key": "B",
+          "text": "工艺流程简化"
+        },
+        {
+          "key": "C",
+          "text": "金回收率高"
+        },
+        {
+          "key": "D",
+          "text": "有利于环境保护"
+        }
+      ],
+      "question": "炭浆法的优点有",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "CO2"
+        },
+        {
+          "key": "B",
+          "text": "CO"
+        },
+        {
+          "key": "C",
+          "text": "H2"
+        },
+        {
+          "key": "D",
+          "text": "CH4"
+        }
+      ],
+      "question": "焦炉煤气中的主要还原成份有",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "煤气"
+        },
+        {
+          "key": "B",
+          "text": "天然气"
+        },
+        {
+          "key": "C",
+          "text": "焦炭"
+        },
+        {
+          "key": "D",
+          "text": "煤粉"
+        }
+      ],
+      "question": "生产中常用作焙烧还原剂的是",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "炭粒度;"
+        },
+        {
+          "key": "B",
+          "text": "矿浆酸碱度;"
+        },
+        {
+          "key": "C",
+          "text": "炭的类型;"
+        },
+        {
+          "key": "D",
+          "text": "矿浆浓度"
+        }
+      ],
+      "question": "对活性炭吸附容量有影响的因素有",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "分级机溢流处;"
+        },
+        {
+          "key": "B",
+          "text": "水力旋流器前;"
+        },
+        {
+          "key": "C",
+          "text": "脱水浓缩前;"
+        },
+        {
+          "key": "D",
+          "text": "磨矿前"
+        }
+      ],
+      "question": "矿浆除屑目的是除去木屑、砂粒、导火索、导爆管、塑胶炸药袋和橡胶轮胎等的碎片、渣子。设备一般是用各种筛子,一般设置在",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "吸附需要耐磨炭;"
+        },
+        {
+          "key": "B",
+          "text": "需要严格除渣;"
+        },
+        {
+          "key": "C",
+          "text": "物料平衡计算困难"
+        },
+        {
+          "key": "D",
+          "text": "不适宜处理含银较高的金矿石及高品位金精矿。"
+        }
+      ],
+      "question": "炭浆法的缺点有",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "包裹连生"
+        },
+        {
+          "key": "B",
+          "text": "穿插连生"
+        },
+        {
+          "key": "C",
+          "text": "毗邻连生-"
+        }
+      ],
+      "question": "连生体的三种结构特征是",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "铜"
+        },
+        {
+          "key": "B",
+          "text": "金"
+        },
+        {
+          "key": "C",
+          "text": "钴"
+        },
+        {
+          "key": "D",
+          "text": "镍"
+        }
+      ],
+      "question": "氨是金属的有效浸出剂。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "矿石可选性研究的三个阶段:",
+      "answer": "1)实验室试验 2)中间试验  3)工业试验。",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "一台360m2的烧结机月产量为33.5万吨,环冷余热每小时产气为35吨,一个月作业时间为30天,问下该烧结机吨矿产气是多少kg/t?",
+      "answer": "吨矿产气量=35*24*28*1000/365000=75.22kg/t",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "简单解释下物相分析。",
+      "answer": "根据矿石中的各种矿物在各种溶剂中的溶解度和溶解速度不同,采用不同浓度的各种溶剂在不同条件下处理所分析的矿样,即可使矿石中各种矿物分离,从而可测出试样中某种元素呈何种矿物存在和含量的多少。",
+      "id": "q43"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "矿物粉碎的目的。",
+      "answer": "(1)使物料粒度减小;\n(2)使有用矿物与脉石矿物充分单体解离。",
+      "id": "q44"
+    }
+  ]
+}

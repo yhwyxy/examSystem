@@ -1,0 +1,864 @@
+{
+  "paper_id": "instrumentation",
+  "name": "仪器仪表",
+  "exam_info": {
+    "title": "测控技术与仪器",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 80.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "仪表的给定值就是它的测量值。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "测量值小数点后的位数愈多,测量愈精确。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "并不是计算结果中保留的小数点位数越多,精确度越高。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "仪表的精度级别指的是仪表的误差。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "灵敏度数值越大,则仪表越灵敏。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "准确度是指测量结果和实际值的一致程度,准确度高意味着系统误差和随机误差都很小。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "单位时间内导线流过的电荷数量为电流强度。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "导线的电阻与导线的长度有关。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "相同材料,长度相同,粗细不同的导线其电阻值相同。",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "仪表的量程就是它所能测量的范围。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "平衡容器"
+        },
+        {
+          "key": "B",
+          "text": "脉冲管路"
+        },
+        {
+          "key": "C",
+          "text": "差压变送器"
+        },
+        {
+          "key": "D",
+          "text": "显示器"
+        }
+      ],
+      "question": "将被测量的差压信号转换成电信号的设备是 。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "-273.16 K"
+        },
+        {
+          "key": "B",
+          "text": "273.16 K"
+        },
+        {
+          "key": "C",
+          "text": "373.15K"
+        },
+        {
+          "key": "D",
+          "text": "100°C"
+        }
+      ],
+      "question": "水的沸点是多少绝对温度 。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "导线"
+        },
+        {
+          "key": "B",
+          "text": "三芯电缆"
+        },
+        {
+          "key": "C",
+          "text": "补偿导线"
+        },
+        {
+          "key": "D",
+          "text": "二芯电缆"
+        }
+      ],
+      "question": "热电偶的延长用 。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "近似线性"
+        },
+        {
+          "key": "B",
+          "text": "非线性"
+        },
+        {
+          "key": "C",
+          "text": "水平直线"
+        },
+        {
+          "key": "D",
+          "text": "垂直直线"
+        }
+      ],
+      "question": "在热电阻温度计中,电阻和温度的关系是 。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "有影响"
+        },
+        {
+          "key": "B",
+          "text": "无影响"
+        },
+        {
+          "key": "C",
+          "text": "要根据具体情况而定"
+        }
+      ],
+      "question": "常用补偿导线把热电偶电势引入测温仪表,补偿导线的长度对其测量有无影响 。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "不一定"
+        },
+        {
+          "key": "B",
+          "text": "不是"
+        },
+        {
+          "key": "C",
+          "text": "是"
+        }
+      ],
+      "question": "反馈调节系统是闭环系统 。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "模拟输入"
+        },
+        {
+          "key": "B",
+          "text": "模拟输出"
+        },
+        {
+          "key": "C",
+          "text": "开关量输出"
+        }
+      ],
+      "question": "DCS系统中DO表示: 。",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "热阻效应"
+        },
+        {
+          "key": "B",
+          "text": "热压效应"
+        },
+        {
+          "key": "C",
+          "text": "热磁效应"
+        },
+        {
+          "key": "D",
+          "text": "热电效应"
+        }
+      ],
+      "question": "热电偶测量原理是基于 。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "热电偶的材料"
+        },
+        {
+          "key": "B",
+          "text": "热电偶的粗细"
+        },
+        {
+          "key": "C",
+          "text": "热电偶长短"
+        },
+        {
+          "key": "D",
+          "text": "热电极材料的化学成分和物理性能"
+        }
+      ],
+      "question": "热电偶的热电特性是由 所决定的。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "易爆气体"
+        },
+        {
+          "key": "B",
+          "text": "爆炸范围"
+        },
+        {
+          "key": "C",
+          "text": "引爆源"
+        },
+        {
+          "key": "D",
+          "text": "以上三个条件同时出现"
+        }
+      ],
+      "question": "仪表防爆的措施就是防止 。",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "电流"
+        },
+        {
+          "key": "B",
+          "text": "电压"
+        },
+        {
+          "key": "C",
+          "text": "电阻"
+        },
+        {
+          "key": "D",
+          "text": "功率"
+        }
+      ],
+      "question": "通常说的负载增加,是指负载 增加。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "电压"
+        },
+        {
+          "key": "B",
+          "text": "电流"
+        },
+        {
+          "key": "C",
+          "text": "其他"
+        },
+        {
+          "key": "D",
+          "text": "电阻"
+        }
+      ],
+      "question": "使用热电偶测温,主要测量其 。",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "90°"
+        },
+        {
+          "key": "B",
+          "text": "180°"
+        },
+        {
+          "key": "C",
+          "text": "270°"
+        },
+        {
+          "key": "D",
+          "text": "360°"
+        }
+      ],
+      "question": "普通压力表的指针摆动角度为 。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "提高测量灵敏度"
+        },
+        {
+          "key": "B",
+          "text": "减小非线性误差"
+        },
+        {
+          "key": "C",
+          "text": "提高电磁兼容性"
+        },
+        {
+          "key": "D",
+          "text": "减少引线电阻的影响"
+        }
+      ],
+      "question": "热电阻测量温度转换电路采用三线制是为了 。",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "基本误差"
+        },
+        {
+          "key": "B",
+          "text": "基本误差的最大允许误差"
+        },
+        {
+          "key": "C",
+          "text": "绝对误差"
+        },
+        {
+          "key": "D",
+          "text": "最大误差"
+        }
+      ],
+      "question": "仪表的精度级别指的是仪表的 。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "D",
+      "options": [
+        {
+          "key": "A",
+          "text": "m"
+        },
+        {
+          "key": "B",
+          "text": "K"
+        },
+        {
+          "key": "C",
+          "text": "cd"
+        },
+        {
+          "key": "D",
+          "text": "t"
+        }
+      ],
+      "question": "以下哪个不是国际基本单位 。",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "m/s2"
+        },
+        {
+          "key": "B",
+          "text": "m/s3"
+        },
+        {
+          "key": "C",
+          "text": "m/s"
+        },
+        {
+          "key": "D",
+          "text": "s/m3"
+        }
+      ],
+      "question": "加速度单位为",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "Q"
+        },
+        {
+          "key": "B",
+          "text": "F"
+        },
+        {
+          "key": "C",
+          "text": "P"
+        },
+        {
+          "key": "D",
+          "text": "T"
+        }
+      ],
+      "question": "单位时间内流过的体系用符号 表示。",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "正比"
+        },
+        {
+          "key": "B",
+          "text": "反比"
+        },
+        {
+          "key": "C",
+          "text": "随机"
+        },
+        {
+          "key": "D",
+          "text": "无关"
+        }
+      ],
+      "question": "气体的流量与压力成 。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "0"
+        },
+        {
+          "key": "B",
+          "text": "50"
+        },
+        {
+          "key": "C",
+          "text": "100"
+        },
+        {
+          "key": "D",
+          "text": "200"
+        }
+      ],
+      "question": "热电阻在0°C的阻值为 Ω。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "补偿导线"
+        },
+        {
+          "key": "B",
+          "text": "铜线"
+        },
+        {
+          "key": "C",
+          "text": "铝线"
+        }
+      ],
+      "question": "用热偶测量温度时,其连接导线不应该使用。",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "(9.8)牛顿"
+        },
+        {
+          "key": "B",
+          "text": "2斤"
+        },
+        {
+          "key": "C",
+          "text": "(10×6)Pa"
+        },
+        {
+          "key": "D",
+          "text": "1Pasi"
+        }
+      ],
+      "question": "1千克力=。",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "单向导电性,"
+        },
+        {
+          "key": "B",
+          "text": "双向导电性,"
+        },
+        {
+          "key": "C",
+          "text": "电容效应,"
+        },
+        {
+          "key": "D",
+          "text": "电感效应"
+        }
+      ],
+      "question": "PN结的特性是。",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "调节器"
+        },
+        {
+          "key": "B",
+          "text": "调节阀"
+        },
+        {
+          "key": "C",
+          "text": "调节对象"
+        },
+        {
+          "key": "D",
+          "text": "变送器"
+        }
+      ],
+      "question": "自动调节系统主要由。",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "比例"
+        },
+        {
+          "key": "B",
+          "text": "比例积分"
+        },
+        {
+          "key": "C",
+          "text": "比例微分"
+        },
+        {
+          "key": "D",
+          "text": "比例积分微分"
+        }
+      ],
+      "question": "自动调节系统按调节器具有的调节规律来分,通常有等调节系统。",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "算错数造成的误差;"
+        },
+        {
+          "key": "B",
+          "text": "记录错误造成的误差"
+        },
+        {
+          "key": "C",
+          "text": "安装错误造成的误差;"
+        },
+        {
+          "key": "D",
+          "text": "看错刻度造成的误差"
+        }
+      ],
+      "question": "下列情况中属于疏忽误差。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "误差;"
+        },
+        {
+          "key": "B",
+          "text": "基本误差;"
+        },
+        {
+          "key": "C",
+          "text": "最大允许误差;"
+        },
+        {
+          "key": "D",
+          "text": "基本误差和最大允许值"
+        }
+      ],
+      "question": "仪表的精度级别是指仪表的。",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "集中控制系统"
+        },
+        {
+          "key": "B",
+          "text": "分散控制系统"
+        },
+        {
+          "key": "C",
+          "text": "计算机控制系统"
+        },
+        {
+          "key": "D",
+          "text": "集散控制系统"
+        }
+      ],
+      "question": "DCS系统又称为。",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "绝对误差"
+        },
+        {
+          "key": "B",
+          "text": "系统误差"
+        },
+        {
+          "key": "C",
+          "text": "静态误差"
+        },
+        {
+          "key": "D",
+          "text": "随机误差"
+        }
+      ],
+      "question": "按误差出现的规律,误差可分为:。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "铜电阻"
+        },
+        {
+          "key": "B",
+          "text": "热电偶"
+        },
+        {
+          "key": "C",
+          "text": "铂电阻"
+        }
+      ],
+      "question": "下列不需要冷端补偿的是。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "什么是零位误差?什么是测量范围?",
+      "answer": "零位误差就是输入标准信号零时,此时设备显示不为零的值。\n测量范围指仪器所能够测量的最小尺寸与最大尺寸之间的范围",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "什么是引用误差?什么是绝对误差?",
+      "answer": "引用误差指测量的绝对误差与仪表的满量程值之比;\n绝对误差指测量值与真实值之差。",
+      "id": "q42"
+    }
+  ]
+}

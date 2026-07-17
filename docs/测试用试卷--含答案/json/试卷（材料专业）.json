@@ -1,0 +1,860 @@
+{
+  "paper_id": "材料专业",
+  "name": "材料专业",
+  "exam_info": {
+    "title": "大学生入职试卷(材料专业)-A卷",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "其他条件相同的条件下,钢的含碳量增加,钢的塑性变差。",
+      "id": "q1"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "钢的加热温度越高,塑性越好,越有利于轧制。",
+      "id": "q2"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "压力加工方法除轧制外还有锻造、挤压等。",
+      "id": "q3"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "钢号Q235-AF标记中的“Q”是指抗拉强度。",
+      "id": "q4"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "在再结晶温度以下轧制称为热轧。",
+      "id": "q5"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "钢的临界点是指钢在加热或冷却时发生相变的温度。",
+      "id": "q6"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": false,
+      "question": "凡温度不超过AC1的热处理工艺均称为回火。",
+      "id": "q7"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "调质处理为淬火加高温回火。",
+      "id": "q8"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "在固溶体中,随着溶质浓度的增加,固溶体的强度、硬度提高。",
+      "id": "q9"
+    },
+    {
+      "type": "true_false",
+      "score": 1.0,
+      "answer": true,
+      "question": "正火与退火的主要区别在于冷却速度不同。",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "碳、锰、硅、硫和磷等"
+        },
+        {
+          "key": "B",
+          "text": "铁、碳、锰、硅、硫和磷等"
+        },
+        {
+          "key": "C",
+          "text": "锰、硅、硫和磷等"
+        },
+        {
+          "key": "D",
+          "text": "碳、锰和硅等"
+        }
+      ],
+      "question": "钢成分中的主要合金元素有。",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "氮"
+        },
+        {
+          "key": "B",
+          "text": "氢"
+        },
+        {
+          "key": "C",
+          "text": "氧"
+        },
+        {
+          "key": "D",
+          "text": "夹杂物"
+        }
+      ],
+      "question": "钢中产生白点缺陷的内在原因是钢中含。",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "面心立方晶格"
+        },
+        {
+          "key": "B",
+          "text": "体心立方晶格"
+        },
+        {
+          "key": "C",
+          "text": "密排六方晶格"
+        },
+        {
+          "key": "D",
+          "text": "立方晶格"
+        }
+      ],
+      "question": "奥氏体钢的晶格类型为。",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "铁素体和渗碳体"
+        },
+        {
+          "key": "B",
+          "text": "铁素体和珠光体"
+        },
+        {
+          "key": "C",
+          "text": "奥氏体和渗碳体"
+        },
+        {
+          "key": "D",
+          "text": "奥氏体和铁素体"
+        }
+      ],
+      "question": "索氏体是的混合物。",
+      "id": "q14"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "体积不变定律"
+        },
+        {
+          "key": "B",
+          "text": "最小阻力定律"
+        },
+        {
+          "key": "C",
+          "text": "剪应力定律"
+        },
+        {
+          "key": "D",
+          "text": "秒流量一致"
+        }
+      ],
+      "question": "轧制变形区内金属的纵向、横向流动将遵守定律。",
+      "id": "q15"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "热裂纹"
+        },
+        {
+          "key": "B",
+          "text": "增加强度"
+        },
+        {
+          "key": "C",
+          "text": "提高塑性"
+        },
+        {
+          "key": "D",
+          "text": "增加韧性"
+        }
+      ],
+      "question": "钢中硫对钢有什么弊端。",
+      "id": "q16"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "弹性"
+        },
+        {
+          "key": "B",
+          "text": "塑性"
+        },
+        {
+          "key": "C",
+          "text": "冲击韧性"
+        },
+        {
+          "key": "D",
+          "text": "各向异性"
+        }
+      ],
+      "question": "金属材料在断裂前发生塑性变形的能力为。",
+      "id": "q17"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "抗拉强度"
+        },
+        {
+          "key": "B",
+          "text": "屈服点"
+        },
+        {
+          "key": "C",
+          "text": "伸长率"
+        },
+        {
+          "key": "D",
+          "text": "冲击值"
+        }
+      ],
+      "question": "某钢牌号为Q235A,其中“235”是指钢的。",
+      "id": "q18"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "好"
+        },
+        {
+          "key": "B",
+          "text": "差"
+        },
+        {
+          "key": "C",
+          "text": "一样"
+        }
+      ],
+      "question": "钢不如铝柔软,塑性比铝。",
+      "id": "q19"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "回火"
+        },
+        {
+          "key": "B",
+          "text": "淬火"
+        },
+        {
+          "key": "C",
+          "text": "正火"
+        }
+      ],
+      "question": "钢材奥氏体化后以大于临界冷却速度快速冷却的工艺过程叫。",
+      "id": "q20"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "过冷度越大"
+        },
+        {
+          "key": "B",
+          "text": "过冷度越小"
+        },
+        {
+          "key": "C",
+          "text": "过冷速度越快"
+        }
+      ],
+      "question": "钢在连续冷却时,冷却速度越快时,相变的。",
+      "id": "q21"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "冷却速度快,原子来不及充分扩散"
+        },
+        {
+          "key": "B",
+          "text": "固溶体的异分结晶"
+        },
+        {
+          "key": "C",
+          "text": "结晶温度间隙过宽"
+        }
+      ],
+      "question": "固溶体合金中产生晶内偏析的原因是。",
+      "id": "q22"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "好"
+        },
+        {
+          "key": "B",
+          "text": "中"
+        },
+        {
+          "key": "C",
+          "text": "差"
+        }
+      ],
+      "question": "镁具有密排六方晶体结构,主滑移面为基面,滑移系少,故加工性能。",
+      "id": "q23"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "在再结晶温度以下进行的轧制"
+        },
+        {
+          "key": "B",
+          "text": "在再结晶温度以上进行的轧制"
+        },
+        {
+          "key": "C",
+          "text": "在高于室温的温度下所进行的轧制"
+        },
+        {
+          "key": "D",
+          "text": "在再结晶温度以下室温以上所进行的轧制"
+        }
+      ],
+      "question": "热轧的含义是。",
+      "id": "q24"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "强度、塑性提高,但硬度、韧性下降"
+        },
+        {
+          "key": "B",
+          "text": "强度、硬度升高,但塑性、韧性下降"
+        },
+        {
+          "key": "C",
+          "text": "强度、韧性提高,但硬度、塑性下降"
+        }
+      ],
+      "question": "合金元素溶入铁素体后,产生固溶体,即有趋势。",
+      "id": "q25"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "0.08%-0.16%"
+        },
+        {
+          "key": "B",
+          "text": "0.08%以下"
+        },
+        {
+          "key": "C",
+          "text": "0.17%-0.23 %"
+        },
+        {
+          "key": "D",
+          "text": "0.23%以上"
+        }
+      ],
+      "question": "包晶钢的碳含量一般为",
+      "id": "q26"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "越好"
+        },
+        {
+          "key": "B",
+          "text": "越差"
+        },
+        {
+          "key": "C",
+          "text": "无影响"
+        },
+        {
+          "key": "D",
+          "text": "无变化"
+        }
+      ],
+      "question": "晶粒越细,钢的机械性能。",
+      "id": "q27"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "冲击值"
+        },
+        {
+          "key": "B",
+          "text": "冲击力"
+        },
+        {
+          "key": "C",
+          "text": "冲击韧性"
+        },
+        {
+          "key": "D",
+          "text": "脆性"
+        }
+      ],
+      "question": "钢材抵抗冲击力而不被破坏的能力叫。",
+      "id": "q28"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "塑性好、变形抗力小"
+        },
+        {
+          "key": "B",
+          "text": "塑性差、变形抗力大"
+        },
+        {
+          "key": "C",
+          "text": "塑性好、变形抗力大"
+        }
+      ],
+      "question": "一般来说,细晶粒的。",
+      "id": "q29"
+    },
+    {
+      "type": "single_choice",
+      "score": 1.5,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "正火"
+        },
+        {
+          "key": "B",
+          "text": "退火"
+        },
+        {
+          "key": "C",
+          "text": "固溶处理"
+        },
+        {
+          "key": "D",
+          "text": "快速冷却"
+        }
+      ],
+      "question": "组织应力可用法消除。",
+      "id": "q30"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "0.0218%"
+        },
+        {
+          "key": "B",
+          "text": "0.0220%"
+        },
+        {
+          "key": "C",
+          "text": "0.77%"
+        },
+        {
+          "key": "D",
+          "text": "0.16%"
+        }
+      ],
+      "question": "以下哪个碳含量在亚共析钢的范围内?",
+      "id": "q31"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "确定加热温度"
+        },
+        {
+          "key": "B",
+          "text": "确定开轧温度"
+        },
+        {
+          "key": "C",
+          "text": "确定终轧温度"
+        },
+        {
+          "key": "D",
+          "text": "确定热处理工艺"
+        }
+      ],
+      "question": "铁碳合金相图对轧钢生产有什么意义?",
+      "id": "q32"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "体心正方晶格"
+        },
+        {
+          "key": "B",
+          "text": "面心立方晶格"
+        },
+        {
+          "key": "C",
+          "text": "密排六方晶格"
+        },
+        {
+          "key": "D",
+          "text": "体心立方晶格"
+        }
+      ],
+      "question": "金属中常见的晶格形式有。",
+      "id": "q33"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "伸长率"
+        },
+        {
+          "key": "B",
+          "text": "断面收缩率"
+        },
+        {
+          "key": "C",
+          "text": "抗拉强度"
+        },
+        {
+          "key": "D",
+          "text": "屈服强度"
+        }
+      ],
+      "question": "反映金属材料塑性的力学性能指标有。",
+      "id": "q34"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "熔点低"
+        },
+        {
+          "key": "B",
+          "text": "液体流动性好"
+        },
+        {
+          "key": "C",
+          "text": "分散缩孔(缩松)少"
+        }
+      ],
+      "question": "共晶系合金的特点有哪些。",
+      "id": "q35"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "变形度"
+        },
+        {
+          "key": "B",
+          "text": "退火温度"
+        },
+        {
+          "key": "C",
+          "text": "原始晶粒尺寸"
+        },
+        {
+          "key": "D",
+          "text": "合金元素及夹杂"
+        }
+      ],
+      "question": "影响再结晶晶粒大小的因素有哪些。",
+      "id": "q36"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "渗碳体"
+        },
+        {
+          "key": "B",
+          "text": "铁素体"
+        },
+        {
+          "key": "C",
+          "text": "铁"
+        },
+        {
+          "key": "D",
+          "text": "碳"
+        }
+      ],
+      "question": "珠光体组织的组成相有哪些。",
+      "id": "q37"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "渗碳体"
+        },
+        {
+          "key": "B",
+          "text": "铁素体"
+        },
+        {
+          "key": "C",
+          "text": "铁"
+        },
+        {
+          "key": "D",
+          "text": "碳"
+        }
+      ],
+      "question": "珠光体组织的组成相有哪些。",
+      "id": "q38"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "异分结晶"
+        },
+        {
+          "key": "B",
+          "text": "结晶需要一定的温度范围"
+        },
+        {
+          "key": "C",
+          "text": "结晶温度高"
+        },
+        {
+          "key": "D",
+          "text": "碳"
+        }
+      ],
+      "question": "固溶体合晶的结晶特点。",
+      "id": "q39"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "去应力"
+        },
+        {
+          "key": "B",
+          "text": "变形晶粒再结晶"
+        },
+        {
+          "key": "C",
+          "text": "提高材料强度"
+        },
+        {
+          "key": "D",
+          "text": "提高材料硬度"
+        }
+      ],
+      "question": "退火的作用有哪些。",
+      "id": "q40"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "面心立方晶体的晶格常数为a,请计算(110)面与(100)面的夹角β。",
+      "answer": "Cosβ=√2/2,β=45°",
+      "id": "q41"
+    },
+    {
+      "type": "short_answer",
+      "score": 20.0,
+      "scoring_mode": "text",
+      "question": "什么是钢的淬透性?提高淬透性的合金元素有哪些?",
+      "answer": "(1)钢的淬透性是指在规定条件下,决定钢材淬硬深度和硬度分布的特性,也就是钢在淬火时能获得马氏体的能力。\n(2)提高淬透性的合金元素主要有:B、Mn、Mo、Cr、Si、Ni",
+      "id": "q42"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "什么是过冷度,过冷度的大小对晶体结晶有何影响?",
+      "answer": "(1)过冷度是理论结晶温度和实际结晶温度的差值,即△t=tR-t;\n(2)过冷度越大,结晶趋势越大,结晶速度越快,晶粒越细小。",
+      "id": "q43"
+    }
+  ]
+}

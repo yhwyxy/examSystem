@@ -64,7 +64,7 @@ def test_negation_conflict_zeros_point_and_forces_review():
     assert diagnostic["rule_hits"][0]["evidence"] == "索引不能提高查询效率"
 
 
-def test_full_reference_fallback_forces_review():
+def test_exact_full_reference_is_deterministic_full_score():
     scorer = TextRerankerScorer(
         pair_scorer=lambda s, p: 0.8,
         allow_model_load=False,
@@ -76,16 +76,17 @@ def test_full_reference_fallback_forces_review():
             student_answer="完整标准答案内容",
         )
     )
-    assert result.force_manual_review is True
-    assert any("全文兜底" in w for w in result.warnings)
-    assert result.score == 8.0
+    assert result.force_manual_review is False
+    assert result.score == 10.0
+    assert result.metadata["decision_reason"] == "exact_reference_match"
 
 
 def test_empty_student_answer():
     scorer = TextRerankerScorer(pair_scorer=lambda s, p: 1.0, allow_model_load=False)
     result = scorer.score(_req(student_answer=""))
     assert result.score == 0.0
-    assert result.force_manual_review is True
+    assert result.force_manual_review is False
+    assert result.metadata["decision_reason"] == "blank_answer"
 
 
 def test_rule_interceptor_number_mismatch():

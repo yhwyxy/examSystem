@@ -1,0 +1,455 @@
+{
+  "paper_id": "software-development",
+  "name": "软件开发",
+  "exam_info": {
+    "title": "大学生入职笔试卷(软件开发)",
+    "description": "由原 Word 试卷转换生成。",
+    "total_score": 100.0,
+    "passing_score": 0
+  },
+  "questions": [
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "MD5"
+        },
+        {
+          "key": "B",
+          "text": "BASE64"
+        },
+        {
+          "key": "C",
+          "text": "SHA1"
+        },
+        {
+          "key": "D",
+          "text": "BASE32"
+        }
+      ],
+      "question": "以下哪些加密算法是不可逆的:",
+      "id": "q1"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "数据库连接池负责分配、管理和释放数据库连接"
+        },
+        {
+          "key": "B",
+          "text": "数据库连接池通过设置参数来控制池中的初始接数、连接的上下限以连接的最大使用次数、最大空闲时间等"
+        },
+        {
+          "key": "C",
+          "text": "数据库连接池的使用明显提高了程序对数据库操作的性能"
+        },
+        {
+          "key": "D",
+          "text": "数据库重启之后,数据库连接池必须要重新开启"
+        }
+      ],
+      "question": "对于数据库连接池描述正确的是:",
+      "id": "q2"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "封装"
+        },
+        {
+          "key": "B",
+          "text": "继承"
+        },
+        {
+          "key": "C",
+          "text": "多态"
+        },
+        {
+          "key": "D",
+          "text": "抽象"
+        }
+      ],
+      "question": "面向对象的基本特征有哪些:",
+      "id": "q3"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "两者定义不同,类是对象的抽象,对象是类的实例。"
+        },
+        {
+          "key": "B",
+          "text": "类是一种引用类型,它封装数据和行为。"
+        },
+        {
+          "key": "C",
+          "text": "对象是对客观事物的抽象,类是对对象的抽象。"
+        },
+        {
+          "key": "D",
+          "text": "类与对象是一一对应的。"
+        }
+      ],
+      "question": "对于类与对象的关系的描述,哪些是正确的:",
+      "id": "q4"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "<div> 标签定义 HTML 文档中的分隔或部分"
+        },
+        {
+          "key": "B",
+          "text": "<div> 标签属于行内元素"
+        },
+        {
+          "key": "C",
+          "text": "<div> 标签属于块级元素"
+        },
+        {
+          "key": "D",
+          "text": "块级元素可以转换成行内元素,反之则不行"
+        }
+      ],
+      "question": "下列说法正确的是:",
+      "id": "q5"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "exit"
+        },
+        {
+          "key": "B",
+          "text": "break"
+        },
+        {
+          "key": "C",
+          "text": "quit"
+        },
+        {
+          "key": "D",
+          "text": "turn off"
+        }
+      ],
+      "question": "中断循环的语句是:",
+      "id": "q6"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "6"
+        },
+        {
+          "key": "B",
+          "text": "5"
+        },
+        {
+          "key": "C",
+          "text": "11"
+        },
+        {
+          "key": "D",
+          "text": "16"
+        }
+      ],
+      "question": "以下javaScript代码片段中的X的值是多少:\nvar X=1;\nfor(var i=0;i<5;i++)\n{\nX+=i;\n}",
+      "id": "q7"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "C",
+      "options": [
+        {
+          "key": "A",
+          "text": "INSERT NEW;"
+        },
+        {
+          "key": "B",
+          "text": "ADD NEW;"
+        },
+        {
+          "key": "C",
+          "text": "INSERT INTO;"
+        },
+        {
+          "key": "D",
+          "text": "ADD RECORD;"
+        }
+      ],
+      "question": "哪条SQL语句用于在数据库中插入新纪录",
+      "id": "q8"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "#myDiv"
+        },
+        {
+          "key": "B",
+          "text": ".myDiv"
+        },
+        {
+          "key": "C",
+          "text": "$myDiv"
+        },
+        {
+          "key": "D",
+          "text": "%myDiv"
+        }
+      ],
+      "question": "下列哪项是正确的CSS  ID选择器:",
+      "id": "q9"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "一种常用的设计模式"
+        },
+        {
+          "key": "B",
+          "text": "目的是为其他对象提供一个代理,以控制对某个对象的访问"
+        },
+        {
+          "key": "C",
+          "text": "代理类负责为委托类预处理消息,过滤消息并转发消息"
+        },
+        {
+          "key": "D",
+          "text": "代理类和委托类通常会实现相同的接口"
+        }
+      ],
+      "question": "什么是代理模式",
+      "id": "q10"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "能"
+        },
+        {
+          "key": "B",
+          "text": "不能"
+        },
+        {
+          "key": "C",
+          "text": "有些情况下能"
+        }
+      ],
+      "question": "IF语句中能否嵌套IF语句",
+      "id": "q11"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "B",
+      "options": [
+        {
+          "key": "A",
+          "text": "冒泡排序"
+        },
+        {
+          "key": "B",
+          "text": "递归"
+        },
+        {
+          "key": "C",
+          "text": "快速排序"
+        }
+      ],
+      "question": "斐波那契数列(0,1,1,2,3,5,8,...)适合使用哪个算法来实现",
+      "id": "q12"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "pwd"
+        },
+        {
+          "key": "B",
+          "text": "ls"
+        },
+        {
+          "key": "C",
+          "text": "uname"
+        },
+        {
+          "key": "D",
+          "text": "Who"
+        }
+      ],
+      "question": "liunx显示工作路径的命令是",
+      "id": "q13"
+    },
+    {
+      "type": "single_choice",
+      "score": 2.0,
+      "answer": "A",
+      "options": [
+        {
+          "key": "A",
+          "text": "范围、时间和成本"
+        },
+        {
+          "key": "B",
+          "text": "时间、成本和质量"
+        },
+        {
+          "key": "C",
+          "text": "范围、质量和成本"
+        },
+        {
+          "key": "D",
+          "text": "范围、进度和质量"
+        }
+      ],
+      "question": "项目的三重制约是",
+      "id": "q14"
+    },
+    {
+      "type": "multiple_choice",
+      "score": 2.0,
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "options": [
+        {
+          "key": "A",
+          "text": "实现局部刷新,提示了用户体验"
+        },
+        {
+          "key": "B",
+          "text": "在客户端运行"
+        },
+        {
+          "key": "C",
+          "text": "优化了传输,减少了带宽占用"
+        },
+        {
+          "key": "D",
+          "text": "在服务端运行"
+        }
+      ],
+      "question": "关于对ajax的描述正确的是",
+      "id": "q15"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "请用你所熟悉的任意一种编程语言写一段嵌套循环代码,请标明所使用的语言。",
+      "id": "q16",
+      "answer": "JavaScript：\nfor (var i = 0; i < 10; i++) {\n    if (i == 5) {\n        break;\n    }\n    // ……\n    for (var j = 0; j < 10; j++) {\n        if (j < 9) {\n            continue;\n        }\n        // ……\n    }\n}"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "面向对象的特征有哪些",
+      "id": "q17",
+      "answer": "A、抽象：忽略与当前目标无关的方面，以便更充分地关注与当前目标有关的方面。\nB、继承：一种联结类的层次模型，允许和鼓励重用，提供明确表述共性的方法。\nC、封装：把过程和数据包围起来，对数据的访问只能通过已定义的界面。\nD、多态：允许不同类的对象对同一消息作出响应。"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "简要描述HTTP、HTTPS的区别",
+      "id": "q18",
+      "answer": "1、HTTP（超文本传输协议）用于在 Web 浏览器和网站服务器之间传递信息。\n2、HTTPS 采用安全套接字层，使传输数据更加安全。\n3、HTTPS 在 HTTP 的基础上增加 SSL/TLS 协议。\n4、使用 HTTPS 协议需要 CA 证书。"
+    },
+    {
+      "type": "short_answer",
+      "score": 10.0,
+      "scoring_mode": "text",
+      "question": "需求调研有哪些方法",
+      "id": "q19",
+      "answer": "观察法、体验法、问卷调查法、访谈法、单据分析法、报表分析法等。"
+    },
+    {
+      "type": "essay",
+      "score": 15.0,
+      "scoring_mode": "text",
+      "question": "下面有两张表:\nEMP表:\nEMP表数据：\nEMP_ID | EMP_NAME | DEPT_ID | SALARY\n10022222 | 张三 | 001 | 1000\n10022796 | 李四 | 002 | 5500\n10022696 | 王五 | 002 | 3200\n10022101 | 赵六 | 003 | 2000\nDEPT表:\nDEPT表数据：\nDEPT_ID | DEPT_NAME\n001 | IT部\n002 | 财务部\n003 | 公司办\n写一条SQL语句,查询出工资高于3000的职员的工号、姓名、部门名称。",
+      "id": "q20",
+      "answer": "SELECT emp_id, emp_name, dept_name FROM emp, dept WHERE salary > 3000 AND emp.dept_id = dept.dept_id;"
+    },
+    {
+      "type": "essay",
+      "score": 15.0,
+      "scoring_mode": "text",
+      "question": "找出元素item在给定数组array中的位置\n输入:\n[ 1, 2, 3, 4 ], 3\n输出:\n2\n请使用js、java、C、C#、python中的任意一种来实现",
+      "id": "q21",
+      "answer": "JavaScript：\nfunction findIndex(array, item) {\n    return array.indexOf(item);\n}"
+    }
+  ]
+}
