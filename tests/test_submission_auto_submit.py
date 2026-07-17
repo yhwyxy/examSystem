@@ -1,4 +1,7 @@
 from backend import database
+from backend.main import SubmitRequest
+from pydantic import ValidationError
+import pytest
 
 
 def test_submission_persists_auto_submit_reason(tmp_path, monkeypatch):
@@ -40,4 +43,22 @@ def test_normal_submission_has_no_auto_submit_reason(tmp_path, monkeypatch):
     )
 
     row = next(item for item in database.list_submissions() if item["id"] == submission_id)
-    assert row["auto_submit_reason"] is None
+
+
+def test_submit_request_accepts_only_known_auto_submit_reasons():
+    assert SubmitRequest(
+        name="张三",
+        employee_id="E001",
+        paper_id="paper-1",
+        answers={"q1": "A"},
+        auto_submit_reason="third_blur",
+    ).auto_submit_reason == "third_blur"
+
+    with pytest.raises(ValidationError):
+        SubmitRequest(
+            name="张三",
+            employee_id="E001",
+            paper_id="paper-1",
+            answers={"q1": "A"},
+            auto_submit_reason="client_supplied_score",
+        )

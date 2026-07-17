@@ -12,7 +12,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -164,6 +164,7 @@ class SubmitRequest(BaseModel):
     department: str | None = None
     answers: dict[str, Any] = Field(default_factory=dict)
     started_at: str | None = None  # 保留字段，但不再用于时间校验
+    auto_submit_reason: Literal["third_blur", "blur_timeout_30s"] | None = None
 
 
 class ExamStartRequest(BaseModel):
@@ -385,6 +386,7 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
             started_at=req.started_at,
             client_ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
+            auto_submit_reason=req.auto_submit_reason,
         )
     except Exception as e:
         if "UNIQUE" in str(e).upper():
