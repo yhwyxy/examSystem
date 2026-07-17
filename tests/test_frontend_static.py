@@ -34,7 +34,32 @@ def test_exam_answer_collection_escapes_dynamic_question_ids():
     assert '`[name="${q.id}"]`' not in collect_answers
 
 
-def test_admin_badge_classes_are_defined_in_stylesheet():
+
+def test_exam_script_implements_deduplicated_anti_switch_auto_submit():
+    source = read_frontend_file("frontend/js/exam.js")
+
+    assert "const AUTO_SUBMIT_AFTER_BLURS = 3" in source
+    assert "const AWAY_TIMEOUT_MS = 30_000" in source
+    assert "blurCount: 0" in source
+    assert "isPageAway: false" in source
+    assert "autoSubmitStarted: false" in source
+    assert "function handlePageAway" in source
+    assert "function handlePageReturn" in source
+    assert "document.addEventListener('visibilitychange'" in source
+    assert "window.addEventListener('blur'" in source
+    assert "window.addEventListener('focus'" in source
+    assert "submitExam('third_blur')" in source
+    assert "submitExam('blur_timeout_30s')" in source
+
+
+def test_exam_submission_sends_reason_only_for_auto_submit():
+    source = read_frontend_file("frontend/js/exam.js")
+    submit_body = function_body(source, "async function submitExam", "async function startExam")
+
+    assert "async function submitExam(autoSubmitReason = null)" in source
+    assert "...(autoSubmitReason ? { auto_submit_reason: autoSubmitReason } : {})" in submit_body
+    assert "state.autoSubmitStarted" in submit_body
+
     admin_source = read_frontend_file("frontend/js/admin.js")
     detail_source = read_frontend_file("frontend/js/detail.js")
     stylesheet = read_frontend_file("frontend/css/style.css")

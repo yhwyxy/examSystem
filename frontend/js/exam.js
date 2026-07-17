@@ -1,3 +1,6 @@
+const AUTO_SUBMIT_AFTER_BLURS = 3;
+const AWAY_TIMEOUT_MS = 30_000;
+
 const state = {
   exam: null,
   paperId: null,
@@ -5,6 +8,11 @@ const state = {
   durationSeconds: 0,
   timerId: null,
   submitting: false,
+  blurCount: 0,
+  isPageAway: false,
+  awayTimeoutId: null,
+  autoSubmitStarted: false,
+  antiSwitchSetup: false,
 };
 
 function $(id) { return document.getElementById(id); }
@@ -171,8 +179,16 @@ function showSuccess() {
   rc.append(h2, p);
 }
 
-async function submitExam(evt) {
-  if (evt) evt.preventDefault();
+async function submitExam(autoSubmitReason = null) {
+  const isAutoSubmit = typeof autoSubmitReason === 'string';
+  if (isAutoSubmit) {
+    if (state.autoSubmitStarted || state.submitting) return;
+    state.autoSubmitStarted = true;
+    clearAwayTimer();
+    toast('检测到切屏，正在自动交卷…');
+  } else if (autoSubmitReason) {
+    autoSubmitReason.preventDefault();
+  }
   if (state.submitting) return;
 
   const name = $('name').value.trim();
@@ -192,6 +208,7 @@ async function submitExam(evt) {
       department: ($('department').value || '').trim() || null,
       answers: collectAnswers(),
       started_at: state.startedAt ? new Date(state.startedAt).toISOString() : null,
+      ...(autoSubmitReason ? { auto_submit_reason: autoSubmitReason } : {}),
     };
     const res = await fetch('/api/submit', {
       method: 'POST',
@@ -204,8 +221,48 @@ async function submitExam(evt) {
   } catch (e) {
     toast(e.message || '提交失败');
     state.submitting = false;
+    state.autoSubmitStarted = false;
     $('submitBtn').disabled = false;
   }
+}
+
+function clearAwayTimer() {
+  if (state.awayTimeoutId !== null) {
+    window.clearTimeout(state.awayTimeoutId);
+    state.awayTimeoutId = null;
+  }
+}
+
+function handlePageAway() {
+  if (state.isPageAway || state.autoSubmitStarted || !state.startedAt) return;
+  state.isPageAway = true;
+  state.blurCount += 1;
+  if (state.blurCount >= AUTO_SUBMIT_AFTER_BLURS) {
+    clearAwayTimer();
+    submitExam('third_blur');
+    return;
+  }
+  clearAwayTimer();
+  state.awayTimeoutId = window.setTimeout(() => {
+    if (state.isPageAway && !state.autoSubmitStarted) submitExam('blur_timeout_30s');
+  }, AWAY_TIMEOUT_MS);
+}
+
+function handlePageReturn() {
+  if (!state.isPageAway) return;
+  state.isPageAway = false;
+  clearAwayTimer();
+}
+
+function setupAntiSwitchAutoSubmit() {
+  if (state.antiSwitchSetup) return;
+  state.antiSwitchSetup = true;
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') handlePageAway();
+    else handlePageReturn();
+  });
+  window.addEventListener('blur', handlePageAway);
+  window.addEventListener('focus', handlePageReturn);
 }
 
 async function startExam() {
@@ -231,6 +288,7 @@ async function startExam() {
     container.textContent = '';
     state.exam.questions.forEach((q, idx) => container.appendChild(renderQuestion(q, idx)));
     startTimer();
+    setupAntiSwitchAutoSubmit();
   } catch (e) {
     toast(e.message || '开始失败');
   }
