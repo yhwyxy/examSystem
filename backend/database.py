@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS submissions (
     reviewer_note TEXT,
     client_ip TEXT,
     user_agent TEXT,
+    auto_submit_reason TEXT,
     UNIQUE(employee_id, paper_id)
 );
 
@@ -127,6 +128,8 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE submissions ADD COLUMN paper_id TEXT NOT NULL DEFAULT 'default'")
     if "paper_name" not in cols:
         conn.execute("ALTER TABLE submissions ADD COLUMN paper_name TEXT")
+    if "auto_submit_reason" not in cols:
+        conn.execute("ALTER TABLE submissions ADD COLUMN auto_submit_reason TEXT")
 
     # 唯一约束：旧 UNIQUE(employee_id) → UNIQUE(employee_id, paper_id)
     # SQLite 无法直接改约束，用索引兜底；旧约束若仍在则可能阻止同工号跨专业。
@@ -177,6 +180,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
                 reviewer_note TEXT,
                 client_ip TEXT,
                 user_agent TEXT,
+                auto_submit_reason TEXT,
                 UNIQUE(employee_id, paper_id)
             );
             INSERT INTO submissions_new (
@@ -288,6 +292,7 @@ def insert_submission_pending(
     started_at: str | None,
     client_ip: str | None,
     user_agent: str | None,
+    auto_submit_reason: str | None = None,
 ) -> int:
     """立即保存提交记录，评分状态设为 grading，分数暂为 0。"""
     submitted_at = now_iso()
@@ -295,15 +300,15 @@ def insert_submission_pending(
         INSERT INTO submissions
         (name, employee_id, paper_id, paper_name, department, answers_json, grading_detail_json,
          objective_score, subjective_score_machine, subjective_score_final,
-         total_score, review_status, started_at, submitted_at, client_ip, user_agent)
-        VALUES (?, ?, ?, ?, ?, ?, '[]', 0, 0, 0, 0, 'grading', ?, ?, ?, ?)
+         total_score, review_status, started_at, submitted_at, client_ip, user_agent, auto_submit_reason)
+        VALUES (?, ?, ?, ?, ?, ?, '[]', 0, 0, 0, 0, 'grading', ?, ?, ?, ?, ?)
     """
     with db_cursor() as conn:
         cur = conn.execute(
             sql,
             (name, employee_id, paper_id, paper_name, department,
              json.dumps(answers, ensure_ascii=False),
-             started_at, submitted_at, client_ip, user_agent),
+             started_at, submitted_at, client_ip, user_agent, auto_submit_reason),
         )
         lastrowid = cur.lastrowid
         if lastrowid is None:
