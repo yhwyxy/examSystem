@@ -227,6 +227,12 @@ function renderPagination(hasMore) {
   }
 }
 
+function formatAutoSubmitReason(reason) {
+  if (reason === 'third_blur') return '切屏达到 3 次，自动交卷';
+  if (reason === 'blur_timeout_30s') return '单次切屏达到 30 秒，自动交卷';
+  return '';
+}
+
 function renderRows(rows) {
   $('tbody').innerHTML = rows.map(r => `<tr>
     <td><input type="checkbox" class="row-check" value="${esc(r.id)}" aria-label="选择记录 ${esc(r.id)}"></td>
@@ -238,6 +244,7 @@ function renderRows(rows) {
     <td>${esc(r.objective_score)}</td>
     <td>${esc(r.subjective_score_final)}</td>
     <td><b>${esc(r.total_score)}</b></td>
+    <td>${formatAutoSubmitReason(r.auto_submit_reason) ? `<span class="badge-auto-submit">${formatAutoSubmitReason(r.auto_submit_reason)}</span>` : ''}</td>
     <td>${badge(r.review_status)}</td>
     <td>${fmtTime(r.submitted_at)}</td>
     <td class="toolbar">

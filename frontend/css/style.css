@@ -517,6 +517,12 @@ tbody tr:hover {
   animation: pulse 1.5s infinite;
 }
 
+.badge-auto-submit {
+  background: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #fdba74;
+}
+
 @keyframes pulse {
   0%,
   100% {

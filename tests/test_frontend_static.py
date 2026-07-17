@@ -60,6 +60,21 @@ def test_exam_submission_sends_reason_only_for_auto_submit():
     assert "...(autoSubmitReason ? { auto_submit_reason: autoSubmitReason } : {})" in submit_body
     assert "state.autoSubmitStarted" in submit_body
 
+
+def test_admin_shows_auto_submit_reason_only_when_present():
+    html = read_frontend_file("frontend/admin.html")
+    source = read_frontend_file("frontend/js/admin.js")
+
+    assert "交卷状态" in html
+    assert "function formatAutoSubmitReason" in source
+    assert "切屏达到 3 次，自动交卷" in source
+    assert "单次切屏达到 30 秒，自动交卷" in source
+    assert "r.auto_submit_reason" in source
+    assert "return ''" in source
+
+
+
+def test_admin_badge_classes_are_defined_in_stylesheet():
     admin_source = read_frontend_file("frontend/js/admin.js")
     detail_source = read_frontend_file("frontend/js/detail.js")
     stylesheet = read_frontend_file("frontend/css/style.css")
