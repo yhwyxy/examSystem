@@ -9,14 +9,6 @@
       "updated_at": "2026-07-11T09:01:06.175108+00:00"
     },
     {
-      "slug": "test",
-      "name": "test",
-      "status": "closed",
-      "question_count": 0,
-      "total_score": 0,
-      "updated_at": "2026-07-11T09:00:23.445588+00:00"
-    },
-    {
       "slug": "text-scoring-specialist",
       "name": "文本主观题评分专项卷",
       "status": "closed",
@@ -166,7 +158,7 @@
       "status": "closed",
       "question_count": 21,
       "total_score": 100.0,
-      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+      "updated_at": "2026-07-17T11:18:34.613646+00:00"
     },
     {
       "slug": "communications",

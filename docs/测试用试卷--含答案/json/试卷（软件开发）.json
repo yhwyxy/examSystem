@@ -406,7 +406,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "code",
       "question": "请用你所熟悉的任意一种编程语言写一段嵌套循环代码,请标明所使用的语言。",
       "id": "q16",
       "answer": "JavaScript：\nfor (var i = 0; i < 10; i++) {\n    if (i == 5) {\n        break;\n    }\n    // ……\n    for (var j = 0; j < 10; j++) {\n        if (j < 9) {\n            continue;\n        }\n        // ……\n    }\n}"
@@ -438,7 +438,7 @@
     {
       "type": "essay",
       "score": 15.0,
-      "scoring_mode": "text",
+      "scoring_mode": "sql",
       "question": "下面有两张表:\nEMP表:\nEMP表数据：\nEMP_ID | EMP_NAME | DEPT_ID | SALARY\n10022222 | 张三 | 001 | 1000\n10022796 | 李四 | 002 | 5500\n10022696 | 王五 | 002 | 3200\n10022101 | 赵六 | 003 | 2000\nDEPT表:\nDEPT表数据：\nDEPT_ID | DEPT_NAME\n001 | IT部\n002 | 财务部\n003 | 公司办\n写一条SQL语句,查询出工资高于3000的职员的工号、姓名、部门名称。",
       "id": "q20",
       "answer": "SELECT emp_id, emp_name, dept_name FROM emp, dept WHERE salary > 3000 AND emp.dept_id = dept.dept_id;"
@@ -446,7 +446,7 @@
     {
       "type": "essay",
       "score": 15.0,
-      "scoring_mode": "text",
+      "scoring_mode": "code",
       "question": "找出元素item在给定数组array中的位置\n输入:\n[ 1, 2, 3, 4 ], 3\n输出:\n2\n请使用js、java、C、C#、python中的任意一种来实现",
       "id": "q21",
       "answer": "JavaScript：\nfunction findIndex(array, item) {\n    return array.indexOf(item);\n}"
