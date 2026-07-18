@@ -1,6 +1,7 @@
 """人工复核与成绩管理服务。"""
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
@@ -93,12 +94,18 @@ def regrade_submission(submission_id: int) -> dict[str, Any]:
     old_details = _parse_detail(submission)
     old_by_qid = {d.get("question_id"): d for d in old_details}
     answers = _parse_answers(submission)
-    new_result = grade_submission(answers, paper_id=submission.get("paper_id") or "default")
-    new_details = new_result["grading_detail"]
+    new_result = asyncio.run(
+        grade_submission(answers, paper_id=submission.get("paper_id") or "default")
+    )
+    new_details = new_result.grading_detail
 
     for d in new_details:
         old = old_by_qid.get(d.get("question_id"))
-        if old and old.get("manually_reviewed"):
+        if (
+            d.get("type") in SUBJECTIVE_TYPES
+            and old
+            and old.get("manually_reviewed")
+        ):
             d.update({
                 "final_score": old.get("final_score"),
                 "manually_reviewed": True,
@@ -112,12 +119,12 @@ def regrade_submission(submission_id: int) -> dict[str, Any]:
     total_score = objective_score + subjective_final
     review_status = aggregate_review_status(new_details)
 
-    database.update_submission_after_review(
-        submission_id=submission_id,
-        grading_detail=new_details,
-        subjective_score_final=subjective_final,
-        total_score=total_score,
-        review_status=review_status,
-        reviewer_note="重新机器判分",
-    )
+    database.save_grading_result(submission_id, {
+        "objective_score": objective_score,
+        "subjective_score_machine": subjective_machine,
+        "subjective_score_final": subjective_final,
+        "total_score": total_score,
+        "review_status": review_status,
+        "grading_detail": new_details,
+    })
     return {"success": True, "total_score": total_score, "review_status": review_status}

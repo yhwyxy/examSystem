@@ -383,7 +383,10 @@ def validate_questions(data: dict[str, Any]) -> None:
                     _error(f"多选题 {qid} answer 必须是非空数组")
         else:
             subs = q.get("subquestions")
-            if subs is not None:
+            if qtype == "composite":
+                _validate_sub_questions(q)
+                continue
+            elif subs is not None:
                 if isinstance(subs, list) and len(subs) == 0:
                     _error(f"题目 {qid} 的 subquestions 不能为空数组，请省略该字段")
                 if is_composite_question(q):

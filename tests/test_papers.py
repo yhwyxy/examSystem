@@ -260,6 +260,26 @@ def test_composite_canonical_schema_and_legacy_aliases():
     assert "sub_questions" not in legacy
 
 
+@pytest.mark.parametrize("subquestions", [None, []])
+def test_composite_requires_nonempty_subquestions_even_with_parent_answer(subquestions):
+    from backend.question_loader import validate_questions
+    from fastapi import HTTPException
+
+    question = {
+        "id": "c1",
+        "type": "composite",
+        "question": "父题",
+        "answer": "父题参考答案不能替代子题",
+        "score": 10,
+    }
+    if subquestions is not None:
+        question["subquestions"] = subquestions
+    paper = {"exam_info": {"title": "复合题"}, "questions": [question]}
+
+    with pytest.raises(HTTPException, match="subquestions.*非空"):
+        validate_questions(paper)
+
+
 def test_code_subanswer_language_must_be_allowed():
     from backend.question_loader import normalize_submitted_subanswer
 
