@@ -1,5 +1,14 @@
 {
   "version": 1,
   "migrated": [],
-  "skipped": []
+  "skipped": [],
+  "processed": [
+    "mechanical",
+    "materials",
+    "instrumentation",
+    "chemical-analysis",
+    "chemical-engineering",
+    "metal-materials",
+    "legal"
+  ]
 }

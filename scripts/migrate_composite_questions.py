@@ -54,9 +54,10 @@ def _legal(qs: list[dict[str, Any]]) -> None:
 
 
 def migrate_all(root: Path, *, report_path: Path) -> dict[str, Any]:
-    report = {"version": 1, "migrated": [], "skipped": []}
+    report = {"version": 1, "migrated": [], "skipped": [], "processed": []}
     for slug, mapping in TARGETS.items():
         path = root / f"{slug}.json"; data = json.loads(path.read_text())
+        report["processed"].append(slug)
         changed = False
         for q in data.get("questions", []):
             if q.get("id") in mapping and q.get("type") != "composite":
