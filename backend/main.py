@@ -471,11 +471,23 @@ def admin_login(req: LoginRequest) -> dict[str, Any]:
 
 
 def _exam_base_url(request: Request) -> str:
-    cfg = get_config().server
-    host = request.url.hostname or get_lan_ip()
-    if host in {"127.0.0.1", "localhost"}:
-        host = get_lan_ip()
-    return f"http://{host}:{cfg.port}"
+    """根据管理员当前访问地址生成考试链接基址。
+
+    不固定拼接配置端口，避免通过 HTTPS、域名、反向代理、隧道或非默认端口
+    访问管理端时，发布出的考试链接跳到错误地址。
+    """
+    scheme = (request.headers.get("x-forwarded-proto") or request.url.scheme or "http").split(",")[0].strip()
+    host = (request.headers.get("x-forwarded-host") or request.headers.get("host") or request.url.netloc).split(",")[0].strip()
+    if not host:
+        cfg = get_config().server
+        host = f"{get_lan_ip()}:{cfg.port}"
+
+    hostname = request.url.hostname
+    if hostname in {"127.0.0.1", "localhost"}:
+        port = request.url.port or get_config().server.port
+        host = f"{get_lan_ip()}:{port}"
+
+    return f"{scheme}://{host}"
 
 
 @app.get("/api/admin/exam-link", dependencies=[Depends(require_admin)])

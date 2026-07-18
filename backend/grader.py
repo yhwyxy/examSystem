@@ -99,7 +99,11 @@ def get_subjective_service() -> SubjectiveScoringService:
                 _remote_reranker = reranker
             else:
                 # 默认允许加载 CrossEncoder；无 semantic 依赖时库内回退词法相似度
-                _subjective_service = SubjectiveScoringService(allow_model_load=True)
+                _subjective_service = SubjectiveScoringService(
+                    allow_model_load=True,
+                    text_model="BAAI/bge-reranker-v2-m3",
+                    code_model="BAAI/bge-reranker-v2-m3",
+                )
         return _subjective_service
 
 

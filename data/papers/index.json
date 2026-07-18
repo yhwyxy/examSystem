@@ -1,44 +1,12 @@
 {
   "papers": [
     {
-      "slug": "default",
-      "name": "企业内部考试",
-      "status": "closed",
-      "question_count": 4,
-      "total_score": 22.0,
-      "updated_at": "2026-07-11T09:01:06.175108+00:00"
-    },
-    {
-      "slug": "text-scoring-specialist",
-      "name": "文本主观题评分专项卷",
-      "status": "closed",
-      "question_count": 5,
-      "total_score": 100,
-      "updated_at": "2026-07-12T00:00:00+00:00"
-    },
-    {
-      "slug": "sql-scoring-specialist",
-      "name": "SQL 主观题评分专项卷",
-      "status": "closed",
-      "question_count": 5,
-      "total_score": 100,
-      "updated_at": "2026-07-12T00:00:00+00:00"
-    },
-    {
-      "slug": "code-scoring-specialist",
-      "name": "Python 代码评分专项卷",
-      "status": "closed",
-      "question_count": 5,
-      "total_score": 100,
-      "updated_at": "2026-07-12T00:00:00+00:00"
-    },
-    {
       "slug": "instrumentation",
       "name": "仪器仪表",
-      "status": "closed",
+      "status": "open",
       "question_count": 42,
       "total_score": 80.0,
-      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+      "updated_at": "2026-07-18T14:07:28.155172+00:00"
     },
     {
       "slug": "metallurgy",
@@ -46,7 +14,7 @@
       "status": "closed",
       "question_count": 43,
       "total_score": 100.0,
-      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+      "updated_at": "2026-07-18T14:06:24.944165+00:00"
     },
     {
       "slug": "chemical-analysis",
@@ -54,7 +22,7 @@
       "status": "closed",
       "question_count": 43,
       "total_score": 100.0,
-      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+      "updated_at": "2026-07-18T03:29:57.950330+00:00"
     },
     {
       "slug": "chemical-engineering",
@@ -94,7 +62,7 @@
       "status": "closed",
       "question_count": 39,
       "total_score": 91.0,
-      "updated_at": "2026-07-17T01:26:30.889948+00:00"
+      "updated_at": "2026-07-18T12:37:17.942466+00:00"
     },
     {
       "slug": "welding",
@@ -158,7 +126,7 @@
       "status": "closed",
       "question_count": 21,
       "total_score": 100.0,
-      "updated_at": "2026-07-17T11:18:34.613646+00:00"
+      "updated_at": "2026-07-18T12:36:38.157637+00:00"
     },
     {
       "slug": "communications",

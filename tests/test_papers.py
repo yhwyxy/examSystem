@@ -2,14 +2,65 @@
 from __future__ import annotations
 
 import json
+import sys
+import types
+from enum import Enum
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
 
+def _install_subjective_scoring_stub(monkeypatch):
+    """隔离链接测试与主观题评分库依赖。"""
+    if "subjective_scoring" in sys.modules:
+        return
+
+    class ScoringMode(Enum):
+        TEXT = "text"
+        SQL = "sql"
+        CODE = "code"
+        CALCULATION = "calculation"
+
+    class ReviewLevel(Enum):
+        MANUAL_REQUIRED = "manual_required"
+        SUGGESTED_REVIEW = "suggested_review"
+        PASS = "pass"
+
+    class ScoringRequest:
+        @classmethod
+        def model_validate(cls, payload):
+            obj = cls()
+            obj.__dict__.update(payload)
+            return obj
+
+    class ScoringResult:
+        pass
+
+    class CohereRerankerPairScorer:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    class SubjectiveScoringService:
+        def __init__(self, *args, **kwargs):
+            pass
+
+    module = types.ModuleType("subjective_scoring")
+    module.CohereRerankerPairScorer = CohereRerankerPairScorer
+    module.ReviewLevel = ReviewLevel
+    module.ScoringMode = ScoringMode
+    module.ScoringRequest = ScoringRequest
+    module.ScoringResult = ScoringResult
+    module.SubjectiveScoringService = SubjectiveScoringService
+    monkeypatch.setitem(sys.modules, "subjective_scoring", module)
+
+
 @pytest.fixture()
 def papers_env(tmp_path, monkeypatch):
+    _install_subjective_scoring_stub(monkeypatch)
     from backend import question_loader as ql
     from backend import paper_store
     from backend import database
@@ -176,6 +227,19 @@ def test_missing_paper_param(papers_env):
     r = client.get("/api/exam")
     assert r.status_code == 400
     assert r.json()["detail"]["code"] == "PAPER_REQUIRED"
+
+
+def test_paper_exam_link_uses_request_origin(papers_env):
+    from backend import paper_store
+    from backend.main import app
+
+    paper_store.create_paper(slug="mech", name="机电")
+    client = TestClient(app, base_url="https://exam.example.com")
+
+    r = client.get("/api/admin/papers/mech/exam-link")
+
+    assert r.status_code == 200
+    assert r.json()["url"] == "https://exam.example.com/exam?paper=mech"
 
 
 def test_sanitize_scoring_points():
