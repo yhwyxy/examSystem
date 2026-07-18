@@ -42,6 +42,12 @@ function questionControlSelector(q, suffix = '') {
   return `[name="${safeQuestionId(q.id)}"]${suffix}`;
 }
 
+function findSubquestionControl(tagName, qid, sid) {
+  return [...document.querySelectorAll(`${tagName}[data-qid][data-sid]`)].find(
+    control => control.dataset.qid === String(qid) && control.dataset.sid === String(sid)
+  ) || null;
+}
+
 function showFatal(message) {
   $('title').textContent = '无法进入考试';
   $('desc').textContent = message;
@@ -125,7 +131,6 @@ function renderQuestion(q, idx) {
         label.className = 'sub-label';
         label.textContent = `(${s.id}) ${s.question || ''}（${s.score} 分）`;
         block.appendChild(label);
-        const controlKey = `${q.id}__${s.id}`;
         const languages = Array.isArray(s.allowed_languages) ? s.allowed_languages : [];
         if (s.scoring_mode === 'code') {
           const languageField = document.createElement('label');
@@ -134,7 +139,8 @@ function renderQuestion(q, idx) {
           languageLabel.textContent = '编程语言';
           const select = document.createElement('select');
           select.className = 'code-language-select';
-          select.setAttribute('data-language-for', controlKey);
+          select.dataset.qid = String(q.id);
+          select.dataset.sid = String(s.id);
           for (const language of languages) {
             const option = document.createElement('option');
             option.value = language;
@@ -145,9 +151,9 @@ function renderQuestion(q, idx) {
           block.appendChild(languageField);
         }
         const ta = document.createElement('textarea');
-        ta.name = controlKey;
         ta.dataset.qid = String(q.id);
         ta.dataset.sid = String(s.id);
+        ta.setAttribute('aria-label', `子题 ${s.id}：${s.question || '答案'}`);
         ta.rows = 6;
         ta.placeholder = '请输入子题答案';
         if (s.scoring_mode === 'code') {
@@ -205,17 +211,12 @@ function collectAnswers() {
     } else {
       const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
       if (subs.length) {
-        const map = {};
+        const map = Object.create(null);
         for (const s of subs) {
-          const el = document.querySelector(
-            `textarea[data-qid="${safeQuestionId(q.id)}"][data-sid="${safeQuestionId(s.id)}"]`
-          );
+          const el = findSubquestionControl('textarea', q.id, s.id);
           const subAnswer = { answer: el ? el.value : '' };
           if (s.scoring_mode === 'code') {
-            const controlKey = `${q.id}__${s.id}`;
-            const language = document.querySelector(
-              `select[data-language-for="${safeQuestionId(controlKey)}"]`
-            );
+            const language = findSubquestionControl('select', q.id, s.id);
             subAnswer.language = language ? language.value : '';
           }
           map[s.id] = subAnswer;

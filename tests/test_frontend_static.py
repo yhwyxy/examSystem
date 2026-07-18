@@ -41,7 +41,8 @@ def test_exam_renders_canonical_subquestions_with_code_language_whitelist():
     assert "q.subquestions" in render_question
     assert "q.sub_questions" not in render_question
     assert "s.allowed_languages" in render_question
-    assert "data-language-for" in render_question
+    assert "select.dataset.qid" in render_question
+    assert "select.dataset.sid" in render_question
     assert "document.createElement('select')" in render_question
     assert "document.createElement('option')" in render_question
     assert "s.code_language" not in render_question
@@ -53,11 +54,35 @@ def test_exam_collects_nested_subquestion_answers_and_selected_language():
 
     assert "q.subquestions" in collect_answers
     assert "q.sub_questions" not in collect_answers
-    assert "data-language-for" in collect_answers
+    assert "findSubquestionControl('textarea', q.id, s.id)" in collect_answers
+    assert "findSubquestionControl('select', q.id, s.id)" in collect_answers
     assert "{ answer:" in collect_answers
     assert "subAnswer.language =" in collect_answers
-    assert "safeQuestionId(q.id)" in collect_answers
-    assert "safeQuestionId(s.id)" in collect_answers
+    assert "Object.create(null)" in collect_answers
+
+
+def test_exam_subquestion_controls_use_collision_safe_dataset_lookup():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function renderExam")
+
+    assert "function findSubquestionControl" in source
+    assert "querySelectorAll(`${tagName}[data-qid][data-sid]`)" in source
+    assert "control.dataset.qid === String(qid)" in source
+    assert "control.dataset.sid === String(sid)" in source
+    assert "select.dataset.qid = String(q.id)" in render_question
+    assert "select.dataset.sid = String(s.id)" in render_question
+    assert "ta.dataset.qid = String(q.id)" in render_question
+    assert "ta.dataset.sid = String(s.id)" in render_question
+    assert "data-language-for" not in source
+    assert "controlKey" not in render_question
+
+
+def test_exam_subquestion_textareas_have_accessible_names():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function renderExam")
+
+    assert "ta.setAttribute('aria-label'" in render_question
+    assert "s.question" in render_question
 
 
 
