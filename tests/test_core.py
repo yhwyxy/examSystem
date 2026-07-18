@@ -547,6 +547,105 @@ def test_grade_composite_sums_sub_scores(monkeypatch):
     assert detail["student_answer"] == {"s1": "a", "s2": "b"}
 
 
+def test_grade_composite_passes_selected_language_sequentially(monkeypatch):
+    import asyncio
+    from backend import grader
+
+    parent = {
+        "id": "c1",
+        "type": "composite",
+        "question": "父",
+        "score": 7,
+        "subquestions": [
+            {
+                "id": "s1",
+                "question": "代码",
+                "answer": "print(1)",
+                "score": 5,
+                "scoring_mode": "code",
+                "allowed_languages": ["python", "javascript"],
+            },
+            {
+                "id": "s2",
+                "question": "解释",
+                "answer": "A",
+                "score": 2,
+                "scoring_mode": "text",
+            },
+        ],
+    }
+    seen = []
+
+    async def fake_run(question, student_answer):
+        seen.append((question["id"], question.get("code_language"), student_answer))
+        return {
+            "machine_score": question["score"],
+            "final_score": question["score"],
+            "score": question["score"],
+            "max_score": question["score"],
+            "review_status": "high_confidence",
+            "low_confidence": False,
+        }
+
+    monkeypatch.setattr(grader, "_run_subjective_grading", fake_run)
+    detail = asyncio.run(
+        grader.grade_composite_question(
+            parent,
+            {
+                "s1": {"answer": "console.log(1)", "language": "javascript"},
+                "s2": {"answer": "说明"},
+            },
+        )
+    )
+
+    assert seen == [
+        ("c1:s1", "javascript", "console.log(1)"),
+        ("c1:s2", None, "说明"),
+    ]
+    assert detail["sub_results"][0]["selected_language"] == "javascript"
+    assert detail["sub_results"][1]["selected_language"] is None
+
+
+def test_grade_composite_legacy_code_answer_uses_first_allowed_language(monkeypatch):
+    import asyncio
+    from backend import grader
+
+    parent = {
+        "id": "c1",
+        "type": "composite",
+        "question": "父",
+        "score": 5,
+        "subquestions": [
+            {
+                "id": "s1",
+                "question": "代码",
+                "answer": "print(1)",
+                "score": 5,
+                "scoring_mode": "code",
+                "allowed_languages": ["python", "javascript"],
+            }
+        ],
+    }
+    seen = {}
+
+    async def fake_run(question, student_answer):
+        seen.update(question)
+        return {
+            "machine_score": 5,
+            "final_score": 5,
+            "score": 5,
+            "max_score": 5,
+            "review_status": "high_confidence",
+            "low_confidence": False,
+        }
+
+    monkeypatch.setattr(grader, "_run_subjective_grading", fake_run)
+    detail = asyncio.run(grader.grade_composite_question(parent, {"s1": "print(1)"}))
+
+    assert seen["code_language"] == "python"
+    assert detail["sub_results"][0]["selected_language"] == "python"
+
+
 def test_format_answer_for_export_composite():
     from backend.exporter import format_student_answer_for_export, format_score_note_for_export
 
@@ -627,4 +726,3 @@ def test_apply_review_sub_question(tmp_path, monkeypatch):
         assert s1["final_score"] == 4
         assert target["final_score"] == 7
         assert float(row["subjective_score_final"]) == 7
-
