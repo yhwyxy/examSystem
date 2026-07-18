@@ -64,6 +64,14 @@ def test_exam_collects_nested_subquestion_answers_and_selected_language():
     assert "Object.create(null)" in collect_answers
 
 
+def test_exam_answer_map_preserves_proto_question_id_for_json_serialization():
+    source = read_frontend_file("frontend/js/exam.js")
+    collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
+
+    assert "const answers = Object.create(null);" in collect_answers
+    assert "answers[q.id] =" in collect_answers
+
+
 def test_exam_subquestion_controls_use_collision_safe_dataset_lookup():
     source = read_frontend_file("frontend/js/exam.js")
     render_question = function_body(source, "function renderQuestion", "function renderExam")

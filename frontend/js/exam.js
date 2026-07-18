@@ -194,7 +194,7 @@ function startTimer() {
 }
 
 function collectAnswers() {
-  const answers = {};
+  const answers = Object.create(null);
   for (const q of state.exam.questions) {
     if (q.type === 'multiple_choice') {
       answers[q.id] = findQuestionControls(q.id).filter(control => control.checked).map(control => control.value);
