@@ -367,13 +367,11 @@ def aggregate_composite_review_status(
         return "pending"
     if all(sub.get("review_status") == "reviewed" for sub in sub_results):
         return "reviewed"
-    if any(
-        sub.get("review_status") == "low_confidence" or sub.get("low_confidence")
-        for sub in sub_results
-    ):
+    if any(sub.get("review_status") == "low_confidence" for sub in sub_results):
         return "low_confidence"
     if any(
         sub.get("need_manual_review")
+        or sub.get("low_confidence")
         or sub.get("review_status") in {"need_review", "pending"}
         for sub in sub_results
     ):

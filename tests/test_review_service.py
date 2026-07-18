@@ -13,7 +13,14 @@ def test_composite_review_status_uses_subquestion_semantics():
     ]) == "high_confidence"
     assert aggregate_composite_review_status([
         {"review_status": "high_confidence", "low_confidence": True},
-    ]) == "low_confidence"
+    ]) == "need_review"
+    assert aggregate_composite_review_status([
+        {
+            "review_status": "need_review",
+            "low_confidence": True,
+            "need_manual_review": True,
+        },
+    ]) == "need_review"
     assert aggregate_composite_review_status([
         {"review_status": "high_confidence", "need_manual_review": True},
     ]) == "need_review"
