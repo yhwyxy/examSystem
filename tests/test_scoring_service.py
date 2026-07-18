@@ -125,6 +125,37 @@ def test_routes_to_sql_by_mode():
     assert len(svc._test_sql.calls) == 1  # type: ignore[attr-defined]
 
 
+def test_calculation_mode_scores_configured_numeric_answer():
+    svc = SubjectiveScoringService(allow_model_load=False)
+    result = svc.score(
+        {
+            "question_id": "calc-1",
+            "max_score": 10,
+            "scoring_mode": "calculation",
+            "student_answer": "n2 = 600",
+            "reference_answer": "600",
+            "scoring_config": {
+                "calculation": {
+                    "final_answers": [
+                        {
+                            "id": "speed",
+                            "description": "从动齿轮转速",
+                            "expected": 600,
+                            "score": 10,
+                            "tolerance": 0.1,
+                        }
+                    ]
+                }
+            },
+        }
+    )
+
+    assert result.scoring_mode is ScoringMode.CALCULATION
+    assert result.track == "CalculationScorer"
+    assert result.score == 10
+    assert result.need_manual_review is False
+
+
 def test_routes_by_code_language_when_mode_missing():
     svc = _service()
     result = svc.score(

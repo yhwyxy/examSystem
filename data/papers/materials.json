@@ -835,7 +835,12 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "calculation",
+      "calculation": {
+        "final_answers": [
+          {"id": "angle", "description": "晶面夹角", "expected": 45, "score": 10, "tolerance": 0.1}
+        ]
+      },
       "question": "面心立方晶体的晶格常数为a,请计算(110)面与(100)面的夹角β。",
       "answer": "Cosβ=√2/2,β=45°",
       "id": "q41"

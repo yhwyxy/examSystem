@@ -195,7 +195,11 @@ def build_scoring_request(
             question.get("scoring_rubric"), max_score
         )
 
+    calculation = question.get("calculation")
     mode = _coerce_scoring_mode(question.get("scoring_mode"))
+    if mode is ScoringMode.CALCULATION and not isinstance(calculation, dict):
+        # 未配置静态数值项时保留旧版可评分行为，避免转换后的题目直接得零分。
+        mode = ScoringMode.TEXT
     # short_answer / essay 默认 text；sql/code 由 mode / code_language 决定
     if mode is None and qtype in SUBJECTIVE_TYPES:
         code_lang = question.get("code_language")
@@ -208,7 +212,6 @@ def build_scoring_request(
 
     cfg = get_config()
     precision = int(getattr(cfg.scoring, "score_precision", 1))
-
     payload: dict[str, Any] = {
         "question_id": str(question.get("id", "?")),
         "paper_id": question.get("paper_id"),
@@ -224,6 +227,7 @@ def build_scoring_request(
         "scoring_config": {
             "score_precision": precision,
             "allow_auto_scoring_point_generation": False,
+            "calculation": calculation or {},
         },
     }
     return ScoringRequest.model_validate(payload)

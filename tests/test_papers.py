@@ -60,6 +60,37 @@ def _sample_questions():
     ]
 
 
+def test_calculation_question_schema_is_accepted():
+    from backend.question_loader import validate_questions
+
+    data = {
+        "exam_info": {"title": "计算题测试"},
+        "questions": [
+            {
+                "id": "calc-1",
+                "type": "short_answer",
+                "question": "计算 1+1",
+                "answer": "2",
+                "score": 10,
+                "scoring_mode": "calculation",
+                "calculation": {
+                    "steps": [],
+                    "final_answers": [
+                        {
+                            "id": "result",
+                            "description": "最终结果",
+                            "expected": 2,
+                            "score": 10,
+                        }
+                    ],
+                },
+            }
+        ],
+    }
+
+    validate_questions(data)
+
+
 def test_create_save_open_close_and_exam_flow(papers_env):
     from backend import paper_store, question_loader
     from backend.main import app

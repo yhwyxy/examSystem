@@ -33,12 +33,12 @@ def test_subjective_scoring_uses_pinned_github_source():
     source = config["tool"]["uv"]["sources"]["subjective-scoring"]
     assert source == {
         "git": "https://github.com/yhwyxy/subjective-scoring",
-        "tag": "v0.1.6",
+        "tag": "v0.1.7",
     }
 
     requirements = (ROOT / "requirements.txt").read_text(encoding="utf-8")
     assert (
         "subjective-scoring[text,sql,code,remote] @ "
-        "git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.6"
+        "git+https://github.com/yhwyxy/subjective-scoring.git@v0.1.7"
         in requirements
     )

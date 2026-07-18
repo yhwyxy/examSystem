@@ -416,6 +416,55 @@ def test_build_scoring_request_from_question():
     assert req.student_answer == "student text"
 
 
+def test_build_scoring_request_passes_calculation_config():
+    from backend.grader import build_scoring_request
+
+    req = build_scoring_request(
+        {
+            "id": "calc-1",
+            "type": "short_answer",
+            "question": "计算 1+1",
+            "answer": "2",
+            "score": 10,
+            "scoring_mode": "calculation",
+            "calculation": {
+                "steps": [],
+                "final_answers": [
+                    {
+                        "id": "result",
+                        "description": "最终结果",
+                        "expected": 2,
+                        "score": 10,
+                    }
+                ],
+            },
+        },
+        "2",
+    )
+
+    assert req.scoring_mode.value == "calculation"
+    assert len(req.scoring_config.calculation.final_answers) == 1
+    assert req.scoring_config.calculation.final_answers[0].expected == 2
+
+
+def test_calculation_mode_without_config_falls_back_to_text():
+    from backend.grader import build_scoring_request
+
+    req = build_scoring_request(
+        {
+            "id": "calc-unconfigured",
+            "type": "essay",
+            "question": "待补充计算评分项",
+            "answer": "参考答案",
+            "score": 10,
+            "scoring_mode": "calculation",
+        },
+        "学生答案",
+    )
+
+    assert req.scoring_mode.value == "text"
+
+
 
 @pytest.mark.usefixtures("_fake_question_loader")
 def test_real_subjective_service_smoke():

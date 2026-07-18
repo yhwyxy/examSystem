@@ -842,7 +842,14 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "calculation",
+      "calculation": {
+        "final_answers": [
+          {"id": "speed", "description": "从动齿轮转速", "expected": 600, "score": 10, "tolerance": 0.1}
+        ],
+        "require_working": true,
+        "final_only_score_cap": 10
+      },
       "question": "一齿轮副,主动齿轮齿数z1=30,从动齿轮齿数z2=50,试计算传动比i=?若主动齿轮转速n1=1000r/min,从动齿轮转速n2=?",
       "answer": "i=z2/z1=50/30=5/3\ni=n1/n2     n2=n1/i=1000/(5/3)=`600r/min",
       "id": "q43"

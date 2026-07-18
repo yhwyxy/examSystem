@@ -26,8 +26,8 @@ BACKUPS_DIR = DATA_DIR / "backups" / "papers"
 ALLOWED_TYPES = {"single_choice", "multiple_choice", "true_false", "short_answer", "essay"}
 OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "true_false"}
 SUBJECTIVE_TYPES = {"short_answer", "essay"}
-SENSITIVE_FIELDS = {"answer", "scoring_rubric", "scoring_points"}
-ALLOWED_SCORING_MODES = {"text", "sql", "code"}
+SENSITIVE_FIELDS = {"answer", "scoring_rubric", "scoring_points", "calculation"}
+ALLOWED_SCORING_MODES = {"text", "sql", "code", "calculation"}
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 PAPER_STATUS_OPEN = "open"
 PAPER_STATUS_CLOSED = "closed"
@@ -110,6 +110,55 @@ def _validate_scoring_points(q: dict[str, Any]) -> None:
         _error(f"题目 {q.get('id')} 评分点合计 {total} 超过题目满分 {max_score}")
 
 
+def _validate_calculation(q: dict[str, Any]) -> None:
+    config = q.get("calculation")
+    if config is None:
+        # 转换器可以先标记计算题，待人工补齐数值评分项；运行时会回退到 text。
+        return
+    if not isinstance(config, dict):
+        _error(f"计算题 {q.get('id')} calculation 必须是对象")
+    if config.get("strategy", "static_values") != "static_values":
+        _error(f"计算题 {q.get('id')} 仅支持 static_values 策略")
+
+    items: list[dict[str, Any]] = []
+    for key in ("steps", "final_answers"):
+        values = config.get(key, [])
+        if not isinstance(values, list):
+            _error(f"计算题 {q.get('id')} calculation.{key} 必须是数组")
+        items.extend(values)
+    if not items:
+        _error(f"计算题 {q.get('id')} 至少需要一个计算步骤或最终答案")
+
+    ids: set[str] = set()
+    total = 0.0
+    for item in items:
+        if not isinstance(item, dict):
+            _error(f"计算题 {q.get('id')} calculation 项必须是对象")
+        item_id = str(item.get("id") or "")
+        if not item_id or item_id in ids:
+            _error(f"计算题 {q.get('id')} calculation id 缺失或重复")
+        ids.add(item_id)
+        if not str(item.get("description") or "").strip():
+            _error(f"计算题 {q.get('id')} calculation.description 缺失")
+        if not isinstance(item.get("expected"), (int, float)):
+            _error(f"计算题 {q.get('id')} calculation.expected 必须是数字")
+        score = item.get("score")
+        if not isinstance(score, (int, float)) or float(score) < 0:
+            _error(f"计算题 {q.get('id')} calculation.score 非法")
+        tolerance = item.get("tolerance", 0)
+        if not isinstance(tolerance, (int, float)) or float(tolerance) < 0:
+            _error(f"计算题 {q.get('id')} calculation.tolerance 非法")
+        keywords = item.get("keywords", [])
+        if not isinstance(keywords, list) or any(not isinstance(k, str) for k in keywords):
+            _error(f"计算题 {q.get('id')} calculation.keywords 必须是字符串数组")
+        total += float(score)
+    if total > float(q.get("score") or 0) + 1e-6:
+        _error(f"计算题 {q.get('id')} calculation 分值合计超过题目满分")
+    cap = config.get("final_only_score_cap")
+    if cap is not None and (not isinstance(cap, (int, float)) or float(cap) < 0 or float(cap) > total + 1e-6):
+        _error(f"计算题 {q.get('id')} final_only_score_cap 非法")
+
+
 def validate_questions(data: dict[str, Any]) -> None:
     """校验整卷结构（exam_info + questions）。"""
     info = data.get("exam_info")
@@ -164,6 +213,8 @@ def validate_questions(data: dict[str, Any]) -> None:
             if mode is not None and str(mode).strip() and str(mode).strip().lower() not in ALLOWED_SCORING_MODES:
                 _error(f"题目 {qid} scoring_mode 非法: {mode}")
             _validate_scoring_points(q)
+            if str(mode or "").strip().lower() == "calculation":
+                _validate_calculation(q)
 
     # 服务端以题目分和为准时仍检查一致性（写路径会覆盖 total_score）
     declared_total = info.get("total_score")

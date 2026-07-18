@@ -99,6 +99,7 @@ function findIndex(array, item) {
 class SectionSpec:
     question_type: str
     default_score: float | None = None
+    scoring_mode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -170,7 +171,32 @@ def parse_section_header(line: str) -> SectionSpec | None:
             default_score = float(total_match.group(1)) / int(count_match.group(1))
         else:
             default_score = None
-    return SectionSpec(question_type=question_type, default_score=default_score)
+    scoring_mode = None
+    if question_type == "essay":
+        if "计算" in compact:
+            scoring_mode = "calculation"
+        elif "程序" in compact:
+            scoring_mode = "code"
+        else:
+            scoring_mode = "text"
+    return SectionSpec(
+        question_type=question_type,
+        default_score=default_score,
+        scoring_mode=scoring_mode,
+    )
+
+
+def _infer_code_language(text: str) -> str | None:
+    compact = str(text or "").lower()
+    if "javascript" in compact or re.search(r"\b(?:js|node\.js)\b", compact):
+        return "javascript"
+    if "typescript" in compact or re.search(r"\bts\b", compact):
+        return "typescript"
+    if "python" in compact or re.search(r"\bpy\b", compact):
+        return "python"
+    if re.search(r"\bjava\b", compact):
+        return "java"
+    return None
 
 
 def parse_answer_token(
@@ -395,6 +421,10 @@ def parse_exam_lines(source_name: str, lines: list[str]) -> ParseResult:
         answer_parts = current.pop("answer_parts", [])
         if answer_parts:
             current["answer"] = "\n".join(answer_parts).strip()
+        if current.get("scoring_mode") == "code" and not current.get("code_language"):
+            current["code_language"] = _infer_code_language(
+                f"{current.get('question', '')}\n{current.get('answer', '')}"
+            )
         current["id"] = f"q{len(questions) + 1}"
         questions.append(current)
         current = None
@@ -522,7 +552,7 @@ def parse_exam_lines(source_name: str, lines: list[str]) -> ParseResult:
             if answer is not None:
                 current["answer"] = answer
             if question_type in {"short_answer", "essay"}:
-                current["scoring_mode"] = "text"
+                current["scoring_mode"] = section.scoring_mode or "text"
             section_questions.append(current)
             continue
 

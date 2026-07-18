@@ -48,6 +48,22 @@ def test_parse_section_header_reads_type_and_score():
     assert section.default_score == 1.5
 
 
+def test_parse_section_header_assigns_calculation_mode():
+    section = parse_section_header("四、计算题（每题10分，共20分）")
+
+    assert section is not None
+    assert section.question_type == "essay"
+    assert section.scoring_mode == "calculation"
+
+
+def test_parse_section_header_assigns_code_mode_for_program_section():
+    section = parse_section_header("三、程序题（每题10分，共20分）")
+
+    assert section is not None
+    assert section.question_type == "essay"
+    assert section.scoring_mode == "code"
+
+
 def test_parse_answer_token_normalizes_objective_answers():
     assert parse_answer_token("√", "true_false") is True
     assert parse_answer_token("×", "true_false") is False
