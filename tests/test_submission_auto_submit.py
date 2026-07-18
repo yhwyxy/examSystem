@@ -62,3 +62,19 @@ def test_submit_request_accepts_only_known_auto_submit_reasons():
             answers={"q1": "A"},
             auto_submit_reason="client_supplied_score",
         )
+
+
+def test_composite_submission_rejects_forged_code_language():
+    from backend.question_loader import validate_answer_shape
+
+    question = {
+        "id": "c1", "type": "composite", "score": 5,
+        "subquestions": [{
+            "id": "s1", "scoring_mode": "code", "allowed_languages": ["python"],
+        }],
+    }
+
+    with pytest.raises(ValueError, match="INVALID_CODE_LANGUAGE"):
+        validate_answer_shape(question, {
+            "s1": {"answer": "console.log(1)", "language": "javascript"},
+        })

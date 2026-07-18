@@ -385,7 +385,9 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
         try:
             question_loader.validate_answer_shape(q, ans)
         except ValueError as e:
-            raise _error(422, "INVALID_ANSWER_SHAPE", str(e)) from e
+            message = str(e)
+            code = "INVALID_CODE_LANGUAGE" if message.startswith("INVALID_CODE_LANGUAGE") else "INVALID_ANSWER_SHAPE"
+            raise _error(422, code, message) from e
 
     try:
         submission_id = database.insert_submission_pending(

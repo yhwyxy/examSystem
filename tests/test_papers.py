@@ -222,8 +222,73 @@ def test_composite_sub_questions_schema_ok():
     }
     validate_questions(data)
     q = data["questions"][0]
-    assert len(q["sub_questions"]) == 2
-    assert q["sub_questions"][1]["code_language"] == "sql"
+    assert q["type"] == "composite"
+    assert len(q["subquestions"]) == 2
+    assert q["subquestions"][1]["code_language"] == "sql"
+
+
+def test_composite_canonical_schema_and_legacy_aliases():
+    from backend.question_loader import get_subquestions, validate_questions
+
+    paper = {
+        "exam_info": {"title": "复合题"},
+        "questions": [{
+            "id": "c1", "type": "composite", "question": "父题", "score": 10,
+            "subquestions": [
+                {"id": "s1", "question": "解释", "answer": "A", "score": 4,
+                 "scoring_mode": "text"},
+                {"id": "s2", "question": "编码", "answer": "print(1)", "score": 6,
+                 "scoring_mode": "code", "allowed_languages": [" Python ", "javascript"]},
+            ],
+        }],
+    }
+
+    validate_questions(paper)
+    assert get_subquestions(paper["questions"][0])[1]["allowed_languages"] == [
+        "python", "javascript"
+    ]
+
+    legacy = {
+        "id": "legacy", "type": "short_answer", "question": "父", "score": 5,
+        "sub_questions": [{
+            "id": "code", "question": "编码", "answer": "print(1)", "score": 5,
+            "scoring_mode": "code", "code_language": "Python",
+        }],
+    }
+    assert get_subquestions(legacy)[0]["allowed_languages"] == ["python"]
+    assert legacy["type"] == "composite"
+    assert "sub_questions" not in legacy
+
+
+def test_code_subanswer_language_must_be_allowed():
+    from backend.question_loader import normalize_submitted_subanswer
+
+    sub = {"id": "s1", "scoring_mode": "code", "allowed_languages": ["python"]}
+    assert normalize_submitted_subanswer(
+        sub, {"answer": "print(1)", "language": "Python"}
+    ) == ("print(1)", "python")
+    with pytest.raises(ValueError, match="INVALID_CODE_LANGUAGE"):
+        normalize_submitted_subanswer(
+            sub, {"answer": "console.log(1)", "language": "javascript"}
+        )
+
+
+def test_sanitize_canonical_composite_exposes_only_public_configuration():
+    from backend.question_loader import sanitize_for_student
+
+    out = sanitize_for_student([{
+        "id": "c1", "type": "composite", "question": "父", "score": 5,
+        "subquestions": [{
+            "id": "s1", "question": "编码", "answer": "print(1)", "score": 5,
+            "scoring_mode": "code", "allowed_languages": ["python"],
+            "scoring_points": [{"text": "正确", "score": 5}],
+        }],
+    }])[0]
+
+    assert out["subquestions"] == [{
+        "id": "s1", "question": "编码", "score": 5,
+        "scoring_mode": "code", "allowed_languages": ["python"],
+    }]
 
 
 def test_composite_score_must_equal_sum():
@@ -247,7 +312,7 @@ def test_composite_score_must_equal_sum():
     }
     with pytest.raises(HTTPException) as ei:
         validate_questions(data)
-    assert "sub_questions" in str(ei.value.detail).lower() or "子题" in str(ei.value.detail)
+    assert "subquestions" in str(ei.value.detail).lower() or "子题" in str(ei.value.detail)
 
 
 def test_code_mode_requires_language():
@@ -318,9 +383,8 @@ def test_sanitize_keeps_sub_questions_strips_answers():
     out = qs[0]
     assert "answer" not in out
     assert "scoring_points" not in out
-    assert out["sub_questions"][0]["id"] == "s1"
-    assert out["sub_questions"][0]["question"] == "子1"
-    assert "answer" not in out["sub_questions"][0]
-    assert "scoring_points" not in out["sub_questions"][0]
-    assert out["sub_questions"][0].get("scoring_mode") == "text"
-
+    assert out["subquestions"][0]["id"] == "s1"
+    assert out["subquestions"][0]["question"] == "子1"
+    assert "answer" not in out["subquestions"][0]
+    assert "scoring_points" not in out["subquestions"][0]
+    assert out["subquestions"][0].get("scoring_mode") == "text"

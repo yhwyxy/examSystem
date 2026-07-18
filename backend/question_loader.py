@@ -23,7 +23,7 @@ INDEX_PATH = PAPERS_DIR / "index.json"
 LEGACY_QUESTIONS_PATH = DATA_DIR / "questions.json"
 BACKUPS_DIR = DATA_DIR / "backups" / "papers"
 
-ALLOWED_TYPES = {"single_choice", "multiple_choice", "true_false", "short_answer", "essay"}
+ALLOWED_TYPES = {"single_choice", "multiple_choice", "true_false", "short_answer", "essay", "composite"}
 OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "true_false"}
 SUBJECTIVE_TYPES = {"short_answer", "essay"}
 SENSITIVE_FIELDS = {"answer", "scoring_rubric", "scoring_points", "calculation"}
@@ -46,8 +46,7 @@ def is_objective(question: dict[str, Any]) -> bool:
 
 
 def is_composite_question(q: dict[str, Any]) -> bool:
-    subs = q.get("sub_questions")
-    return isinstance(subs, list) and len(subs) > 0
+    return bool(get_subquestions(q))
 
 
 def _normalize_code_language(raw: Any, *, qid: str) -> str | None:
@@ -59,20 +58,76 @@ def _normalize_code_language(raw: Any, *, qid: str) -> str | None:
     return lang
 
 
+def normalize_composite_question(question: dict[str, Any]) -> dict[str, Any]:
+    """将旧复合题字段原地转换为规范字段。"""
+    if "subquestions" not in question and isinstance(question.get("sub_questions"), list):
+        question["subquestions"] = question.pop("sub_questions")
+    subs = question.get("subquestions")
+    if isinstance(subs, list) and subs and question.get("type") in SUBJECTIVE_TYPES:
+        question["type"] = "composite"
+    for sub in subs if isinstance(subs, list) else []:
+        if not isinstance(sub, dict):
+            continue
+        legacy = sub.get("code_language")
+        if str(sub.get("scoring_mode") or "text").strip().lower() == "code":
+            sub.pop("code_language", None)
+            languages = sub.get("allowed_languages") or ([legacy] if legacy else [])
+            if isinstance(languages, list):
+                normalized = [
+                    _normalize_code_language(value, qid=str(sub.get("id") or "?"))
+                    for value in languages
+                ]
+                sub["allowed_languages"] = list(dict.fromkeys(
+                    language for language in normalized if language
+                ))
+    return question
+
+
+def get_subquestions(question: dict[str, Any]) -> list[dict[str, Any]]:
+    normalize_composite_question(question)
+    value = question.get("subquestions")
+    return value if isinstance(value, list) else []
+
+
+def normalize_submitted_subanswer(
+    subquestion: dict[str, Any], raw: Any, *, allow_legacy: bool = False
+) -> tuple[str, str | None]:
+    """校验并规范化一个小问的考生答案。"""
+    mode = str(subquestion.get("scoring_mode") or "text").strip().lower()
+    if isinstance(raw, str):
+        if mode == "code" and not allow_legacy:
+            raise ValueError("INVALID_ANSWER_SHAPE: 代码子题答案必须包含 language")
+        answer = raw
+        language = (subquestion.get("allowed_languages") or [None])[0]
+    elif isinstance(raw, dict) and isinstance(raw.get("answer", ""), str):
+        answer = raw.get("answer", "")
+        language = raw.get("language")
+    else:
+        raise ValueError("INVALID_ANSWER_SHAPE: 子题答案必须包含字符串 answer")
+
+    if mode == "code":
+        normalized = str(language or "").strip().lower()
+        if normalized not in subquestion.get("allowed_languages", []):
+            raise ValueError("INVALID_CODE_LANGUAGE: 代码语言不在允许范围内")
+        return answer, normalized
+    return answer, None
+
+
 def validate_answer_shape(question: dict[str, Any], answer: Any) -> None:
     """校验提交答案形状。非法时 raise ValueError('INVALID_ANSWER_SHAPE: ...')。"""
     if is_composite_question(question):
         if not isinstance(answer, dict):
             raise ValueError("INVALID_ANSWER_SHAPE: 复合题答案必须为对象 map")
-        expected = {str(s.get("id")) for s in question["sub_questions"] if s.get("id")}
+        subs = get_subquestions(question)
+        expected = {str(s.get("id")) for s in subs if s.get("id")}
         got = {str(k) for k in answer.keys()}
         if got != expected:
             raise ValueError(
                 f"INVALID_ANSWER_SHAPE: 复合题答案键必须为 {sorted(expected)}，实际 {sorted(got)}"
             )
+        submap = {str(s.get("id")): s for s in subs}
         for k, v in answer.items():
-            if v is not None and not isinstance(v, str):
-                raise ValueError(f"INVALID_ANSWER_SHAPE: 子题 {k} 答案必须为字符串")
+            normalize_submitted_subanswer(submap[str(k)], v)
         return
     if isinstance(answer, dict):
         raise ValueError("INVALID_ANSWER_SHAPE: 非复合题答案不能为对象")
@@ -162,7 +217,8 @@ def _validate_subjective_mode_and_language(q: dict[str, Any], *, label: str | No
         mode = str(q.get("scoring_mode") or "text").strip().lower()
 
     lang = _normalize_code_language(q.get("code_language"), qid=qid)
-    if mode == "code" and not lang:
+    allowed_languages = q.get("allowed_languages")
+    if mode == "code" and not lang and not allowed_languages:
         _error(f"题目 {qid} 的 scoring_mode=code 时必须提供 code_language")
     if mode == "sql":
         if lang is None:
@@ -181,21 +237,21 @@ def _validate_subjective_mode_and_language(q: dict[str, Any], *, label: str | No
 
 def _validate_sub_questions(parent: dict[str, Any]) -> None:
     parent_qid = str(parent.get("id") or "?")
-    subs = parent.get("sub_questions")
+    subs = get_subquestions(parent)
     if not isinstance(subs, list) or not subs:
-        _error(f"题目 {parent_qid} 的 sub_questions 必须为非空数组")
-    if parent.get("type") not in SUBJECTIVE_TYPES:
-        _error(f"题目 {parent_qid} 仅 short_answer/essay 可配置 sub_questions")
+        _error(f"题目 {parent_qid} 的 subquestions 必须为非空数组")
+    if parent.get("type") != "composite":
+        _error(f"题目 {parent_qid} 配置 subquestions 时类型必须为 composite")
 
     parent_score = float(parent.get("score") or 0)
     seen: set[str] = set()
     total = 0.0
     for j, sub in enumerate(subs):
         if not isinstance(sub, dict):
-            _error(f"题目 {parent_qid} sub_questions[{j}] 必须是对象")
+            _error(f"题目 {parent_qid} subquestions[{j}] 必须是对象")
         sid = sub.get("id")
         if not sid or not str(sid).strip():
-            _error(f"题目 {parent_qid} sub_questions[{j}] 缺少 id")
+            _error(f"题目 {parent_qid} subquestions[{j}] 缺少 id")
         sid = str(sid).strip()
         if sid in seen:
             _error(f"题目 {parent_qid} 子题 id 重复: {sid}")
@@ -210,10 +266,19 @@ def _validate_sub_questions(parent: dict[str, Any]) -> None:
             _error(f"题目 {parent_qid} 子题 {sid} score 必须是大于 0 的数字")
         total += float(score)
         _validate_subjective_mode_and_language(sub, label=f"{parent_qid}.{sid}")
+        mode = sub.get("scoring_mode", "text")
+        languages = sub.get("allowed_languages")
+        if mode == "code":
+            if not isinstance(languages, list) or not languages:
+                _error(f"题目 {parent_qid} 子题 {sid} 的 allowed_languages 必须为非空数组")
+            if len(languages) != len(set(languages)):
+                _error(f"题目 {parent_qid} 子题 {sid} 的 allowed_languages 不能重复")
+        elif languages is not None:
+            _error(f"题目 {parent_qid} 子题 {sid} 仅代码模式可配置 allowed_languages")
 
     if abs(total - parent_score) > 1e-6:
         _error(
-            f"题目 {parent_qid} 的 sub_questions 分值之和 ({total}) 不等于题目分值 ({parent_score})"
+            f"题目 {parent_qid} 的 subquestions 分值之和 ({total}) 不等于题目分值 ({parent_score})"
         )
 
 
@@ -283,6 +348,7 @@ def validate_questions(data: dict[str, Any]) -> None:
     for q in questions:
         if not isinstance(q, dict):
             _error("questions 中每一项必须是对象")
+        normalize_composite_question(q)
         qid = q.get("id")
         if not qid:
             _error("每道题必须存在 id")
@@ -316,10 +382,10 @@ def validate_questions(data: dict[str, Any]) -> None:
                 if not isinstance(ans, list) or not ans:
                     _error(f"多选题 {qid} answer 必须是非空数组")
         else:
-            subs = q.get("sub_questions")
+            subs = q.get("subquestions")
             if subs is not None:
                 if isinstance(subs, list) and len(subs) == 0:
-                    _error(f"题目 {qid} 的 sub_questions 不能为空数组，请省略该字段")
+                    _error(f"题目 {qid} 的 subquestions 不能为空数组，请省略该字段")
                 if is_composite_question(q):
                     _validate_sub_questions(q)
                     continue
@@ -360,10 +426,11 @@ def recompute_total_score(data: dict[str, Any]) -> float:
 def sanitize_for_student(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sanitized: list[dict[str, Any]] = []
     for q in questions:
-        public = {k: v for k, v in q.items() if k not in SENSITIVE_FIELDS and k != "sub_questions"}
+        normalize_composite_question(q)
+        public = {k: v for k, v in q.items() if k not in SENSITIVE_FIELDS and k != "subquestions"}
         if is_composite_question(q):
-            public["sub_questions"] = []
-            for s in q.get("sub_questions") or []:
+            public["subquestions"] = []
+            for s in get_subquestions(q):
                 if not isinstance(s, dict):
                     continue
                 sub_public: dict[str, Any] = {
@@ -373,9 +440,9 @@ def sanitize_for_student(questions: list[dict[str, Any]]) -> list[dict[str, Any]
                 }
                 if s.get("scoring_mode"):
                     sub_public["scoring_mode"] = s.get("scoring_mode")
-                if s.get("code_language"):
-                    sub_public["code_language"] = s.get("code_language")
-                public["sub_questions"].append(sub_public)
+                if s.get("allowed_languages"):
+                    sub_public["allowed_languages"] = list(s["allowed_languages"])
+                public["subquestions"].append(sub_public)
         sanitized.append(public)
     return sanitized
 
