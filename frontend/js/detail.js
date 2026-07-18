@@ -67,9 +67,12 @@ function render() {
         const sid = s.sub_question_id;
         const inputId = `score_${questionId}__${sid}`;
         const noteId = `note_${questionId}__${sid}`;
-        return `<div class="sub-result card nested" style="margin:12px 0;padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+        const language = s.selected_language
+          ? `<span class="sub-result-language">语言：${esc(s.selected_language)}</span>`
+          : '';
+        return `<div class="sub-result card nested">
           <h4>子题 ${esc(sid)}. ${esc(s.question || '')}</h4>
-          <p class="muted">满分 ${esc(s.max_score)}，机器分 ${esc(s.score)}，最终分 <b>${esc(s.final_score ?? s.score)}</b> ${badge(s.review_status)}</p>
+          <p class="muted">满分 ${esc(s.max_score)}，机器分 ${esc(s.score)}，最终分 <b>${esc(s.final_score ?? s.score)}</b> ${language} ${badge(s.review_status)}</p>
           <div class="answer-box"><b>学生：</b><br>${esc(s.student_answer ?? '')}</div>
           <div class="answer-box"><b>参考：</b><br>${esc(s.reference_answer ?? '')}</div>
           ${s.reason ? `<p><b>理由：</b>${esc(s.reason)}</p>` : ''}

@@ -16,7 +16,9 @@ def format_student_answer_for_export(detail: dict[str, Any]) -> str:
         for s in detail["sub_results"]:
             sid = s.get("sub_question_id", "?")
             ans = s.get("student_answer", "")
-            lines.append(f"[{sid}] {ans}")
+            language = s.get("selected_language")
+            prefix = f"[{sid}][{language}]" if language else f"[{sid}]"
+            lines.append(f"{prefix} {ans}")
         return "\n".join(lines)
     ans = detail.get("student_answer", "")
     if isinstance(ans, list):

@@ -96,6 +96,29 @@ def test_exam_subquestion_textareas_have_accessible_names():
     assert "s.question" in render_question
 
 
+def test_admin_editor_writes_canonical_composites_and_language_whitelist():
+    source = read_frontend_file("frontend/js/papers.js")
+    render_editor = function_body(source, "function renderSubQuestionsEditor", "function collectSubQuestionsFromUI")
+    collect_editor = function_body(source, "function collectSubQuestionsFromUI", "function applyQuestionFromForm")
+
+    assert "SUPPORTED_CODE_LANGUAGES" in source
+    assert "subquestions" in source
+    assert "sub_questions" not in source
+    assert 'class="sq-languages"' in render_editor
+    assert "multiple" in render_editor
+    assert ".selectedOptions" in collect_editor
+    assert "item.allowed_languages" in collect_editor
+    assert "item.code_language" not in collect_editor
+
+
+def test_admin_composite_detail_displays_selected_language_without_inline_style():
+    source = read_frontend_file("frontend/js/detail.js")
+
+    assert "selected_language" in source
+    assert "sub-result card nested" in source
+    assert 'style="' not in source
+
+
 
 def test_exam_script_implements_deduplicated_anti_switch_auto_submit():
     source = read_frontend_file("frontend/js/exam.js")

@@ -665,6 +665,21 @@ def test_format_answer_for_export_composite():
     assert "s1=2/4" in note
 
 
+def test_composite_export_includes_selected_language():
+    from backend.exporter import format_student_answer_for_export
+
+    detail = {
+        "is_composite": True,
+        "sub_results": [{
+            "sub_question_id": "s1",
+            "student_answer": "print(1)",
+            "selected_language": "python",
+        }],
+    }
+
+    assert "[s1][python] print(1)" in format_student_answer_for_export(detail)
+
+
 def test_apply_review_sub_question(tmp_path, monkeypatch):
     from backend import database
     import json

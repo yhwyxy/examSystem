@@ -807,6 +807,10 @@ tbody tr:hover {
 }
 .option-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; }
 .nested-panel { margin-top: 1rem; background: #fcfcff; }
+.sub-q-row { margin: 8px 0; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.sq-languages { min-height: 7rem; }
+.sub-result.card.nested { margin: 12px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.sub-result-language { margin-left: 0.5rem; }
 .paper-meta-grid { margin-bottom: 0.75rem; }
 .full-label { display: block; margin: 0.5rem 0 0.75rem; }
 .full-label textarea { width: 100%; }
