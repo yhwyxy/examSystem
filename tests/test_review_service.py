@@ -1,6 +1,27 @@
 import json
 
 
+def test_composite_review_status_uses_subquestion_semantics():
+    from backend.grader import aggregate_composite_review_status
+
+    assert aggregate_composite_review_status([]) == "pending"
+    assert aggregate_composite_review_status([
+        {"review_status": "reviewed"}, {"review_status": "reviewed"},
+    ]) == "reviewed"
+    assert aggregate_composite_review_status([
+        {"review_status": "reviewed"}, {"review_status": "high_confidence"},
+    ]) == "high_confidence"
+    assert aggregate_composite_review_status([
+        {"review_status": "high_confidence", "low_confidence": True},
+    ]) == "low_confidence"
+    assert aggregate_composite_review_status([
+        {"review_status": "high_confidence", "need_manual_review": True},
+    ]) == "need_review"
+    assert aggregate_composite_review_status([
+        {"review_status": "pending"},
+    ]) == "need_review"
+
+
 def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, monkeypatch):
     from backend import database, review_service
     from backend.grader import GradingResult
@@ -28,7 +49,7 @@ def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, 
                 {
                     "sub_question_id": "s2", "max_score": 6,
                     "machine_score": 3, "score": 3, "final_score": 3,
-                    "review_status": "reviewed",
+                    "review_status": "high_confidence",
                 },
             ],
         },
@@ -79,12 +100,16 @@ def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, 
                     {
                         "sub_question_id": "s1", "max_score": 4,
                         "machine_score": 1, "score": 1, "final_score": 1,
-                        "review_status": "reviewed",
+                        "review_status": "low_confidence",
+                        "low_confidence": True,
+                        "need_manual_review": True,
                     },
                     {
                         "sub_question_id": "s2", "max_score": 6,
                         "machine_score": 5, "score": 5, "final_score": 5,
-                        "review_status": "reviewed",
+                        "review_status": "high_confidence",
+                        "low_confidence": False,
+                        "need_manual_review": False,
                     },
                 ],
             },
@@ -114,12 +139,18 @@ def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, 
     composite = details["q2"]
     subs = {s["sub_question_id"]: s for s in composite["sub_results"]}
 
-    assert result == {"success": True, "total_score": 23.0, "review_status": "reviewed"}
+    assert result == {"success": True, "total_score": 23.0, "review_status": "pending"}
     assert (subs["s1"]["machine_score"], subs["s1"]["score"], subs["s1"]["final_score"]) == (1, 1, 4)
     assert subs["s1"]["reviewed_by"] == "human"
     assert subs["s1"]["review_note"] == "子题人工确认"
+    assert subs["s1"]["low_confidence"] is False
+    assert subs["s1"]["need_manual_review"] is False
     assert (subs["s2"]["machine_score"], subs["s2"]["final_score"]) == (5, 5)
     assert (composite["machine_score"], composite["score"], composite["final_score"]) == (6.0, 6.0, 9.0)
+    assert composite["review_status"] == "high_confidence"
+    assert composite["low_confidence"] is False
+    assert composite["need_manual_review"] is False
+    assert composite["is_correct"] is False
     assert (details["q3"]["machine_score"], details["q3"]["score"], details["q3"]["final_score"]) == (4, 4, 5)
     assert details["q3"]["reviewed_by"] == "human"
     assert (details["q4"]["machine_score"], details["q4"]["final_score"]) == (6, 6)
@@ -127,7 +158,7 @@ def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, 
     assert float(stored["subjective_score_machine"]) == 16
     assert float(stored["subjective_score_final"]) == 20
     assert float(stored["total_score"]) == 23
-    assert stored["review_status"] == "reviewed"
+    assert stored["review_status"] == "pending"
 
 
 def test_regrade_submission_awaits_grader_and_persists_complete_result(monkeypatch):
@@ -207,6 +238,8 @@ def test_regrade_submission_awaits_grader_and_persists_complete_result(monkeypat
                 "machine_score": 4,
                 "final_score": 7,
                 "review_status": "reviewed",
+                "low_confidence": False,
+                "need_manual_review": False,
                 "manually_reviewed": True,
                 "reviewer_note": "人工确认",
             },

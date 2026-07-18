@@ -6,7 +6,11 @@ import json
 from typing import Any
 
 from . import database
-from .grader import aggregate_review_status, grade_submission
+from .grader import (
+    aggregate_composite_review_status,
+    aggregate_review_status,
+    grade_submission,
+)
 from .question_loader import SUBJECTIVE_TYPES
 
 
@@ -97,6 +101,8 @@ def _preserve_manual_final(
         old_detail.get("final_score", old_detail.get("score", 0)) or 0
     )
     new_detail["review_status"] = "reviewed"
+    new_detail["low_confidence"] = False
+    new_detail["need_manual_review"] = False
     for field in (
         "reviewed_by", "review_note", "manually_reviewed", "reviewer_note"
     ):
@@ -133,9 +139,21 @@ def _merge_manual_reviews(
                 float(sub.get("final_score", sub.get("score", 0)) or 0)
                 for sub in detail["sub_results"]
             )
-            detail["review_status"] = aggregate_review_status(detail["sub_results"])
-            detail["low_confidence"] = detail["review_status"] != "reviewed"
-            detail["need_manual_review"] = detail["review_status"] != "reviewed"
+            detail["review_status"] = aggregate_composite_review_status(
+                detail["sub_results"]
+            )
+            detail["low_confidence"] = (
+                detail["review_status"] == "low_confidence"
+                or any(sub.get("low_confidence") for sub in detail["sub_results"])
+            )
+            detail["need_manual_review"] = (
+                detail["review_status"] in {"need_review", "low_confidence", "pending"}
+                or any(sub.get("need_manual_review") for sub in detail["sub_results"])
+            )
+            detail["is_correct"] = abs(
+                float(detail["final_score"])
+                - float(detail.get("max_score", 0) or 0)
+            ) < 1e-6
             detail["reason"] = "; ".join(
                 f"{sub.get('sub_question_id')}={sub.get('final_score', sub.get('score'))}/{sub.get('max_score')}"
                 for sub in detail["sub_results"]

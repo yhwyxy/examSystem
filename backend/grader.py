@@ -359,6 +359,28 @@ async def _run_subjective_grading(
         }
 
 
+def aggregate_composite_review_status(
+    sub_results: list[dict[str, Any]],
+) -> str:
+    """按子题结果汇总复合题状态，供初次评分与重评共同使用。"""
+    if not sub_results:
+        return "pending"
+    if all(sub.get("review_status") == "reviewed" for sub in sub_results):
+        return "reviewed"
+    if any(
+        sub.get("review_status") == "low_confidence" or sub.get("low_confidence")
+        for sub in sub_results
+    ):
+        return "low_confidence"
+    if any(
+        sub.get("need_manual_review")
+        or sub.get("review_status") in {"need_review", "pending"}
+        for sub in sub_results
+    ):
+        return "need_review"
+    return "high_confidence"
+
+
 # ---------------------------------------------------------------------------
 # 逐题判分
 # ---------------------------------------------------------------------------
@@ -398,25 +420,7 @@ async def grade_composite_question(
 
     parent_machine = sum(float(s.get("machine_score", s.get("score", 0)) or 0) for s in sub_results)
     parent_final = sum(float(s.get("final_score", s.get("score", 0)) or 0) for s in sub_results)
-    review_status = "need_review"
-    if sub_results and all(s.get("review_status") == "reviewed" for s in sub_results):
-        review_status = "reviewed"
-    elif sub_results and all(
-        s.get("review_status") not in {"need_review", "low_confidence", "pending"}
-        for s in sub_results
-    ):
-        # 全部高置信则父题也可视为 auto 路径上的 high_confidence
-        if any(s.get("review_status") == "low_confidence" for s in sub_results):
-            review_status = "low_confidence"
-        elif any(s.get("need_manual_review") or s.get("low_confidence") for s in sub_results):
-            review_status = "need_review"
-        else:
-            review_status = "high_confidence"
-    else:
-        if any(s.get("review_status") == "low_confidence" for s in sub_results):
-            review_status = "low_confidence"
-        else:
-            review_status = "need_review"
+    review_status = aggregate_composite_review_status(sub_results)
 
     low_conf = any(s.get("low_confidence") for s in sub_results) or review_status in {
         "low_confidence",
