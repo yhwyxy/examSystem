@@ -187,3 +187,140 @@ def test_sanitize_scoring_points():
     assert "answer" not in qs[0]
     assert "scoring_rubric" not in qs[0]
     assert "scoring_points" not in qs[0]
+
+
+def test_composite_sub_questions_schema_ok():
+    from backend.question_loader import validate_questions
+
+    data = {
+        "exam_info": {"title": "复合题"},
+        "questions": [
+            {
+                "id": "c1",
+                "type": "short_answer",
+                "question": "阅读下列材料并回答",
+                "score": 10,
+                "sub_questions": [
+                    {
+                        "id": "s1",
+                        "question": "解释概念",
+                        "answer": "参考A",
+                        "score": 4,
+                        "scoring_mode": "text",
+                    },
+                    {
+                        "id": "s2",
+                        "question": "写 SQL",
+                        "answer": "SELECT 1",
+                        "score": 6,
+                        "scoring_mode": "sql",
+                        "code_language": "SQL",
+                    },
+                ],
+            }
+        ],
+    }
+    validate_questions(data)
+    q = data["questions"][0]
+    assert len(q["sub_questions"]) == 2
+    assert q["sub_questions"][1]["code_language"] == "sql"
+
+
+def test_composite_score_must_equal_sum():
+    from backend.question_loader import validate_questions
+    from fastapi import HTTPException
+
+    data = {
+        "exam_info": {"title": "t"},
+        "questions": [
+            {
+                "id": "c1",
+                "type": "short_answer",
+                "question": "父",
+                "score": 9,
+                "sub_questions": [
+                    {"id": "s1", "question": "a", "answer": "a", "score": 4, "scoring_mode": "text"},
+                    {"id": "s2", "question": "b", "answer": "b", "score": 6, "scoring_mode": "text"},
+                ],
+            }
+        ],
+    }
+    with pytest.raises(HTTPException) as ei:
+        validate_questions(data)
+    assert "sub_questions" in str(ei.value.detail).lower() or "子题" in str(ei.value.detail)
+
+
+def test_code_mode_requires_language():
+    from backend.question_loader import validate_questions
+    from fastapi import HTTPException
+
+    data = {
+        "exam_info": {"title": "t"},
+        "questions": [
+            {
+                "id": "q1",
+                "type": "short_answer",
+                "question": "写代码",
+                "answer": "print(1)",
+                "score": 5,
+                "scoring_mode": "code",
+            }
+        ],
+    }
+    with pytest.raises(HTTPException) as ei:
+        validate_questions(data)
+    assert "code_language" in str(ei.value.detail)
+
+
+def test_validate_answer_shape_composite_and_single():
+    from backend.question_loader import validate_answer_shape
+
+    composite = {
+        "id": "c1",
+        "type": "short_answer",
+        "sub_questions": [{"id": "s1", "score": 5}, {"id": "s2", "score": 5}],
+    }
+    validate_answer_shape(composite, {"s1": "a", "s2": "b"})
+    with pytest.raises(ValueError, match="INVALID_ANSWER_SHAPE"):
+        validate_answer_shape(composite, "plain string")
+    with pytest.raises(ValueError, match="INVALID_ANSWER_SHAPE"):
+        validate_answer_shape(composite, {"s1": "only-one"})
+
+    single = {"id": "q1", "type": "short_answer"}
+    validate_answer_shape(single, "ok")
+    with pytest.raises(ValueError, match="INVALID_ANSWER_SHAPE"):
+        validate_answer_shape(single, {"s1": "x"})
+
+
+def test_sanitize_keeps_sub_questions_strips_answers():
+    from backend.question_loader import sanitize_for_student
+
+    qs = sanitize_for_student([
+        {
+            "id": "c1",
+            "type": "short_answer",
+            "question": "父干",
+            "score": 10,
+            "answer": "不应出现",
+            "sub_questions": [
+                {
+                    "id": "s1",
+                    "question": "子1",
+                    "answer": "密钥",
+                    "score": 10,
+                    "scoring_mode": "text",
+                    "scoring_points": [{"id": "p1", "text": "点", "score": 10}],
+                    "code_language": "python",
+                }
+            ],
+        }
+    ])
+    out = qs[0]
+    assert "answer" not in out
+    assert "scoring_points" not in out
+    assert out["sub_questions"][0]["id"] == "s1"
+    assert out["sub_questions"][0]["question"] == "子1"
+    assert "answer" not in out["sub_questions"][0]
+    assert "scoring_points" not in out["sub_questions"][0]
+    assert out["sub_questions"][0].get("scoring_mode") == "text"
+

@@ -28,6 +28,10 @@ OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "true_false"}
 SUBJECTIVE_TYPES = {"short_answer", "essay"}
 SENSITIVE_FIELDS = {"answer", "scoring_rubric", "scoring_points", "calculation"}
 ALLOWED_SCORING_MODES = {"text", "sql", "code", "calculation"}
+ALLOWED_CODE_LANGUAGES = frozenset({
+    "python", "java", "javascript", "typescript", "go",
+    "c", "cpp", "csharp", "sql", "bash", "shell",
+})
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 PAPER_STATUS_OPEN = "open"
 PAPER_STATUS_CLOSED = "closed"
@@ -39,6 +43,39 @@ _index_cache: dict[str, Any] | None = None
 
 def is_objective(question: dict[str, Any]) -> bool:
     return question.get("type") in OBJECTIVE_TYPES
+
+
+def is_composite_question(q: dict[str, Any]) -> bool:
+    subs = q.get("sub_questions")
+    return isinstance(subs, list) and len(subs) > 0
+
+
+def _normalize_code_language(raw: Any, *, qid: str) -> str | None:
+    if raw is None or raw == "":
+        return None
+    lang = str(raw).strip().lower()
+    if lang not in ALLOWED_CODE_LANGUAGES:
+        _error(f"题目 {qid} 不支持的 code_language: {raw}")
+    return lang
+
+
+def validate_answer_shape(question: dict[str, Any], answer: Any) -> None:
+    """校验提交答案形状。非法时 raise ValueError('INVALID_ANSWER_SHAPE: ...')。"""
+    if is_composite_question(question):
+        if not isinstance(answer, dict):
+            raise ValueError("INVALID_ANSWER_SHAPE: 复合题答案必须为对象 map")
+        expected = {str(s.get("id")) for s in question["sub_questions"] if s.get("id")}
+        got = {str(k) for k in answer.keys()}
+        if got != expected:
+            raise ValueError(
+                f"INVALID_ANSWER_SHAPE: 复合题答案键必须为 {sorted(expected)}，实际 {sorted(got)}"
+            )
+        for k, v in answer.items():
+            if v is not None and not isinstance(v, str):
+                raise ValueError(f"INVALID_ANSWER_SHAPE: 子题 {k} 答案必须为字符串")
+        return
+    if isinstance(answer, dict):
+        raise ValueError("INVALID_ANSWER_SHAPE: 非复合题答案不能为对象")
 
 
 def _error(message: str, code: str = "INVALID_QUESTION_FILE", status: int = 500) -> None:
@@ -108,6 +145,76 @@ def _validate_scoring_points(q: dict[str, Any]) -> None:
         total += float(score)
     if total > max_score + 1e-6:
         _error(f"题目 {q.get('id')} 评分点合计 {total} 超过题目满分 {max_score}")
+
+
+def _validate_subjective_mode_and_language(q: dict[str, Any], *, label: str | None = None) -> None:
+    """规范化 scoring_mode / code_language，并做 code 语言必填等校验。"""
+    qid = label or str(q.get("id") or "?")
+    mode_raw = q.get("scoring_mode")
+    mode = str(mode_raw or "text").strip().lower() if mode_raw is not None else "text"
+    if mode_raw is not None and str(mode_raw).strip() and mode not in ALLOWED_SCORING_MODES:
+        _error(f"题目 {qid} scoring_mode 非法: {mode_raw}")
+    if mode_raw is not None and str(mode_raw).strip():
+        q["scoring_mode"] = mode
+    elif mode_raw is None or not str(mode_raw).strip():
+        # 子题/单题未写 mode 时默认 text，便于下游透传
+        q.setdefault("scoring_mode", "text")
+        mode = str(q.get("scoring_mode") or "text").strip().lower()
+
+    lang = _normalize_code_language(q.get("code_language"), qid=qid)
+    if mode == "code" and not lang:
+        _error(f"题目 {qid} 的 scoring_mode=code 时必须提供 code_language")
+    if mode == "sql":
+        if lang is None:
+            lang = "sql"
+        elif lang != "sql":
+            _error(f"题目 {qid} 的 scoring_mode=sql 时 code_language 必须为 sql")
+    if lang is not None:
+        q["code_language"] = lang
+    elif "code_language" in q and (q.get("code_language") is None or q.get("code_language") == ""):
+        q.pop("code_language", None)
+
+    _validate_scoring_points(q)
+    if mode == "calculation":
+        _validate_calculation(q)
+
+
+def _validate_sub_questions(parent: dict[str, Any]) -> None:
+    parent_qid = str(parent.get("id") or "?")
+    subs = parent.get("sub_questions")
+    if not isinstance(subs, list) or not subs:
+        _error(f"题目 {parent_qid} 的 sub_questions 必须为非空数组")
+    if parent.get("type") not in SUBJECTIVE_TYPES:
+        _error(f"题目 {parent_qid} 仅 short_answer/essay 可配置 sub_questions")
+
+    parent_score = float(parent.get("score") or 0)
+    seen: set[str] = set()
+    total = 0.0
+    for j, sub in enumerate(subs):
+        if not isinstance(sub, dict):
+            _error(f"题目 {parent_qid} sub_questions[{j}] 必须是对象")
+        sid = sub.get("id")
+        if not sid or not str(sid).strip():
+            _error(f"题目 {parent_qid} sub_questions[{j}] 缺少 id")
+        sid = str(sid).strip()
+        if sid in seen:
+            _error(f"题目 {parent_qid} 子题 id 重复: {sid}")
+        seen.add(sid)
+        sub["id"] = sid
+        if not sub.get("question"):
+            _error(f"题目 {parent_qid} 子题 {sid} 缺少 question")
+        if not sub.get("answer"):
+            _error(f"题目 {parent_qid} 子题 {sid} 缺少参考答案 answer")
+        score = sub.get("score")
+        if not isinstance(score, (int, float)) or float(score) <= 0:
+            _error(f"题目 {parent_qid} 子题 {sid} score 必须是大于 0 的数字")
+        total += float(score)
+        _validate_subjective_mode_and_language(sub, label=f"{parent_qid}.{sid}")
+
+    if abs(total - parent_score) > 1e-6:
+        _error(
+            f"题目 {parent_qid} 的 sub_questions 分值之和 ({total}) 不等于题目分值 ({parent_score})"
+        )
 
 
 def _validate_calculation(q: dict[str, Any]) -> None:
@@ -196,6 +303,8 @@ def validate_questions(data: dict[str, Any]) -> None:
         total += float(score)
 
         if qtype in OBJECTIVE_TYPES:
+            if is_composite_question(q):
+                _error(f"客观题 {qid} 不能配置 sub_questions")
             if qtype in {"single_choice", "multiple_choice"}:
                 _validate_option_list(q)
             if "answer" not in q:
@@ -207,14 +316,17 @@ def validate_questions(data: dict[str, Any]) -> None:
                 if not isinstance(ans, list) or not ans:
                     _error(f"多选题 {qid} answer 必须是非空数组")
         else:
+            subs = q.get("sub_questions")
+            if subs is not None:
+                if isinstance(subs, list) and len(subs) == 0:
+                    _error(f"题目 {qid} 的 sub_questions 不能为空数组，请省略该字段")
+                if is_composite_question(q):
+                    _validate_sub_questions(q)
+                    continue
+
             if not q.get("answer"):
                 _error(f"主观题 {qid} 缺少参考答案 answer")
-            mode = q.get("scoring_mode")
-            if mode is not None and str(mode).strip() and str(mode).strip().lower() not in ALLOWED_SCORING_MODES:
-                _error(f"题目 {qid} scoring_mode 非法: {mode}")
-            _validate_scoring_points(q)
-            if str(mode or "").strip().lower() == "calculation":
-                _validate_calculation(q)
+            _validate_subjective_mode_and_language(q)
 
     # 服务端以题目分和为准时仍检查一致性（写路径会覆盖 total_score）
     declared_total = info.get("total_score")
@@ -248,7 +360,23 @@ def recompute_total_score(data: dict[str, Any]) -> float:
 def sanitize_for_student(questions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     sanitized: list[dict[str, Any]] = []
     for q in questions:
-        sanitized.append({k: v for k, v in q.items() if k not in SENSITIVE_FIELDS})
+        public = {k: v for k, v in q.items() if k not in SENSITIVE_FIELDS and k != "sub_questions"}
+        if is_composite_question(q):
+            public["sub_questions"] = []
+            for s in q.get("sub_questions") or []:
+                if not isinstance(s, dict):
+                    continue
+                sub_public: dict[str, Any] = {
+                    "id": s.get("id"),
+                    "question": s.get("question", ""),
+                    "score": s.get("score"),
+                }
+                if s.get("scoring_mode"):
+                    sub_public["scoring_mode"] = s.get("scoring_mode")
+                if s.get("code_language"):
+                    sub_public["code_language"] = s.get("code_language")
+                public["sub_questions"].append(sub_public)
+        sanitized.append(public)
     return sanitized
 
 
