@@ -383,9 +383,11 @@
           }
         }
         q.sub_questions = subs;
+        delete q.answer;
         q.score = subs.reduce((a, s) => a + (Number(s.score) || 0), 0);
         $('qScore').value = q.score;
       } else {
+        delete q.sub_questions;
         const ans = $('qAnswer').value;
         if (!ans || !ans.trim()) { toast('请填写参考答案'); return; }
         q.answer = ans;
