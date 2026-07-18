@@ -196,6 +196,7 @@ class ReviewRequest(BaseModel):
     question_id: str
     new_score: float
     note: str | None = None
+    sub_question_id: str | None = None
 
 
 # 评分并发上限：防止「提交即新建线程 + 新建事件循环」导致
@@ -375,6 +376,17 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
     if elapsed > cfg.duration_minutes * 60 + cfg.grace_period_seconds:
         raise _error(403, "EXAM_TIMEOUT", "考试已超时，提交被拒绝")
 
+    full = question_loader.load_questions(paper_id)
+    qmap = {str(q["id"]): q for q in full.get("questions", [])}
+    for qid, ans in (req.answers or {}).items():
+        q = qmap.get(str(qid))
+        if not q:
+            continue
+        try:
+            question_loader.validate_answer_shape(q, ans)
+        except ValueError as e:
+            raise _error(422, "INVALID_ANSWER_SHAPE", str(e)) from e
+
     try:
         submission_id = database.insert_submission_pending(
             name=req.name.strip(),
@@ -534,7 +546,7 @@ def admin_delete_submissions(req: DeleteRequest) -> dict[str, Any]:
 
 @app.post("/api/admin/review", dependencies=[Depends(require_admin)])
 def admin_review(req: ReviewRequest) -> dict[str, Any]:
-    result = database.apply_review(submission_id=req.submission_id, question_id=req.question_id, new_score=req.new_score, note=req.note)
+    result = database.apply_review(submission_id=req.submission_id, question_id=req.question_id, new_score=req.new_score, note=req.note, sub_question_id=req.sub_question_id)
     if not result.get("success"):
         raise _error(400, result.get("code", "REVIEW_FAILED"), result.get("message", "复核失败"))
     return result

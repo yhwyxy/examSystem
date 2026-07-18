@@ -176,10 +176,12 @@
     }
     box.innerHTML = editing.questions.map((q, i) => {
       const mode = q.scoring_mode || (q.code_language ? (String(q.code_language).toLowerCase() === 'sql' ? 'sql' : 'code') : '');
+      const subN = Array.isArray(q.sub_questions) ? q.sub_questions.length : 0;
+      const subLabel = subN ? ` · 复合题 · ${subN} 子题` : '';
       return `<div class="question-editor-item">
         <div>
           <strong>${i + 1}. [${esc(TYPE_LABEL[q.type] || q.type)}] ${esc((q.question || '').slice(0, 80))}</strong>
-          <div class="muted">${esc(q.id)} · ${esc(q.score)} 分${mode ? ' · ' + esc(mode) : ''}</div>
+          <div class="muted">${esc(q.id)} · ${esc(q.score)} 分${mode ? ' · ' + esc(mode) : ''}${subLabel}</div>
         </div>
         <div class="toolbar">
           <button class="btn secondary q-up" type="button" data-i="${i}" ${!editing.editable ? 'disabled' : ''}>上移</button>
@@ -219,6 +221,7 @@
     $('qCodeLang').value = q.code_language || '';
     $('qRubric').value = q.scoring_rubric || '';
     renderPointsEditor(q.scoring_points || []);
+    renderSubQuestionsEditor(q.sub_questions || []);
     onTypeChange();
     if (!editing.editable) {
       $('questionFormPanel').querySelectorAll('input,textarea,select,button').forEach(el => {
@@ -298,6 +301,49 @@
     })).filter(p => p.text);
   }
 
+
+  function renderSubQuestionsEditor(subs) {
+    const list = $('qSubQuestionsList');
+    if (!list) return;
+    const items = Array.isArray(subs) ? subs : [];
+    list.innerHTML = items.map((s, i) => `
+      <div class="sub-q-row panel nested-panel" data-i="${i}" style="margin:8px 0;padding:10px;border:1px solid #e5e7eb;border-radius:8px;">
+        <div class="form-grid">
+          <label>子题 ID <input class="sq-id" value="${esc(s.id || `s${i+1}`)}"></label>
+          <label>分值 <input class="sq-score" type="number" min="0.5" step="0.5" value="${esc(s.score ?? 1)}"></label>
+          <label>评分模式
+            <select class="sq-mode">
+              <option value="text" ${s.scoring_mode==='text'?'selected':''}>文本</option>
+              <option value="sql" ${s.scoring_mode==='sql'?'selected':''}>SQL</option>
+              <option value="code" ${s.scoring_mode==='code'?'selected':''}>代码</option>
+              <option value="calculation" ${s.scoring_mode==='calculation'?'selected':''}>计算</option>
+            </select>
+          </label>
+          <label>代码语言 <input class="sq-lang" value="${esc(s.code_language || '')}" placeholder="python / sql"></label>
+        </div>
+        <label class="full-label">子题题干 <textarea class="sq-stem" rows="2">${esc(s.question || '')}</textarea></label>
+        <label class="full-label">子题参考答案 <textarea class="sq-answer code-answer" rows="3">${esc(s.answer || '')}</textarea></label>
+        <button class="btn danger sq-del" type="button" data-i="${i}">删除子题</button>
+      </div>
+    `).join('') || '<p class="muted">无子题（单题模式）</p>';
+  }
+
+  function collectSubQuestionsFromUI() {
+    return [...document.querySelectorAll('#qSubQuestionsList .sub-q-row')].map((row, i) => {
+      const mode = row.querySelector('.sq-mode').value || 'text';
+      const item = {
+        id: row.querySelector('.sq-id').value.trim() || `s${i+1}`,
+        question: row.querySelector('.sq-stem').value.trim(),
+        answer: row.querySelector('.sq-answer').value,
+        score: Number(row.querySelector('.sq-score').value) || 0,
+        scoring_mode: mode,
+      };
+      const lang = row.querySelector('.sq-lang').value.trim();
+      if (lang) item.code_language = lang;
+      return item;
+    }).filter(s => s.question);
+  }
+
   function applyQuestionFromForm() {
     if (!editing?.editable) return;
     const type = $('qType').value;
@@ -324,16 +370,36 @@
     } else if (type === 'true_false') {
       q.answer = $('qTrueFalseAnswer').value === 'true';
     } else {
-      const ans = $('qAnswer').value;
-      if (!ans || !ans.trim()) { toast('请填写参考答案'); return; }
-      q.answer = ans;
-      q.scoring_mode = $('qScoringMode').value || 'text';
-      const lang = $('qCodeLang').value.trim();
-      if (lang) q.code_language = lang;
-      const rubric = $('qRubric').value.trim();
-      if (rubric) q.scoring_rubric = rubric;
-      const points = collectPointsFromUI();
-      if (points.length) q.scoring_points = points;
+      const subs = collectSubQuestionsFromUI();
+      if (subs.length) {
+        const ids = new Set();
+        for (const s of subs) {
+          if (!s.answer || !String(s.answer).trim()) { toast(`子题 ${s.id} 需要参考答案`); return; }
+          if (!(s.score > 0)) { toast(`子题 ${s.id} 分值须 > 0`); return; }
+          if (ids.has(s.id)) { toast(`子题 ID 重复: ${s.id}`); return; }
+          ids.add(s.id);
+          if (s.scoring_mode === 'code' && !s.code_language) {
+            toast(`子题 ${s.id} 代码模式必须填写语言`); return;
+          }
+        }
+        q.sub_questions = subs;
+        q.score = subs.reduce((a, s) => a + (Number(s.score) || 0), 0);
+        $('qScore').value = q.score;
+      } else {
+        const ans = $('qAnswer').value;
+        if (!ans || !ans.trim()) { toast('请填写参考答案'); return; }
+        q.answer = ans;
+        q.scoring_mode = $('qScoringMode').value || 'text';
+        if (q.scoring_mode === 'code' && !$('qCodeLang').value.trim()) {
+          toast('代码模式必须填写语言'); return;
+        }
+        const lang = $('qCodeLang').value.trim();
+        if (lang) q.code_language = lang;
+        const rubric = $('qRubric').value.trim();
+        if (rubric) q.scoring_rubric = rubric;
+        const points = collectPointsFromUI();
+        if (points.length) q.scoring_points = points;
+      }
     }
 
     if (editingQuestionIndex >= 0) {
@@ -425,6 +491,23 @@
     if (cancelQ) cancelQ.addEventListener('click', hideQuestionForm);
     const applyQ = $('applyQuestionBtn');
     if (applyQ) applyQ.addEventListener('click', applyQuestionFromForm);
+
+    const addSubBtn = $('addSubQuestionBtn');
+    if (addSubBtn) addSubBtn.addEventListener('click', () => {
+      const cur = collectSubQuestionsFromUI();
+      cur.push({ id: `s${cur.length + 1}`, question: '', answer: '', score: 1, scoring_mode: 'text' });
+      renderSubQuestionsEditor(cur);
+    });
+    const subList = $('qSubQuestionsList');
+    if (subList) subList.addEventListener('click', (e) => {
+      const btn = e.target.closest('.sq-del');
+      if (!btn) return;
+      const cur = collectSubQuestionsFromUI();
+      const i = Number(btn.dataset.i);
+      cur.splice(i, 1);
+      renderSubQuestionsEditor(cur);
+    });
+
     const qType = $('qType');
     if (qType) qType.addEventListener('change', () => {
       onTypeChange();

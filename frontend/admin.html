@@ -201,6 +201,7 @@
                       <option value="text">文本</option>
                       <option value="sql">SQL</option>
                       <option value="code">代码</option>
+                      <option value="calculation">计算题</option>
                     </select>
                   </label>
                   <label>代码语言
@@ -215,6 +216,14 @@
                   <button class="btn secondary" id="addPointBtn" type="button">加评分点</button>
                 </div>
                 <div id="qPointsList"></div>
+                <div id="qSubQuestionsBlock" class="q-block" style="margin-top:1rem">
+                  <div class="section-head">
+                    <h3>子题（复合题，可选）</h3>
+                    <button class="btn secondary" id="addSubQuestionBtn" type="button">加子题</button>
+                  </div>
+                  <p class="muted form-note">添加子题后，父题参考答案可留空；父分值必须等于子题分值之和（保存时自动汇总）。</p>
+                  <div id="qSubQuestionsList"></div>
+                </div>
               </div>
 
               <div class="toolbar" style="margin-top:1rem">

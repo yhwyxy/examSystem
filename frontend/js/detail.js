@@ -60,8 +60,45 @@ function render() {
   $('detail').innerHTML = gradingDetail.map(d => {
     const subjective = ['short_answer', 'essay'].includes(d.type);
     const questionId = d.question_id;
-    const studentAnswer = Array.isArray(d.student_answer) ? d.student_answer.join(',') : (d.student_answer ?? '');
-    const referenceAnswer = Array.isArray(d.reference_answer) ? d.reference_answer.join(',') : (d.reference_answer ?? '');
+    const isComposite = d.is_composite && Array.isArray(d.sub_results);
+
+    if (isComposite) {
+      const subHtml = (d.sub_results || []).map(s => {
+        const sid = s.sub_question_id;
+        const inputId = `score_${questionId}__${sid}`;
+        const noteId = `note_${questionId}__${sid}`;
+        return `<div class="sub-result card nested" style="margin:12px 0;padding:12px;border:1px solid #e5e7eb;border-radius:8px;">
+          <h4>子题 ${esc(sid)}. ${esc(s.question || '')}</h4>
+          <p class="muted">满分 ${esc(s.max_score)}，机器分 ${esc(s.score)}，最终分 <b>${esc(s.final_score ?? s.score)}</b> ${badge(s.review_status)}</p>
+          <div class="answer-box"><b>学生：</b><br>${esc(s.student_answer ?? '')}</div>
+          <div class="answer-box"><b>参考：</b><br>${esc(s.reference_answer ?? '')}</div>
+          ${s.reason ? `<p><b>理由：</b>${esc(s.reason)}</p>` : ''}
+          <div class="toolbar">
+            <input class="score-input" type="number" id="${esc(inputId)}" value="${esc(s.final_score ?? s.score)}">
+            <input class="note-input" type="text" id="${esc(noteId)}" placeholder="子题复核备注">
+            <button class="btn review-btn" data-qid="${esc(questionId)}" data-sid="${esc(sid)}">保存子题复核</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      return `<div class="card">
+        <div class="header"><h3>${esc(questionId)}. ${esc(d.question)}</h3>${badge(d.review_status || d.grading_status)}</div>
+        <p class="muted">复合题 · 满分：${esc(d.max_score)}，机器分：${esc(d.score)}，最终分：<b>${esc(d.final_score ?? d.score)}</b></p>
+        ${d.reason ? `<p><b>汇总：</b>${esc(d.reason)}</p>` : ''}
+        ${subHtml}
+      </div>`;
+    }
+
+    const studentAnswer = Array.isArray(d.student_answer)
+      ? d.student_answer.join(',')
+      : (typeof d.student_answer === 'object' && d.student_answer !== null
+          ? JSON.stringify(d.student_answer)
+          : (d.student_answer ?? ''));
+    const referenceAnswer = Array.isArray(d.reference_answer)
+      ? d.reference_answer.join(',')
+      : (typeof d.reference_answer === 'object' && d.reference_answer !== null
+          ? JSON.stringify(d.reference_answer)
+          : (d.reference_answer ?? ''));
 
     return `<div class="card">
       <div class="header"><h3>${esc(questionId)}. ${esc(d.question)}</h3>${badge(d.review_status || d.grading_status)}</div>
@@ -82,13 +119,17 @@ async function load() {
   render();
 }
 
-async function review(qid) {
-  const score = Number($('score_' + qid).value);
-  const note = $('note_' + qid).value;
+async function review(qid, sid) {
+  const scoreElId = sid ? `score_${qid}__${sid}` : `score_${qid}`;
+  const noteElId = sid ? `note_${qid}__${sid}` : `note_${qid}`;
+  const score = Number($(scoreElId).value);
+  const note = $(noteElId).value;
+  const body = { submission_id: Number(id), question_id: qid, new_score: score, note };
+  if (sid) body.sub_question_id = sid;
   const res = await authFetch('/api/admin/review', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ submission_id: Number(id), question_id: qid, new_score: score, note })
+    body: JSON.stringify(body)
   });
   const data = await res.json();
   if (!res.ok || !data.success) { toast(data.detail?.message || data.message || '保存失败'); return; }
@@ -99,7 +140,7 @@ async function review(qid) {
 $('detail').addEventListener('click', (e) => {
   const btn = e.target.closest('.review-btn');
   if (!btn) return;
-  review(btn.dataset.qid).catch(err => toast(err.message));
+  review(btn.dataset.qid, btn.dataset.sid || null).catch(err => toast(err.message));
 });
 
 $('regradeBtn').addEventListener('click', async () => {

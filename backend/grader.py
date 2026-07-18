@@ -212,12 +212,18 @@ def build_scoring_request(
 
     cfg = get_config()
     precision = int(getattr(cfg.scoring, "score_precision", 1))
+    raw_lang = question.get("code_language")
+    code_language = (
+        str(raw_lang).strip().lower() or None
+        if raw_lang not in (None, "")
+        else None
+    )
     payload: dict[str, Any] = {
         "question_id": str(question.get("id", "?")),
         "paper_id": question.get("paper_id"),
         "question_type": qtype,
         "scoring_mode": mode,
-        "code_language": question.get("code_language"),
+        "code_language": code_language,
         "course_type": question.get("course_type"),
         "max_score": max_score,
         "question": str(question.get("question") or ""),
@@ -305,6 +311,11 @@ def detail_from_scoring_result(
 # 主观题判分
 # ---------------------------------------------------------------------------
 
+async def grade_subjective_question(question: dict[str, Any], student_answer: str) -> dict[str, Any]:
+    """公开别名：单道主观题评分（供测试/复合题复用）。"""
+    return await _run_subjective_grading(question, student_answer)
+
+
 async def _run_subjective_grading(
     question: dict[str, Any],
     student_answer: str,
@@ -348,13 +359,106 @@ async def _run_subjective_grading(
 # 逐题判分
 # ---------------------------------------------------------------------------
 
+async def grade_composite_question(
+    question: dict[str, Any],
+    raw_answer: Any,
+) -> dict[str, Any]:
+    """复合题：逐子题评分并汇总为一条 parent detail。"""
+    from .question_loader import is_composite_question
+
+    qid = str(question.get("id") or "")
+    raw = raw_answer if isinstance(raw_answer, dict) else {}
+    sub_results: list[dict[str, Any]] = []
+
+    for sub in question.get("sub_questions") or []:
+        if not isinstance(sub, dict):
+            continue
+        sid = str(sub.get("id") or "")
+        sub_ans = raw.get(sid, "")
+        if sub_ans is None:
+            sub_ans = ""
+        sub_q = {
+            **sub,
+            "type": question.get("type"),
+            "paper_id": question.get("paper_id"),
+            "id": f"{qid}:{sid}",
+        }
+        sub_detail = await _run_subjective_grading(sub_q, str(sub_ans))
+        sub_detail["sub_question_id"] = sid
+        sub_detail["question_id"] = qid
+        sub_detail["question"] = sub.get("question", "")
+        # 兼容导出/复核：统一 score 字段
+        if "score" not in sub_detail:
+            sub_detail["score"] = sub_detail.get("machine_score", sub_detail.get("final_score", 0))
+        sub_results.append(sub_detail)
+
+    parent_machine = sum(float(s.get("machine_score", s.get("score", 0)) or 0) for s in sub_results)
+    parent_final = sum(float(s.get("final_score", s.get("score", 0)) or 0) for s in sub_results)
+    review_status = "need_review"
+    if sub_results and all(s.get("review_status") == "reviewed" for s in sub_results):
+        review_status = "reviewed"
+    elif sub_results and all(
+        s.get("review_status") not in {"need_review", "low_confidence", "pending"}
+        for s in sub_results
+    ):
+        # 全部高置信则父题也可视为 auto 路径上的 high_confidence
+        if any(s.get("review_status") == "low_confidence" for s in sub_results):
+            review_status = "low_confidence"
+        elif any(s.get("need_manual_review") or s.get("low_confidence") for s in sub_results):
+            review_status = "need_review"
+        else:
+            review_status = "high_confidence"
+    else:
+        if any(s.get("review_status") == "low_confidence" for s in sub_results):
+            review_status = "low_confidence"
+        else:
+            review_status = "need_review"
+
+    low_conf = any(s.get("low_confidence") for s in sub_results) or review_status in {
+        "low_confidence",
+        "need_review",
+    }
+    return {
+        "question_id": qid,
+        "type": question.get("type"),
+        "question": question.get("question", ""),
+        "is_composite": True,
+        "student_answer": raw,
+        "reference_answer": {
+            str(s.get("id")): s.get("answer")
+            for s in (question.get("sub_questions") or [])
+            if isinstance(s, dict)
+        },
+        "max_score": float(question.get("score") or 0),
+        "machine_score": parent_machine,
+        "score": parent_machine,
+        "final_score": parent_final,
+        "is_correct": abs(parent_final - float(question.get("score") or 0)) < 1e-6,
+        "grading_method": "composite",
+        "sub_results": sub_results,
+        "review_status": review_status,
+        "reason": "; ".join(
+            f"{s.get('sub_question_id')}={s.get('final_score', s.get('score'))}/{s.get('max_score')}"
+            for s in sub_results
+        ),
+        "low_confidence": low_conf,
+        "need_manual_review": low_conf or review_status in {"need_review", "low_confidence"},
+    }
+
+
 async def grade_question(
     question: dict[str, Any],
     student_answer: Any,
 ) -> dict[str, Any]:
     """对单道题判分，返回该题的 grading_detail 条目。"""
+    from .question_loader import is_composite_question
+
     qtype = question.get("type")
     if qtype in SUBJECTIVE_TYPES:
+        if is_composite_question(question):
+            return await grade_composite_question(question, student_answer)
+        if isinstance(student_answer, dict):
+            student_answer = ""
         return await _run_subjective_grading(question, str(student_answer or ""))
     return objective_grader.grade_objective(question, student_answer)
 

@@ -544,8 +544,9 @@ def apply_review(
     new_score: float,
     note: str | None,
     operator: str = "human",
+    sub_question_id: str | None = None,
 ) -> dict[str, Any]:
-    """人工复核：更新指定题目的分数并重新计算总分。"""
+    """人工复核：更新指定题目（或复合题子题）的分数并重新计算总分。"""
     with db_cursor() as conn:
         row = conn.execute(
             "SELECT grading_detail_json, objective_score, subjective_score_machine FROM submissions WHERE id = ?",
@@ -557,22 +558,57 @@ def apply_review(
         details: list[dict[str, Any]] = json.loads(row["grading_detail_json"])
         target = None
         for item in details:
-            if item.get("question_id") == question_id:
+            if str(item.get("question_id")) == str(question_id):
                 target = item
                 break
         if target is None:
             return {"success": False, "code": "QUESTION_NOT_FOUND", "message": "未找到对应题目"}
 
-        max_score = float(target.get("max_score", 0))
-        if new_score < 0 or new_score > max_score:
-            return {"success": False, "code": "REVIEW_SCORE_INVALID", "message": "复核分数非法"}
+        log_qid = str(question_id)
 
-        old_score = float(target.get("score", 0))
-        target["score"] = new_score
-        target["final_score"] = new_score
-        target["reviewed_by"] = operator
-        target["review_note"] = note or ""
-        target["review_status"] = "reviewed"
+        if sub_question_id:
+            if not target.get("is_composite") or not isinstance(target.get("sub_results"), list):
+                return {"success": False, "code": "NOT_COMPOSITE", "message": "题目不是复合题"}
+            sub = next(
+                (
+                    s
+                    for s in target["sub_results"]
+                    if str(s.get("sub_question_id")) == str(sub_question_id)
+                ),
+                None,
+            )
+            if sub is None:
+                return {"success": False, "code": "QUESTION_NOT_FOUND", "message": "未找到子题"}
+            max_score = float(sub.get("max_score", 0))
+            if new_score < 0 or new_score > max_score:
+                return {"success": False, "code": "REVIEW_SCORE_INVALID", "message": "复核分数非法"}
+            old_score = float(sub.get("final_score", sub.get("score", 0)))
+            sub["score"] = new_score
+            sub["final_score"] = new_score
+            sub["reviewed_by"] = operator
+            sub["review_note"] = note or ""
+            sub["review_status"] = "reviewed"
+            target["score"] = sum(float(s.get("score") or 0) for s in target["sub_results"])
+            target["final_score"] = sum(
+                float(s.get("final_score", s.get("score") or 0)) for s in target["sub_results"]
+            )
+            target["reviewed_by"] = operator
+            if all(s.get("review_status") == "reviewed" for s in target["sub_results"]):
+                target["review_status"] = "reviewed"
+            else:
+                target["review_status"] = "need_review"
+            log_qid = f"{question_id}#{sub_question_id}"
+        else:
+            max_score = float(target.get("max_score", 0))
+            if new_score < 0 or new_score > max_score:
+                return {"success": False, "code": "REVIEW_SCORE_INVALID", "message": "复核分数非法"}
+
+            old_score = float(target.get("final_score", target.get("score", 0)))
+            target["score"] = new_score
+            target["final_score"] = new_score
+            target["reviewed_by"] = operator
+            target["review_note"] = note or ""
+            target["review_status"] = "reviewed"
 
         new_subjective = sum(
             float(d.get("final_score", d.get("score", 0)))
@@ -581,21 +617,35 @@ def apply_review(
         )
         new_total = float(row["objective_score"]) + new_subjective
 
+        still_need = any(
+            d.get("review_status") in {"need_review", "low_confidence", "pending"}
+            for d in details
+            if d.get("type") in {"short_answer", "essay"}
+        )
+        review_status = "need_review" if still_need else "reviewed"
+
         conn.execute(
-            "UPDATE submissions SET grading_detail_json = ?, subjective_score_final = ?, total_score = ?, review_status = 'reviewed' WHERE id = ?",
-            (json.dumps(details, ensure_ascii=False), new_subjective, new_total, submission_id),
+            "UPDATE submissions SET grading_detail_json = ?, subjective_score_final = ?, total_score = ?, review_status = ? WHERE id = ?",
+            (json.dumps(details, ensure_ascii=False), new_subjective, new_total, review_status, submission_id),
         )
 
         insert_review_log(
             submission_id=submission_id,
-            question_id=question_id,
+            question_id=log_qid,
             old_score=old_score,
             new_score=new_score,
             note=note,
             conn=conn,
         )
 
-        return {"success": True, "total_score": new_total}
+        return {
+            "success": True,
+            "total_score": new_total,
+            "subjective_score_final": new_subjective,
+            "review_status": review_status,
+            "old_score": old_score,
+            "new_score": new_score,
+        }
 
 
 def save_grading_result(

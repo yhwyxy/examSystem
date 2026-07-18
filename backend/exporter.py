@@ -9,8 +9,39 @@ from . import database
 from . import question_loader
 
 
+
+def format_student_answer_for_export(detail: dict[str, Any]) -> str:
+    if detail.get("is_composite") and isinstance(detail.get("sub_results"), list):
+        lines = []
+        for s in detail["sub_results"]:
+            sid = s.get("sub_question_id", "?")
+            ans = s.get("student_answer", "")
+            lines.append(f"[{sid}] {ans}")
+        return "\n".join(lines)
+    ans = detail.get("student_answer", "")
+    if isinstance(ans, list):
+        return ",".join(str(x) for x in ans)
+    if isinstance(ans, dict):
+        return json.dumps(ans, ensure_ascii=False)
+    return str(ans or "")
+
+
+def format_score_note_for_export(detail: dict[str, Any]) -> str:
+    if detail.get("is_composite") and isinstance(detail.get("sub_results"), list):
+        parts = [
+            f"{s.get('sub_question_id')}={s.get('final_score', s.get('score'))}/{s.get('max_score')}"
+            for s in detail["sub_results"]
+        ]
+        return "复合题: " + "; ".join(parts)
+    return str(detail.get("reason") or "")
+
+
 def _answer_to_text(answer: Any) -> str:
-    if isinstance(answer, (list, dict)):
+    if isinstance(answer, dict):
+        # 复合题答案 map：分行展示
+        lines = [f"[{k}] {v}" for k, v in answer.items()]
+        return "\n".join(lines)
+    if isinstance(answer, list):
         return json.dumps(answer, ensure_ascii=False)
     if isinstance(answer, bool):
         return "正确" if answer else "错误"
@@ -81,6 +112,18 @@ def export_submissions_xlsx(paper_id: str | None = None) -> bytes:
         if not answers and isinstance(r.get("answers"), dict):
             answers = r["answers"]
 
+        details_by_qid: dict[str, Any] = {}
+        detail_raw = r.get("grading_detail_json")
+        if detail_raw:
+            try:
+                details = json.loads(detail_raw) if isinstance(detail_raw, str) else detail_raw
+            except Exception:
+                details = []
+            for d in details or []:
+                qid = str(d.get("question_id") or "")
+                if qid:
+                    details_by_qid[qid] = d
+
         base = [
             r.get("id"), r.get("name"), r.get("employee_id"),
             r.get("paper_id") or "", r.get("paper_name") or "",
@@ -89,7 +132,17 @@ def export_submissions_xlsx(paper_id: str | None = None) -> bytes:
             r.get("subjective_score_final"), r.get("total_score"),
             r.get("review_status"), r.get("submitted_at"),
         ]
-        ans_cols = [_answer_to_text(answers.get(qid)) for qid in question_ids]
+        ans_cols = []
+        for qid in question_ids:
+            d = details_by_qid.get(str(qid))
+            if d and (d.get("is_composite") or d.get("sub_results")):
+                cell = format_student_answer_for_export(d)
+                note = format_score_note_for_export(d)
+                if note:
+                    cell = f"{cell}\n{note}"
+                ans_cols.append(cell)
+            else:
+                ans_cols.append(_answer_to_text(answers.get(qid)))
         ws.append(base + ans_cols)
 
     for i, h in enumerate(headers, 1):

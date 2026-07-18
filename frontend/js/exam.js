@@ -114,15 +114,41 @@ function renderQuestion(q, idx) {
     box.appendChild(createAnswerOption(q, { value: true, text: '正确' }, 'radio', { hideKey: true }));
     box.appendChild(createAnswerOption(q, { value: false, text: '错误' }, 'radio', { hideKey: true }));
   } else {
-    const ta = document.createElement('textarea');
-    ta.name = String(q.id);
-    ta.rows = 6;
-    ta.placeholder = '请输入答案';
-    if (q.scoring_mode === 'code' || q.code_language) {
-      ta.className = 'code-answer';
-      ta.placeholder = `请输入代码${q.code_language ? '（' + q.code_language + '）' : ''}`;
+    const subs = Array.isArray(q.sub_questions) ? q.sub_questions : [];
+    if (subs.length) {
+      const wrap = document.createElement('div');
+      wrap.className = 'composite-answers';
+      for (const s of subs) {
+        const block = document.createElement('div');
+        block.className = 'sub-answer';
+        const label = document.createElement('div');
+        label.className = 'sub-label';
+        label.textContent = `(${s.id}) ${s.question || ''}（${s.score} 分）`;
+        const ta = document.createElement('textarea');
+        ta.name = `${q.id}__${s.id}`;
+        ta.dataset.qid = String(q.id);
+        ta.dataset.sid = String(s.id);
+        ta.rows = 6;
+        ta.placeholder = '请输入子题答案';
+        if (s.scoring_mode === 'code' || s.code_language) {
+          ta.className = 'code-answer';
+          ta.placeholder = `请输入代码${s.code_language ? '（' + s.code_language + '）' : ''}`;
+        }
+        block.append(label, ta);
+        wrap.appendChild(block);
+      }
+      box.appendChild(wrap);
+    } else {
+      const ta = document.createElement('textarea');
+      ta.name = String(q.id);
+      ta.rows = 6;
+      ta.placeholder = '请输入答案';
+      if (q.scoring_mode === 'code' || q.code_language) {
+        ta.className = 'code-answer';
+        ta.placeholder = `请输入代码${q.code_language ? '（' + q.code_language + '）' : ''}`;
+      }
+      box.appendChild(ta);
     }
-    box.appendChild(ta);
   }
   return box;
 }
@@ -157,8 +183,20 @@ function collectAnswers() {
       const el = document.querySelector(questionControlSelector(q, ':checked'));
       answers[q.id] = el ? el.value : null;
     } else {
-      const el = document.querySelector(questionControlSelector(q));
-      answers[q.id] = el ? el.value : '';
+      const subs = Array.isArray(q.sub_questions) ? q.sub_questions : [];
+      if (subs.length) {
+        const map = {};
+        for (const s of subs) {
+          const el = document.querySelector(
+            `textarea[data-qid="${safeQuestionId(q.id)}"][data-sid="${safeQuestionId(s.id)}"]`
+          );
+          map[s.id] = el ? el.value : '';
+        }
+        answers[q.id] = map;
+      } else {
+        const el = document.querySelector(questionControlSelector(q));
+        answers[q.id] = el ? el.value : '';
+      }
     }
   }
   return answers;

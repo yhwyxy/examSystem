@@ -482,3 +482,149 @@ def test_real_subjective_service_smoke():
         assert detail["machine_score"] >= 0
     finally:
         grader_mod.set_subjective_service(None)
+
+
+def test_build_scoring_request_passes_code_language():
+    from backend.grader import build_scoring_request
+
+    q = {
+        "id": "q1",
+        "type": "short_answer",
+        "question": "写 python",
+        "answer": "print(1)",
+        "score": 5,
+        "scoring_mode": "code",
+        "code_language": "Python",
+    }
+    req = build_scoring_request(q, "print(1)")
+    assert req.code_language == "python"
+    mode = req.scoring_mode
+    assert getattr(mode, "value", mode) == "code" or str(mode).endswith("code") or str(mode) == "code"
+
+
+def test_grade_composite_sums_sub_scores(monkeypatch):
+    import asyncio
+    from backend import grader
+
+    parent = {
+        "id": "c1",
+        "type": "short_answer",
+        "question": "父",
+        "score": 10,
+        "sub_questions": [
+            {"id": "s1", "question": "子1", "answer": "A", "score": 4, "scoring_mode": "text"},
+            {"id": "s2", "question": "子2", "answer": "B", "score": 6, "scoring_mode": "text"},
+        ],
+    }
+
+    async def fake_run(question, student_answer: str):
+        sid = str(question.get("id") or "")
+        score = 2.0 if sid.endswith("s1") else 5.0
+        return {
+            "question_id": question.get("id"),
+            "type": question.get("type"),
+            "question": question.get("question"),
+            "student_answer": student_answer,
+            "reference_answer": question.get("answer"),
+            "max_score": float(question.get("score") or 0),
+            "machine_score": score,
+            "score": score,
+            "final_score": score,
+            "grading_method": "subjective_scoring:text",
+            "review_status": "high_confidence",
+            "reason": "ok",
+            "confidence": 0.95,
+            "low_confidence": False,
+        }
+
+    monkeypatch.setattr(grader, "_run_subjective_grading", fake_run)
+    detail = asyncio.run(grader.grade_composite_question(parent, {"s1": "a", "s2": "b"}))
+    assert detail["is_composite"] is True
+    assert detail["score"] == 7.0
+    assert detail["final_score"] == 7.0
+    assert len(detail["sub_results"]) == 2
+    assert detail["sub_results"][0]["sub_question_id"] == "s1"
+    assert detail["student_answer"] == {"s1": "a", "s2": "b"}
+
+
+def test_format_answer_for_export_composite():
+    from backend.exporter import format_student_answer_for_export, format_score_note_for_export
+
+    d = {
+        "is_composite": True,
+        "sub_results": [
+            {"sub_question_id": "s1", "student_answer": "答1", "final_score": 2, "max_score": 4},
+            {"sub_question_id": "s2", "student_answer": "答2", "final_score": 6, "max_score": 6},
+        ],
+        "student_answer": {"s1": "答1", "s2": "答2"},
+    }
+    text = format_student_answer_for_export(d)
+    assert "s1" in text and "答1" in text
+    assert "s2" in text
+    note = format_score_note_for_export(d)
+    assert "复合题" in note
+    assert "s1=2/4" in note
+
+
+def test_apply_review_sub_question(tmp_path, monkeypatch):
+    from backend import database
+    import json
+
+    db_path = tmp_path / "t.db"
+    monkeypatch.setattr(database, "DB_PATH", db_path)
+    monkeypatch.setattr(database, "_initialized", False)
+    database.init_db()
+
+    detail = [{
+        "question_id": "c1",
+        "type": "short_answer",
+        "is_composite": True,
+        "max_score": 10,
+        "score": 5,
+        "final_score": 5,
+        "review_status": "need_review",
+        "sub_results": [
+            {"sub_question_id": "s1", "max_score": 4, "score": 2, "final_score": 2, "review_status": "need_review"},
+            {"sub_question_id": "s2", "max_score": 6, "score": 3, "final_score": 3, "review_status": "high_confidence"},
+        ],
+    }]
+    sid = database.insert_submission(
+        name="张三",
+        employee_id="E1",
+        paper_id="p1",
+        paper_name="P1",
+        department="D",
+        answers={"c1": {"s1": "a", "s2": "b"}},
+        grading_detail=detail,
+        scores={
+            "objective_score": 0,
+            "subjective_score_machine": 5,
+            "subjective_score_final": 5,
+            "total_score": 5,
+        },
+        review_status="need_review",
+        started_at=None,
+        client_ip=None,
+        user_agent=None,
+    )
+
+    r = database.apply_review(
+        submission_id=sid,
+        question_id="c1",
+        new_score=4,
+        note="满分口径",
+        sub_question_id="s1",
+    )
+    assert r["success"] is True, r
+    with database.db_cursor() as conn:
+        row = conn.execute(
+            "SELECT grading_detail_json, subjective_score_final FROM submissions WHERE id=?",
+            (sid,),
+        ).fetchone()
+        details = json.loads(row["grading_detail_json"])
+        target = details[0]
+        s1 = next(s for s in target["sub_results"] if s["sub_question_id"] == "s1")
+        assert s1["final_score"] == 4
+        assert target["final_score"] == 7
+        assert float(row["subjective_score_final"]) == 7
+
