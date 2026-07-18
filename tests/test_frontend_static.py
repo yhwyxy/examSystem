@@ -34,6 +34,32 @@ def test_exam_answer_collection_escapes_dynamic_question_ids():
     assert '`[name="${q.id}"]`' not in collect_answers
 
 
+def test_exam_renders_canonical_subquestions_with_code_language_whitelist():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function renderExam")
+
+    assert "q.subquestions" in render_question
+    assert "q.sub_questions" not in render_question
+    assert "s.allowed_languages" in render_question
+    assert "data-language-for" in render_question
+    assert "document.createElement('select')" in render_question
+    assert "document.createElement('option')" in render_question
+    assert "s.code_language" not in render_question
+
+
+def test_exam_collects_nested_subquestion_answers_and_selected_language():
+    source = read_frontend_file("frontend/js/exam.js")
+    collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
+
+    assert "q.subquestions" in collect_answers
+    assert "q.sub_questions" not in collect_answers
+    assert "data-language-for" in collect_answers
+    assert "{ answer:" in collect_answers
+    assert "subAnswer.language =" in collect_answers
+    assert "safeQuestionId(q.id)" in collect_answers
+    assert "safeQuestionId(s.id)" in collect_answers
+
+
 
 def test_exam_script_implements_deduplicated_anti_switch_auto_submit():
     source = read_frontend_file("frontend/js/exam.js")
@@ -134,4 +160,3 @@ def test_admin_shell_is_fixed_two_pane_layout():
     assert "panel.hidden" in js
     assert 'data-view="overview"' in html
     assert 'href="#overview"' not in html
-

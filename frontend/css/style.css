@@ -811,4 +811,16 @@ tbody tr:hover {
 .full-label { display: block; margin: 0.5rem 0 0.75rem; }
 .full-label textarea { width: 100%; }
 .code-answer { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.composite-answers { display: grid; gap: 16px; }
+.sub-answer {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.sub-answer:first-child { padding-top: 0; border-top: 0; }
+.sub-label { color: var(--ink); font-weight: 650; overflow-wrap: anywhere; }
+.code-language-field { width: min(100%, 260px); }
+.code-language-select { min-width: 0; }
 .q-block { margin-top: 0.75rem; }

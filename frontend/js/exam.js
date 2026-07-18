@@ -114,7 +114,7 @@ function renderQuestion(q, idx) {
     box.appendChild(createAnswerOption(q, { value: true, text: '正确' }, 'radio', { hideKey: true }));
     box.appendChild(createAnswerOption(q, { value: false, text: '错误' }, 'radio', { hideKey: true }));
   } else {
-    const subs = Array.isArray(q.sub_questions) ? q.sub_questions : [];
+    const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
     if (subs.length) {
       const wrap = document.createElement('div');
       wrap.className = 'composite-answers';
@@ -124,17 +124,37 @@ function renderQuestion(q, idx) {
         const label = document.createElement('div');
         label.className = 'sub-label';
         label.textContent = `(${s.id}) ${s.question || ''}（${s.score} 分）`;
+        block.appendChild(label);
+        const controlKey = `${q.id}__${s.id}`;
+        const languages = Array.isArray(s.allowed_languages) ? s.allowed_languages : [];
+        if (s.scoring_mode === 'code') {
+          const languageField = document.createElement('label');
+          languageField.className = 'code-language-field';
+          const languageLabel = document.createElement('span');
+          languageLabel.textContent = '编程语言';
+          const select = document.createElement('select');
+          select.className = 'code-language-select';
+          select.setAttribute('data-language-for', controlKey);
+          for (const language of languages) {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            select.appendChild(option);
+          }
+          languageField.append(languageLabel, select);
+          block.appendChild(languageField);
+        }
         const ta = document.createElement('textarea');
-        ta.name = `${q.id}__${s.id}`;
+        ta.name = controlKey;
         ta.dataset.qid = String(q.id);
         ta.dataset.sid = String(s.id);
         ta.rows = 6;
         ta.placeholder = '请输入子题答案';
-        if (s.scoring_mode === 'code' || s.code_language) {
+        if (s.scoring_mode === 'code') {
           ta.className = 'code-answer';
-          ta.placeholder = `请输入代码${s.code_language ? '（' + s.code_language + '）' : ''}`;
+          ta.placeholder = '请输入代码';
         }
-        block.append(label, ta);
+        block.appendChild(ta);
         wrap.appendChild(block);
       }
       box.appendChild(wrap);
@@ -183,14 +203,22 @@ function collectAnswers() {
       const el = document.querySelector(questionControlSelector(q, ':checked'));
       answers[q.id] = el ? el.value : null;
     } else {
-      const subs = Array.isArray(q.sub_questions) ? q.sub_questions : [];
+      const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
       if (subs.length) {
         const map = {};
         for (const s of subs) {
           const el = document.querySelector(
             `textarea[data-qid="${safeQuestionId(q.id)}"][data-sid="${safeQuestionId(s.id)}"]`
           );
-          map[s.id] = el ? el.value : '';
+          const subAnswer = { answer: el ? el.value : '' };
+          if (s.scoring_mode === 'code') {
+            const controlKey = `${q.id}__${s.id}`;
+            const language = document.querySelector(
+              `select[data-language-for="${safeQuestionId(controlKey)}"]`
+            );
+            subAnswer.language = language ? language.value : '';
+          }
+          map[s.id] = subAnswer;
         }
         answers[q.id] = map;
       } else {
