@@ -881,12 +881,28 @@
       "id": "q41"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 10.0,
       "scoring_mode": "text",
       "question": "影响氧化还原反应速率的主要因素有哪些?如何加速反应的进行?",
       "answer": "影响氧化还原反应速率的主要因素有反应物的浓度,温度,催化剂,诱导作用;\n增加反应物浓度,或升高溶液温度,或加入正催化剂,或有诱导反应存在等都可加速反应的完成。",
-      "id": "q42"
+      "id": "q42",
+      "subquestions": [
+        {
+          "id": "q42-1",
+          "question": "影响因素",
+          "answer": "反应物浓度、温度、催化剂、诱导作用。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q42-2",
+          "question": "加速方法",
+          "answer": "增加浓度、升高温度、加入正催化剂或利用诱导反应。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -897,12 +913,28 @@
       "id": "q43"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 10.0,
       "scoring_mode": "text",
       "question": "怎样用一种试剂区别失去标签的四种物质?这四种物质是氯化钠,硫酸钠,氯化铵,硫酸铵,并注明鉴别现象。",
       "answer": "选用Ba(OH)2试剂。\n将四种未知试剂配成溶液,分装在四个试管中,分别加入Ba(OH)2溶液并加热\n(1)出现白色沉淀,产生刺激性气味气体的是硫酸铵;\n(2)没有白色沉淀,但产生刺激性气味气体的是氯化铵;\n(3)只有白色沉淀的物质是硫酸钠。\n(4)没有白色沉淀,也不产生刺激性气味气体的是氯化钠。",
-      "id": "q44"
+      "id": "q44",
+      "subquestions": [
+        {
+          "id": "q44-1",
+          "question": "鉴别试剂",
+          "answer": "选用 Ba(OH)2 溶液分别加入并加热。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q44-2",
+          "question": "鉴别现象",
+          "answer": "白色沉淀且刺激性气体为硫酸铵；仅气体为氯化铵；仅沉淀为硫酸钠；均无为氯化钠。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        }
+      ]
     }
   ]
 }
