@@ -32,14 +32,16 @@ function getPaperIdFromUrl() {
   return p || null;
 }
 
-function safeQuestionId(id) {
-  const raw = String(id);
-  if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(raw);
-  return raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+function findQuestionControls(qid) {
+  return [...document.querySelectorAll('[name]')].filter(
+    control => control.name === String(qid)
+  );
 }
 
-function questionControlSelector(q, suffix = '') {
-  return `[name="${safeQuestionId(q.id)}"]${suffix}`;
+function findSubquestionControl(tagName, qid, sid) {
+  return [...document.querySelectorAll(`${tagName}[data-qid][data-sid]`)].find(
+    control => control.dataset.qid === String(qid) && control.dataset.sid === String(sid)
+  ) || null;
 }
 
 function showFatal(message) {
@@ -114,7 +116,7 @@ function renderQuestion(q, idx) {
     box.appendChild(createAnswerOption(q, { value: true, text: '正确' }, 'radio', { hideKey: true }));
     box.appendChild(createAnswerOption(q, { value: false, text: '错误' }, 'radio', { hideKey: true }));
   } else {
-    const subs = Array.isArray(q.sub_questions) ? q.sub_questions : [];
+    const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
     if (subs.length) {
       const wrap = document.createElement('div');
       wrap.className = 'composite-answers';
@@ -124,17 +126,37 @@ function renderQuestion(q, idx) {
         const label = document.createElement('div');
         label.className = 'sub-label';
         label.textContent = `(${s.id}) ${s.question || ''}（${s.score} 分）`;
+        block.appendChild(label);
+        const languages = Array.isArray(s.allowed_languages) ? s.allowed_languages : [];
+        if (s.scoring_mode === 'code') {
+          const languageField = document.createElement('label');
+          languageField.className = 'code-language-field';
+          const languageLabel = document.createElement('span');
+          languageLabel.textContent = '编程语言';
+          const select = document.createElement('select');
+          select.className = 'code-language-select';
+          select.dataset.qid = String(q.id);
+          select.dataset.sid = String(s.id);
+          for (const language of languages) {
+            const option = document.createElement('option');
+            option.value = language;
+            option.textContent = language;
+            select.appendChild(option);
+          }
+          languageField.append(languageLabel, select);
+          block.appendChild(languageField);
+        }
         const ta = document.createElement('textarea');
-        ta.name = `${q.id}__${s.id}`;
         ta.dataset.qid = String(q.id);
         ta.dataset.sid = String(s.id);
+        ta.setAttribute('aria-label', `子题 ${s.id}：${s.question || '答案'}`);
         ta.rows = 6;
         ta.placeholder = '请输入子题答案';
-        if (s.scoring_mode === 'code' || s.code_language) {
+        if (s.scoring_mode === 'code') {
           ta.className = 'code-answer';
-          ta.placeholder = `请输入代码${s.code_language ? '（' + s.code_language + '）' : ''}`;
+          ta.placeholder = '请输入代码';
         }
-        block.append(label, ta);
+        block.appendChild(ta);
         wrap.appendChild(block);
       }
       box.appendChild(wrap);
@@ -172,29 +194,32 @@ function startTimer() {
 }
 
 function collectAnswers() {
-  const answers = {};
+  const answers = Object.create(null);
   for (const q of state.exam.questions) {
     if (q.type === 'multiple_choice') {
-      answers[q.id] = [...document.querySelectorAll(questionControlSelector(q, ':checked'))].map(el => el.value);
+      answers[q.id] = findQuestionControls(q.id).filter(control => control.checked).map(control => control.value);
     } else if (q.type === 'true_false') {
-      const el = document.querySelector(questionControlSelector(q, ':checked'));
+      const el = findQuestionControls(q.id).find(control => control.checked);
       answers[q.id] = el ? (el.value === 'true') : null;
     } else if (q.type === 'single_choice') {
-      const el = document.querySelector(questionControlSelector(q, ':checked'));
+      const el = findQuestionControls(q.id).find(control => control.checked);
       answers[q.id] = el ? el.value : null;
     } else {
-      const subs = Array.isArray(q.sub_questions) ? q.sub_questions : [];
+      const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
       if (subs.length) {
-        const map = {};
+        const map = Object.create(null);
         for (const s of subs) {
-          const el = document.querySelector(
-            `textarea[data-qid="${safeQuestionId(q.id)}"][data-sid="${safeQuestionId(s.id)}"]`
-          );
-          map[s.id] = el ? el.value : '';
+          const el = findSubquestionControl('textarea', q.id, s.id);
+          const subAnswer = { answer: el ? el.value : '' };
+          if (s.scoring_mode === 'code') {
+            const language = findSubquestionControl('select', q.id, s.id);
+            subAnswer.language = language ? language.value : '';
+          }
+          map[s.id] = subAnswer;
         }
         answers[q.id] = map;
       } else {
-        const el = document.querySelector(questionControlSelector(q));
+        const el = findQuestionControls(q.id)[0];
         answers[q.id] = el ? el.value : '';
       }
     }

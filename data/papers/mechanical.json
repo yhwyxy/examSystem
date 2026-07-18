@@ -824,12 +824,21 @@
       "id": "q40"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 9.0,
       "scoring_mode": "text",
       "question": "三视图由哪三个视图组成?并简述各视图之间的对应关系(投影规律)?",
       "answer": "主视图    俯视图    左视图\n长对正-----主视图与俯视图相应投影长度相等;\n高平齐-----主视图与左视图相应投影高度相等;\n宽相等-----俯视图与左视图相应投影宽度相等",
-      "id": "q41"
+      "id": "q41",
+      "subquestions": [
+        {
+          "id": "q41-1",
+          "question": "三视图组成及投影规律",
+          "answer": "主视图、俯视图、左视图；长对正、高平齐、宽相等。",
+          "score": 9.0,
+          "scoring_mode": "text"
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -845,7 +854,13 @@
       "scoring_mode": "calculation",
       "calculation": {
         "final_answers": [
-          {"id": "speed", "description": "从动齿轮转速", "expected": 600, "score": 10, "tolerance": 0.1}
+          {
+            "id": "speed",
+            "description": "从动齿轮转速",
+            "expected": 600,
+            "score": 10,
+            "tolerance": 0.1
+          }
         ],
         "require_working": true,
         "final_only_score_cap": 10
@@ -855,12 +870,21 @@
       "id": "q43"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 15.0,
       "scoring_mode": "text",
       "question": "换向阀常用的几种控制方式?画出他们的图形符号?",
       "answer": "换向阀常用的控制方式:人力控制、机械控制、电气控制、直接压力控制、先导控制;",
-      "id": "q44"
+      "id": "q44",
+      "subquestions": [
+        {
+          "id": "q44-1",
+          "question": "换向阀控制方式",
+          "answer": "人力控制、机械控制、电气控制、直接压力控制、先导控制。",
+          "score": 15.0,
+          "scoring_mode": "text"
+        }
+      ]
     }
   ]
 }

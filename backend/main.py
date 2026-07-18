@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from fastapi.concurrency import run_in_threadpool
 
-from . import database, exporter, grader, paper_store, question_loader
+from . import database, exporter, grader, paper_store, question_loader, review_service
 from .config import get_config, reload_config
 from .utils import generate_qr_base64, get_lan_ip, parse_iso
 
@@ -385,7 +385,9 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
         try:
             question_loader.validate_answer_shape(q, ans)
         except ValueError as e:
-            raise _error(422, "INVALID_ANSWER_SHAPE", str(e)) from e
+            message = str(e)
+            code = "INVALID_CODE_LANGUAGE" if message.startswith("INVALID_CODE_LANGUAGE") else "INVALID_ANSWER_SHAPE"
+            raise _error(422, code, message) from e
 
     try:
         submission_id = database.insert_submission_pending(
@@ -554,48 +556,15 @@ def admin_review(req: ReviewRequest) -> dict[str, Any]:
 
 @app.post("/api/admin/regrade/{submission_id}", dependencies=[Depends(require_admin)])
 def admin_regrade(submission_id: int) -> dict[str, Any]:
-    submission = database.get_submission(submission_id)
-    if not submission:
-        raise _error(404, "NOT_FOUND", "提交记录不存在")
-
-    answers = submission.get("answers") or {}
-    paper_id = submission.get("paper_id") or "default"
-
-    import asyncio
-    loop = asyncio.new_event_loop()
-    try:
-        result = loop.run_until_complete(grader.grade_submission(answers, paper_id=paper_id))
-    finally:
-        loop.close()
-
-    existing_detail = submission.get("grading_detail") or []
-    manual_map = {(d.get("question_id")): d for d in existing_detail if d.get("reviewed_by")}
-
-    merged: list[dict[str, Any]] = []
-    for detail in result.grading_detail:
-        qid = detail.get("question_id")
-        if qid in manual_map:
-            detail = {**detail, **manual_map[qid]}
-        merged.append(detail)
-
-    database.save_grading_result(submission_id, {
-        "objective_score": result.objective_score,
-        "subjective_score_machine": result.subjective_score_machine,
-        "subjective_score_final": result.subjective_score_final,
-        "total_score": result.total_score,
-        "review_status": result.review_status,
-        "grading_detail": merged,
-        "pending_ids": [d.get("question_id") for d in merged if d.get("review_status") == "pending"],
-        "low_confidence_count": sum(1 for d in merged if d.get("low_confidence")),
-    })
-
-    return {
-        "success": True,
-        "submission_id": submission_id,
-        "objective_score": result.objective_score,
-        "subjective_score_machine": result.subjective_score_machine,
-        "total_score": result.total_score,
-    }
+    result = review_service.regrade_submission(submission_id)
+    if not result.get("success"):
+        status = 404 if result.get("code") == "SUBMISSION_NOT_FOUND" else 400
+        raise _error(
+            status,
+            result.get("code", "REGRADE_FAILED"),
+            result.get("message", "重新判分失败"),
+        )
+    return {**result, "submission_id": submission_id}
 
 
 @app.get("/api/admin/export", dependencies=[Depends(require_admin)])

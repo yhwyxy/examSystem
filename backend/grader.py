@@ -15,7 +15,11 @@ from typing import Any
 
 from . import objective_grader
 from .config import get_config
-from .question_loader import SUBJECTIVE_TYPES
+from .question_loader import (
+    SUBJECTIVE_TYPES,
+    get_subquestions,
+    normalize_submitted_subanswer,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -355,6 +359,26 @@ async def _run_subjective_grading(
         }
 
 
+def aggregate_composite_review_status(
+    sub_results: list[dict[str, Any]],
+) -> str:
+    """按子题结果汇总复合题状态，供初次评分与重评共同使用。"""
+    if not sub_results:
+        return "pending"
+    if all(sub.get("review_status") == "reviewed" for sub in sub_results):
+        return "reviewed"
+    if any(sub.get("review_status") == "low_confidence" for sub in sub_results):
+        return "low_confidence"
+    if any(
+        sub.get("need_manual_review")
+        or sub.get("low_confidence")
+        or sub.get("review_status") in {"need_review", "pending"}
+        for sub in sub_results
+    ):
+        return "need_review"
+    return "high_confidence"
+
+
 # ---------------------------------------------------------------------------
 # 逐题判分
 # ---------------------------------------------------------------------------
@@ -364,29 +388,29 @@ async def grade_composite_question(
     raw_answer: Any,
 ) -> dict[str, Any]:
     """复合题：逐子题评分并汇总为一条 parent detail。"""
-    from .question_loader import is_composite_question
-
     qid = str(question.get("id") or "")
     raw = raw_answer if isinstance(raw_answer, dict) else {}
     sub_results: list[dict[str, Any]] = []
 
-    for sub in question.get("sub_questions") or []:
-        if not isinstance(sub, dict):
-            continue
+    subquestions = get_subquestions(question)
+    for sub in subquestions:
         sid = str(sub.get("id") or "")
-        sub_ans = raw.get(sid, "")
-        if sub_ans is None:
-            sub_ans = ""
+        sub_ans, selected_language = normalize_submitted_subanswer(
+            sub, raw.get(sid, ""), allow_legacy=True
+        )
         sub_q = {
             **sub,
-            "type": question.get("type"),
+            "type": "short_answer",
             "paper_id": question.get("paper_id"),
             "id": f"{qid}:{sid}",
         }
-        sub_detail = await _run_subjective_grading(sub_q, str(sub_ans))
+        if selected_language:
+            sub_q["code_language"] = selected_language
+        sub_detail = await _run_subjective_grading(sub_q, sub_ans)
         sub_detail["sub_question_id"] = sid
         sub_detail["question_id"] = qid
         sub_detail["question"] = sub.get("question", "")
+        sub_detail["selected_language"] = selected_language
         # 兼容导出/复核：统一 score 字段
         if "score" not in sub_detail:
             sub_detail["score"] = sub_detail.get("machine_score", sub_detail.get("final_score", 0))
@@ -394,25 +418,7 @@ async def grade_composite_question(
 
     parent_machine = sum(float(s.get("machine_score", s.get("score", 0)) or 0) for s in sub_results)
     parent_final = sum(float(s.get("final_score", s.get("score", 0)) or 0) for s in sub_results)
-    review_status = "need_review"
-    if sub_results and all(s.get("review_status") == "reviewed" for s in sub_results):
-        review_status = "reviewed"
-    elif sub_results and all(
-        s.get("review_status") not in {"need_review", "low_confidence", "pending"}
-        for s in sub_results
-    ):
-        # 全部高置信则父题也可视为 auto 路径上的 high_confidence
-        if any(s.get("review_status") == "low_confidence" for s in sub_results):
-            review_status = "low_confidence"
-        elif any(s.get("need_manual_review") or s.get("low_confidence") for s in sub_results):
-            review_status = "need_review"
-        else:
-            review_status = "high_confidence"
-    else:
-        if any(s.get("review_status") == "low_confidence" for s in sub_results):
-            review_status = "low_confidence"
-        else:
-            review_status = "need_review"
+    review_status = aggregate_composite_review_status(sub_results)
 
     low_conf = any(s.get("low_confidence") for s in sub_results) or review_status in {
         "low_confidence",
@@ -426,8 +432,7 @@ async def grade_composite_question(
         "student_answer": raw,
         "reference_answer": {
             str(s.get("id")): s.get("answer")
-            for s in (question.get("sub_questions") or [])
-            if isinstance(s, dict)
+            for s in subquestions
         },
         "max_score": float(question.get("score") or 0),
         "machine_score": parent_machine,
@@ -454,9 +459,9 @@ async def grade_question(
     from .question_loader import is_composite_question
 
     qtype = question.get("type")
+    if is_composite_question(question):
+        return await grade_composite_question(question, student_answer)
     if qtype in SUBJECTIVE_TYPES:
-        if is_composite_question(question):
-            return await grade_composite_question(question, student_answer)
         if isinstance(student_answer, dict):
             student_answer = ""
         return await _run_subjective_grading(question, str(student_answer or ""))

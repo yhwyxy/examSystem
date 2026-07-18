@@ -838,7 +838,13 @@
       "scoring_mode": "calculation",
       "calculation": {
         "final_answers": [
-          {"id": "angle", "description": "晶面夹角", "expected": 45, "score": 10, "tolerance": 0.1}
+          {
+            "id": "angle",
+            "description": "晶面夹角",
+            "expected": 45,
+            "score": 10,
+            "tolerance": 0.1
+          }
         ]
       },
       "question": "面心立方晶体的晶格常数为a,请计算(110)面与(100)面的夹角β。",
@@ -846,20 +852,52 @@
       "id": "q41"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 20.0,
       "scoring_mode": "text",
       "question": "什么是钢的淬透性?提高淬透性的合金元素有哪些?",
       "answer": "(1)钢的淬透性是指在规定条件下,决定钢材淬硬深度和硬度分布的特性,也就是钢在淬火时能获得马氏体的能力。\n(2)提高淬透性的合金元素主要有:B、Mn、Mo、Cr、Si、Ni",
-      "id": "q42"
+      "id": "q42",
+      "subquestions": [
+        {
+          "id": "q42-1",
+          "question": "钢的淬透性定义",
+          "answer": "在规定条件下钢淬火获得马氏体的能力。",
+          "score": 10.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q42-2",
+          "question": "提高淬透性的合金元素",
+          "answer": "B、Mn、Mo、Cr、Si、Ni。",
+          "score": 10.0,
+          "scoring_mode": "text"
+        }
+      ]
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 10.0,
       "scoring_mode": "text",
       "question": "什么是过冷度,过冷度的大小对晶体结晶有何影响?",
       "answer": "(1)过冷度是理论结晶温度和实际结晶温度的差值,即△t=tR-t;\n(2)过冷度越大,结晶趋势越大,结晶速度越快,晶粒越细小。",
-      "id": "q43"
+      "id": "q43",
+      "subquestions": [
+        {
+          "id": "q43-1",
+          "question": "过冷度定义",
+          "answer": "理论结晶温度和实际结晶温度的差值。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q43-2",
+          "question": "过冷度影响",
+          "answer": "过冷度越大，结晶速度越快、晶粒越细。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        }
+      ]
     }
   ]
 }

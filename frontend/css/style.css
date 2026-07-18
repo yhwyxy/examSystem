@@ -807,8 +807,24 @@ tbody tr:hover {
 }
 .option-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; }
 .nested-panel { margin-top: 1rem; background: #fcfcff; }
+.sub-q-row { margin: 8px 0; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.sq-languages { min-height: 7rem; }
+.sub-result.card.nested { margin: 12px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.sub-result-language { margin-left: 0.5rem; }
 .paper-meta-grid { margin-bottom: 0.75rem; }
 .full-label { display: block; margin: 0.5rem 0 0.75rem; }
 .full-label textarea { width: 100%; }
 .code-answer { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+.composite-answers { display: grid; gap: 16px; }
+.sub-answer {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+.sub-answer:first-child { padding-top: 0; border-top: 0; }
+.sub-label { color: var(--ink); font-weight: 650; overflow-wrap: anywhere; }
+.code-language-field { width: min(100%, 260px); }
+.code-language-select { min-width: 0; }
 .q-block { margin-top: 0.75rem; }

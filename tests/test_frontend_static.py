@@ -24,14 +24,111 @@ def test_exam_question_renderer_builds_answer_controls_with_dom_api():
     assert "document.createElement('input')" in source
 
 
-def test_exam_answer_collection_escapes_dynamic_question_ids():
+def test_exam_answer_collection_matches_dynamic_question_ids_without_selectors():
     source = read_frontend_file("frontend/js/exam.js")
     collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
 
-    assert "safeQuestionId" in source
-    assert "CSS.escape" in source
-    assert '`input[name="${q.id}"]:checked`' not in collect_answers
-    assert '`[name="${q.id}"]`' not in collect_answers
+    assert "function findQuestionControls" in source
+    assert "document.querySelectorAll('[name]')" in source
+    assert "control.name === String(qid)" in source
+    assert "control.checked" in collect_answers
+    assert "safeQuestionId" not in source
+    assert "questionControlSelector" not in source
+    assert "[name=\"${" not in collect_answers
+
+
+def test_exam_renders_canonical_subquestions_with_code_language_whitelist():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function renderExam")
+
+    assert "q.subquestions" in render_question
+    assert "q.sub_questions" not in render_question
+    assert "s.allowed_languages" in render_question
+    assert "select.dataset.qid" in render_question
+    assert "select.dataset.sid" in render_question
+    assert "document.createElement('select')" in render_question
+    assert "document.createElement('option')" in render_question
+    assert "s.code_language" not in render_question
+
+
+def test_exam_collects_nested_subquestion_answers_and_selected_language():
+    source = read_frontend_file("frontend/js/exam.js")
+    collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
+
+    assert "q.subquestions" in collect_answers
+    assert "q.sub_questions" not in collect_answers
+    assert "findSubquestionControl('textarea', q.id, s.id)" in collect_answers
+    assert "findSubquestionControl('select', q.id, s.id)" in collect_answers
+    assert "{ answer:" in collect_answers
+    assert "subAnswer.language =" in collect_answers
+    assert "Object.create(null)" in collect_answers
+
+
+def test_exam_answer_map_preserves_proto_question_id_for_json_serialization():
+    source = read_frontend_file("frontend/js/exam.js")
+    collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
+
+    assert "const answers = Object.create(null);" in collect_answers
+    assert "answers[q.id] =" in collect_answers
+
+
+def test_exam_subquestion_controls_use_collision_safe_dataset_lookup():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function renderExam")
+
+    assert "function findSubquestionControl" in source
+    assert "querySelectorAll(`${tagName}[data-qid][data-sid]`)" in source
+    assert "control.dataset.qid === String(qid)" in source
+    assert "control.dataset.sid === String(sid)" in source
+    assert "select.dataset.qid = String(q.id)" in render_question
+    assert "select.dataset.sid = String(s.id)" in render_question
+    assert "ta.dataset.qid = String(q.id)" in render_question
+    assert "ta.dataset.sid = String(s.id)" in render_question
+    assert "data-language-for" not in source
+    assert "controlKey" not in render_question
+
+
+def test_exam_subquestion_textareas_have_accessible_names():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function renderExam")
+
+    assert "ta.setAttribute('aria-label'" in render_question
+    assert "s.question" in render_question
+
+
+def test_admin_editor_writes_canonical_composites_and_language_whitelist():
+    source = read_frontend_file("frontend/js/papers.js")
+    render_editor = function_body(source, "function renderSubQuestionsEditor", "function collectSubQuestionsFromUI")
+    collect_editor = function_body(source, "function collectSubQuestionsFromUI", "function applyQuestionFromForm")
+
+    assert "SUPPORTED_CODE_LANGUAGES" in source
+    assert "subquestions" in source
+    assert "sub_questions" not in source
+    assert 'class="sq-languages"' in render_editor
+    assert "multiple" in render_editor
+    assert ".selectedOptions" in collect_editor
+    assert "item.allowed_languages" in collect_editor
+    assert "item.code_language" not in collect_editor
+
+
+def test_admin_composite_detail_displays_selected_language_without_inline_style():
+    source = read_frontend_file("frontend/js/detail.js")
+
+    assert "selected_language" in source
+    assert "sub-result card nested" in source
+    assert 'style="' not in source
+
+
+def test_detail_review_reads_scores_from_result_container_not_dynamic_ids():
+    source = read_frontend_file("frontend/js/detail.js")
+    review = function_body(source, "async function review", "$('detail').addEventListener")
+    click_handler = function_body(source, "$('detail').addEventListener", "$('regradeBtn')")
+
+    assert ".querySelector('.score-input')" in review
+    assert ".querySelector('.note-input')" in review
+    assert "getElementById(scoreElId)" not in review
+    assert "getElementById(noteElId)" not in review
+    assert "closest('.sub-result')" in click_handler
 
 
 
@@ -134,4 +231,3 @@ def test_admin_shell_is_fixed_two_pane_layout():
     assert "panel.hidden" in js
     assert 'data-view="overview"' in html
     assert 'href="#overview"' not in html
-

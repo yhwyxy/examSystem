@@ -4,7 +4,7 @@
   "exam_info": {
     "title": "测控技术与仪器",
     "description": "由原 Word 试卷转换生成。",
-    "total_score": 80.0,
+    "total_score": 100.0,
     "passing_score": 0
   },
   "questions": [
@@ -845,20 +845,117 @@
       "id": "q40"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 10.0,
       "scoring_mode": "text",
       "question": "什么是零位误差?什么是测量范围?",
       "answer": "零位误差就是输入标准信号零时,此时设备显示不为零的值。\n测量范围指仪器所能够测量的最小尺寸与最大尺寸之间的范围",
-      "id": "q41"
+      "id": "q41",
+      "subquestions": [
+        {
+          "id": "q41-1",
+          "question": "零位误差",
+          "answer": "输入标准信号为零时设备显示不为零的值。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q41-2",
+          "question": "测量范围",
+          "answer": "仪器能够测量的最小值与最大值之间的范围。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        }
+      ]
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 10.0,
       "scoring_mode": "text",
       "question": "什么是引用误差?什么是绝对误差?",
       "answer": "引用误差指测量的绝对误差与仪表的满量程值之比;\n绝对误差指测量值与真实值之差。",
-      "id": "q42"
+      "id": "q42",
+      "subquestions": [
+        {
+          "id": "q42-1",
+          "question": "引用误差",
+          "answer": "绝对误差与仪表满量程值之比。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q42-2",
+          "question": "绝对误差",
+          "answer": "测量值与真实值之差。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        }
+      ]
+    },
+    {
+      "id": "q43",
+      "type": "composite",
+      "question": "压力变送器零位迁移计算",
+      "score": 20.0,
+      "subquestions": [
+        {
+          "id": "q43-1",
+          "question": "测量范围（含上下界）",
+          "answer": "仪表的测量范围变为100-200 kPa。",
+          "score": 7.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q43-2",
+          "question": "量程",
+          "answer": "100 kPa",
+          "score": 6.0,
+          "scoring_mode": "calculation",
+          "calculation": {
+            "final_answers": [
+              {
+                "id": "span",
+                "description": "仪表量程",
+                "expected": 100,
+                "score": 6,
+                "tolerance": 0.1
+              }
+            ]
+          }
+        },
+        {
+          "id": "q43-3",
+          "question": "输出对应压力",
+          "answer": "100、150、200 kPa",
+          "score": 7.0,
+          "scoring_mode": "calculation",
+          "calculation": {
+            "final_answers": [
+              {
+                "id": "out-4mA",
+                "description": "4mA对应输入压力",
+                "expected": 100,
+                "score": 2.34,
+                "tolerance": 0.1
+              },
+              {
+                "id": "out-12mA",
+                "description": "12mA对应输入压力",
+                "expected": 150,
+                "score": 2.33,
+                "tolerance": 0.1
+              },
+              {
+                "id": "out-20mA",
+                "description": "20mA对应输入压力",
+                "expected": 200,
+                "score": 2.33,
+                "tolerance": 0.1
+              }
+            ]
+          }
+        }
+      ]
     }
   ]
 }

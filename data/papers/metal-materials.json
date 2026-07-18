@@ -878,12 +878,28 @@
       "id": "q42"
     },
     {
-      "type": "short_answer",
+      "type": "composite",
       "score": 10.0,
       "scoring_mode": "text",
       "question": "铁碳合金中基本相是那些?其机械性能如何?",
       "answer": "基本相有:铁素体 奥氏体 渗碳体\n铁素体的强度和硬度不高,但具有良好的塑性和韧性。\n奥氏体的硬度较低而塑性较高,易于锻压成型。\n渗碳体硬度很高而塑性和韧性几乎为零,脆性大。",
-      "id": "q43"
+      "id": "q43",
+      "subquestions": [
+        {
+          "id": "q43-1",
+          "question": "铁碳合金基本相",
+          "answer": "铁素体、奥氏体、渗碳体。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "q43-2",
+          "question": "机械性能",
+          "answer": "铁素体强度硬度不高但塑韧性好；奥氏体硬度低塑性高；渗碳体硬度高、脆性大。",
+          "score": 5.0,
+          "scoring_mode": "text"
+        }
+      ]
     },
     {
       "type": "short_answer",

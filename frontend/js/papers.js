@@ -7,7 +7,12 @@
     true_false: '判断',
     short_answer: '简答',
     essay: '论述',
+    composite: '复合',
   };
+  const SUPPORTED_CODE_LANGUAGES = [
+    'python', 'java', 'javascript', 'typescript', 'go',
+    'c', 'cpp', 'csharp', 'sql', 'bash', 'shell',
+  ];
 
   let papersCache = [];
   let editing = null; // { slug, name, exam_info, questions, status, editable }
@@ -176,7 +181,7 @@
     }
     box.innerHTML = editing.questions.map((q, i) => {
       const mode = q.scoring_mode || (q.code_language ? (String(q.code_language).toLowerCase() === 'sql' ? 'sql' : 'code') : '');
-      const subN = Array.isArray(q.sub_questions) ? q.sub_questions.length : 0;
+      const subN = Array.isArray(q.subquestions) ? q.subquestions.length : 0;
       const subLabel = subN ? ` · 复合题 · ${subN} 子题` : '';
       return `<div class="question-editor-item">
         <div>
@@ -209,7 +214,7 @@
       ], answer: 'A',
     } : { ...editing.questions[index], options: (editing.questions[index].options || []).map(o => ({ ...o })) };
 
-    $('qType').value = q.type || 'single_choice';
+    $('qType').value = q.type === 'composite' ? 'short_answer' : (q.type || 'single_choice');
     $('qScore').value = q.score ?? 5;
     $('qId').value = index < 0 ? '' : (q.id || '');
     $('qId').disabled = index >= 0;
@@ -221,7 +226,7 @@
     $('qCodeLang').value = q.code_language || '';
     $('qRubric').value = q.scoring_rubric || '';
     renderPointsEditor(q.scoring_points || []);
-    renderSubQuestionsEditor(q.sub_questions || []);
+    renderSubQuestionsEditor(q.subquestions || []);
     onTypeChange();
     if (!editing.editable) {
       $('questionFormPanel').querySelectorAll('input,textarea,select,button').forEach(el => {
@@ -306,8 +311,13 @@
     const list = $('qSubQuestionsList');
     if (!list) return;
     const items = Array.isArray(subs) ? subs : [];
-    list.innerHTML = items.map((s, i) => `
-      <div class="sub-q-row panel nested-panel" data-i="${i}" style="margin:8px 0;padding:10px;border:1px solid #e5e7eb;border-radius:8px;">
+    list.innerHTML = items.map((s, i) => {
+      const selectedLanguages = new Set(Array.isArray(s.allowed_languages) ? s.allowed_languages : []);
+      const languageOptions = SUPPORTED_CODE_LANGUAGES.map(language =>
+        `<option value="${language}" ${selectedLanguages.has(language) ? 'selected' : ''}>${language}</option>`
+      ).join('');
+      return `
+      <div class="sub-q-row panel nested-panel" data-i="${i}">
         <div class="form-grid">
           <label>子题 ID <input class="sq-id" value="${esc(s.id || `s${i+1}`)}"></label>
           <label>分值 <input class="sq-score" type="number" min="0.5" step="0.5" value="${esc(s.score ?? 1)}"></label>
@@ -319,13 +329,18 @@
               <option value="calculation" ${s.scoring_mode==='calculation'?'selected':''}>计算</option>
             </select>
           </label>
-          <label>代码语言 <input class="sq-lang" value="${esc(s.code_language || '')}" placeholder="python / sql"></label>
+          <label>允许语言
+            <select class="sq-languages" multiple size="4" aria-label="子题 ${esc(s.id || `s${i+1}`)} 允许的编程语言">
+              ${languageOptions}
+            </select>
+          </label>
         </div>
         <label class="full-label">子题题干 <textarea class="sq-stem" rows="2">${esc(s.question || '')}</textarea></label>
         <label class="full-label">子题参考答案 <textarea class="sq-answer code-answer" rows="3">${esc(s.answer || '')}</textarea></label>
         <button class="btn danger sq-del" type="button" data-i="${i}">删除子题</button>
       </div>
-    `).join('') || '<p class="muted">无子题（单题模式）</p>';
+    `;
+    }).join('') || '<p class="muted">无子题（单题模式）</p>';
   }
 
   function collectSubQuestionsFromUI() {
@@ -338,8 +353,9 @@
         score: Number(row.querySelector('.sq-score').value) || 0,
         scoring_mode: mode,
       };
-      const lang = row.querySelector('.sq-lang').value.trim();
-      if (lang) item.code_language = lang;
+      const allowedLanguages = [...row.querySelector('.sq-languages').selectedOptions]
+        .map(option => option.value);
+      if (mode === 'code') item.allowed_languages = allowedLanguages;
       return item;
     }).filter(s => s.question);
   }
@@ -378,16 +394,17 @@
           if (!(s.score > 0)) { toast(`子题 ${s.id} 分值须 > 0`); return; }
           if (ids.has(s.id)) { toast(`子题 ID 重复: ${s.id}`); return; }
           ids.add(s.id);
-          if (s.scoring_mode === 'code' && !s.code_language) {
-            toast(`子题 ${s.id} 代码模式必须填写语言`); return;
+          if (s.scoring_mode === 'code' && !s.allowed_languages?.length) {
+            toast(`子题 ${s.id} 代码模式必须选择至少一种允许语言`); return;
           }
         }
-        q.sub_questions = subs;
+        q.type = 'composite';
+        q.subquestions = subs;
         delete q.answer;
         q.score = subs.reduce((a, s) => a + (Number(s.score) || 0), 0);
         $('qScore').value = q.score;
       } else {
-        delete q.sub_questions;
+        delete q.subquestions;
         const ans = $('qAnswer').value;
         if (!ans || !ans.trim()) { toast('请填写参考答案'); return; }
         q.answer = ans;
