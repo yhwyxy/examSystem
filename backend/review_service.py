@@ -85,6 +85,66 @@ def review_question(submission_id: int, question_id: str, new_score: float, note
     return {"success": True, "total_score": total_score, "review_status": review_status}
 
 
+def _is_manually_reviewed(detail: dict[str, Any]) -> bool:
+    return bool(detail.get("reviewed_by") or detail.get("manually_reviewed"))
+
+
+def _preserve_manual_final(
+    new_detail: dict[str, Any], old_detail: dict[str, Any]
+) -> None:
+    """保留人工最终分和复核元数据，不覆盖新的机器评分字段。"""
+    new_detail["final_score"] = float(
+        old_detail.get("final_score", old_detail.get("score", 0)) or 0
+    )
+    new_detail["review_status"] = "reviewed"
+    for field in (
+        "reviewed_by", "review_note", "manually_reviewed", "reviewer_note"
+    ):
+        if field in old_detail:
+            new_detail[field] = old_detail[field]
+
+
+def _merge_manual_reviews(
+    new_details: list[dict[str, Any]], old_details: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    old_by_qid = {str(d.get("question_id")): d for d in old_details}
+    for detail in new_details:
+        old = old_by_qid.get(str(detail.get("question_id")))
+        if not old:
+            continue
+
+        if detail.get("is_composite") and isinstance(detail.get("sub_results"), list):
+            old_subs = {
+                str(sub.get("sub_question_id")): sub
+                for sub in old.get("sub_results", [])
+                if isinstance(sub, dict)
+            }
+            for sub in detail["sub_results"]:
+                old_sub = old_subs.get(str(sub.get("sub_question_id")))
+                if old_sub and _is_manually_reviewed(old_sub):
+                    _preserve_manual_final(sub, old_sub)
+
+            detail["machine_score"] = sum(
+                float(sub.get("machine_score", sub.get("score", 0)) or 0)
+                for sub in detail["sub_results"]
+            )
+            detail["score"] = detail["machine_score"]
+            detail["final_score"] = sum(
+                float(sub.get("final_score", sub.get("score", 0)) or 0)
+                for sub in detail["sub_results"]
+            )
+            detail["review_status"] = aggregate_review_status(detail["sub_results"])
+            detail["low_confidence"] = detail["review_status"] != "reviewed"
+            detail["need_manual_review"] = detail["review_status"] != "reviewed"
+            detail["reason"] = "; ".join(
+                f"{sub.get('sub_question_id')}={sub.get('final_score', sub.get('score'))}/{sub.get('max_score')}"
+                for sub in detail["sub_results"]
+            )
+        elif _is_manually_reviewed(old):
+            _preserve_manual_final(detail, old)
+    return new_details
+
+
 def regrade_submission(submission_id: int) -> dict[str, Any]:
     """重新机器判分。已人工复核的主观题保留人工分。"""
     submission = database.get_submission(submission_id)
@@ -92,31 +152,20 @@ def regrade_submission(submission_id: int) -> dict[str, Any]:
         return {"success": False, "code": "SUBMISSION_NOT_FOUND", "message": "提交记录不存在"}
 
     old_details = _parse_detail(submission)
-    old_by_qid = {d.get("question_id"): d for d in old_details}
     answers = _parse_answers(submission)
-    new_result = asyncio.run(
-        grade_submission(answers, paper_id=submission.get("paper_id") or "default")
-    )
-    new_details = new_result.grading_detail
-
-    for d in new_details:
-        old = old_by_qid.get(d.get("question_id"))
-        if (
-            d.get("type") in SUBJECTIVE_TYPES
-            and old
-            and old.get("manually_reviewed")
-        ):
-            d.update({
-                "final_score": old.get("final_score"),
-                "manually_reviewed": True,
-                "review_status": "reviewed",
-                "reviewer_note": old.get("reviewer_note"),
-            })
+    loop = asyncio.new_event_loop()
+    try:
+        new_result = loop.run_until_complete(
+            grade_submission(answers, paper_id=submission.get("paper_id") or "default")
+        )
+    finally:
+        loop.close()
+    new_details = _merge_manual_reviews(new_result.grading_detail, old_details)
 
     objective_score = sum(float(d.get("final_score", 0.0)) for d in new_details if d.get("type") not in SUBJECTIVE_TYPES)
     subjective_machine = sum(float(d.get("machine_score", 0.0)) for d in new_details if d.get("type") in SUBJECTIVE_TYPES)
     subjective_final = sum(float(d.get("final_score", 0.0)) for d in new_details if d.get("type") in SUBJECTIVE_TYPES)
-    total_score = objective_score + subjective_final
+    total_score = round(objective_score + subjective_final, 6)
     review_status = aggregate_review_status(new_details)
 
     database.save_grading_result(submission_id, {
