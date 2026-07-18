@@ -273,6 +273,25 @@ def test_code_subanswer_language_must_be_allowed():
         )
 
 
+def test_composite_rejects_duplicate_languages_after_normalization():
+    from backend.question_loader import validate_questions
+    from fastapi import HTTPException
+
+    paper = {
+        "exam_info": {"title": "复合题"},
+        "questions": [{
+            "id": "c1", "type": "composite", "question": "父题", "score": 5,
+            "subquestions": [{
+                "id": "s1", "question": "编码", "answer": "print(1)", "score": 5,
+                "scoring_mode": "code", "allowed_languages": ["Python", " python "],
+            }],
+        }],
+    }
+
+    with pytest.raises(HTTPException, match="allowed_languages 不能重复"):
+        validate_questions(paper)
+
+
 def test_sanitize_canonical_composite_exposes_only_public_configuration():
     from backend.question_loader import sanitize_for_student
 

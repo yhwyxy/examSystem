@@ -77,9 +77,9 @@ def normalize_composite_question(question: dict[str, Any]) -> dict[str, Any]:
                     _normalize_code_language(value, qid=str(sub.get("id") or "?"))
                     for value in languages
                 ]
-                sub["allowed_languages"] = list(dict.fromkeys(
+                sub["allowed_languages"] = [
                     language for language in normalized if language
-                ))
+                ]
     return question
 
 
