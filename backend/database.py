@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from .config import get_config
+from .question_loader import SUBJECTIVE_TYPES
 from .utils import now_iso, seconds_between
 
 PROJECT_ROOT = __import__("pathlib").Path(__file__).resolve().parent.parent
@@ -613,14 +614,14 @@ def apply_review(
         new_subjective = sum(
             float(d.get("final_score", d.get("score", 0)))
             for d in details
-            if d.get("type") in {"short_answer", "essay"}
+            if d.get("type") in SUBJECTIVE_TYPES
         )
         new_total = float(row["objective_score"]) + new_subjective
 
         still_need = any(
             d.get("review_status") in {"need_review", "low_confidence", "pending"}
             for d in details
-            if d.get("type") in {"short_answer", "essay"}
+            if d.get("type") in SUBJECTIVE_TYPES
         )
         review_status = "need_review" if still_need else "reviewed"
 

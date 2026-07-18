@@ -25,7 +25,7 @@ BACKUPS_DIR = DATA_DIR / "backups" / "papers"
 
 ALLOWED_TYPES = {"single_choice", "multiple_choice", "true_false", "short_answer", "essay", "composite"}
 OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "true_false"}
-SUBJECTIVE_TYPES = {"short_answer", "essay"}
+SUBJECTIVE_TYPES = {"short_answer", "essay", "composite"}
 SENSITIVE_FIELDS = {"answer", "scoring_rubric", "scoring_points", "calculation"}
 ALLOWED_SCORING_MODES = {"text", "sql", "code", "calculation"}
 ALLOWED_CODE_LANGUAGES = frozenset({
