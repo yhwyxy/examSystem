@@ -39,9 +39,9 @@ def _legal(qs: list[dict[str, Any]]) -> None:
     parent["question"] = selected[0]["question"].split("\n1.", 1)[0]
     parent.pop("answer", None)
     parts = [
-        ("01号房屋的物权归属应当如何确定？为什么？", "01号房归丙所有。房屋物权变动经依法登记发生效力，丙已付清房款并办理过户登记。"),
-        ("甲、丙之间的房屋买卖合同效力如何？应考虑哪些因素？", "甲、丙合同有效。甲与乙已有合同及丙知情不当然导致合同无效；还应考察是否违反强制性规定、公序良俗或存在恶意串通损害乙权利。"),
-        ("2月12日甲、乙修改原合同的行为效力如何？为什么？", "修改行为有效，性质属于双方协商变更合同，双方受变更后的合同约束。"),
+        ("01号房屋的物权归属应当如何确定？为什么？", "01号房屋的物权归属应当以不动产登记簿为准。丙已经支付全部房款并办理过户登记，故01号房屋所有权已经转移给丙。"),
+        ("甲、丙之间的房屋买卖合同效力如何？应考虑哪些因素？", "甲、丙之间于2月8日形成的房屋买卖合同,该合同为有效合同。尽管甲已就该房与乙签订合同,但甲丙行为不违反公序良俗及强制性规定,不存在无效因素,也不属于恶意串通损害乙权利。"),
+        ("2月12日甲、乙修改原合同的行为效力如何？为什么？", "2月12日,甲、乙之间修改合同的行为,该行为有效,其性质属于双方变更合同。双方受变更后的合同的约束。"),
         ("乙的诉讼请求是否应当得到支持？为什么？", selected[1]["answer"]),
         ("针对甲要求乙履行购买02号房的义务，乙可主张什么权利？为什么？", selected[2]["answer"]),
         ("邻居丁所遭受的损失应当由谁赔偿？为什么？", selected[3]["answer"]),
@@ -57,15 +57,31 @@ def migrate_all(root: Path, *, report_path: Path) -> dict[str, Any]:
     report = {"version": 1, "migrated": [], "skipped": [], "processed": []}
     for slug, mapping in TARGETS.items():
         path = root / f"{slug}.json"; data = json.loads(path.read_text())
-        report["processed"].append(slug)
+        report["processed"].extend(f"{slug}:{qid}" for qid in (mapping or ({"q35": None} if slug == "legal" else {})))
         changed = False
         for q in data.get("questions", []):
+            if slug == "instrumentation" and q.get("id") == "q43" and q.get("type") == "composite":
+                q["subquestions"][0].update({"question": "测量范围（含上下界）", "answer": "仪表的测量范围变为100-200 kPa。", "scoring_mode": "text"})
+                q["subquestions"][1].update({"calculation": {"final_answers": [{"id": "span", "description": "仪表量程", "expected": 100, "score": 6, "tolerance": 0.1}]}})
+                q["subquestions"][2].update({"calculation": {"final_answers": [{"id": "out-4mA", "description": "4mA对应输入压力", "expected": 100, "score": 2.34, "tolerance": 0.1}, {"id": "out-12mA", "description": "12mA对应输入压力", "expected": 150, "score": 2.33, "tolerance": 0.1}, {"id": "out-20mA", "description": "20mA对应输入压力", "expected": 200, "score": 2.33, "tolerance": 0.1}]}})
+                changed = True
             if q.get("id") in mapping and q.get("type") != "composite":
                 _composite(q, mapping[q["id"]]); changed = True; report["migrated"].append(f"{slug}:{q['id']}")
         if slug == "instrumentation" and not any(q.get("id") == "q43" for q in data["questions"]):
-            data["questions"].append({"id":"q43","type":"composite","question":"压力变送器零位迁移计算","score":20.0,"subquestions":[{"id":"q43-1","question":"测量范围","answer":"100-200 kPa","score":7.0,"scoring_mode":"calculation"},{"id":"q43-2","question":"量程","answer":"100 kPa","score":6.0,"scoring_mode":"calculation"},{"id":"q43-3","question":"输出对应压力","answer":"100、150、200 kPa","score":7.0,"scoring_mode":"calculation"}]}); changed = True; report["migrated"].append("instrumentation:q43")
+            data["questions"].append({"id":"q43","type":"composite","question":"压力变送器零位迁移计算","score":20.0,"subquestions":[{"id":"q43-1","question":"测量范围（含上下界）","answer":"仪表的测量范围变为100-200 kPa。","score":7.0,"scoring_mode":"text"},{"id":"q43-2","question":"仪表量程","answer":"100 kPa","score":6.0,"scoring_mode":"calculation","calculation":{"final_answers":[{"id":"span","description":"仪表量程","expected":100,"score":6,"tolerance":0.1}]}},{"id":"q43-3","question":"输出对应压力","answer":"输入100 kPa输出4mA；输入150 kPa输出12mA；输入200 kPa输出20mA。","score":7.0,"scoring_mode":"calculation","calculation":{"final_answers":[{"id":"out-4mA","description":"4mA对应输入压力","expected":100,"score":2.34,"tolerance":0.1},{"id":"out-12mA","description":"12mA对应输入压力","expected":150,"score":2.33,"tolerance":0.1},{"id":"out-20mA","description":"20mA对应输入压力","expected":200,"score":2.33,"tolerance":0.1}]}}]}); changed = True; report["migrated"].append("instrumentation:q43")
+            data.setdefault("exam_info", {})["total_score"] = 100.0
         if slug == "legal" and not any(q.get("id") == "q35" and q.get("type") == "composite" for q in data["questions"]):
             _legal(data["questions"]); changed = True; report["migrated"].append("legal:q35")
+        if slug == "legal":
+            data.setdefault("exam_info", {})["total_score"] = 100.0
+            parent = next((q for q in data["questions"] if q.get("id") == "q35" and q.get("type") == "composite"), None)
+            if parent:
+                answers = ["01号房屋的物权归属应当以不动产登记簿为准。丙已经支付全部房款并办理过户登记，故01号房屋所有权已经转移给丙。", "甲、丙之间于2月8日形成的房屋买卖合同,该合同为有效合同。尽管甲已就该房与乙签订合同,但甲丙行为不违反公序良俗及强制性规定,不存在无效因素,也不属于恶意串通损害乙权利。", "2月12日,甲、乙之间修改合同的行为,该行为有效,其性质属于双方变更合同。双方受变更后的合同的约束。"]
+                for sub, answer in zip(parent["subquestions"][:3], answers): sub["answer"] = answer
+                changed = True
+        if slug == "instrumentation":
+            data.setdefault("exam_info", {})["total_score"] = 100.0
+            changed = True
         if changed: path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n")
     return report

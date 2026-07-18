@@ -4,12 +4,13 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from scripts.migrate_composite_questions import migrate_all
+from backend.question_loader import validate_questions
 
 
 def test_migration_targets_and_is_idempotent(tmp_path):
     root = Path("data/papers")
     report = migrate_all(root, report_path=tmp_path / "report.json")
-    assert report["migrated"]
+    assert len(report["processed"]) == 13
     expected = {
         "mechanical": {"q41", "q44"}, "materials": {"q42", "q43"},
         "instrumentation": {"q41", "q42", "q43"},
@@ -29,3 +30,18 @@ def test_migration_targets_and_is_idempotent(tmp_path):
     before = (root / "mechanical.json").read_text()
     migrate_all(root, report_path=tmp_path / "report2.json")
     assert (root / "mechanical.json").read_text() == before
+
+
+def test_instrumentation_calculation_and_legal_answers_are_complete(tmp_path):
+    root = Path("data/papers")
+    report = migrate_all(root, report_path=tmp_path / "report.json")
+    instrumentation = json.loads((root / "instrumentation.json").read_text())
+    validate_questions(instrumentation)
+    q43 = next(q for q in instrumentation["questions"] if q["id"] == "q43")
+    assert q43["subquestions"][0]["scoring_mode"] == "text"
+    assert len(q43["subquestions"][2]["calculation"]["final_answers"]) == 3
+    legal = json.loads((root / "legal.json").read_text())
+    parent = next(q for q in legal["questions"] if q["id"] == "q35")
+    first_three = parent["subquestions"][:3]
+    assert all(len(sub["answer"]) >= 45 for sub in first_three)
+    assert len(report["processed"]) == 13

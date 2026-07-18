@@ -4,7 +4,7 @@
   "exam_info": {
     "title": "测控技术与仪器",
     "description": "由原 Word 试卷转换生成。",
-    "total_score": 80.0,
+    "total_score": 100.0,
     "passing_score": 0
   },
   "questions": [
@@ -900,24 +900,60 @@
       "subquestions": [
         {
           "id": "q43-1",
-          "question": "测量范围",
-          "answer": "100-200 kPa",
+          "question": "测量范围（含上下界）",
+          "answer": "仪表的测量范围变为100-200 kPa。",
           "score": 7.0,
-          "scoring_mode": "calculation"
+          "scoring_mode": "text"
         },
         {
           "id": "q43-2",
           "question": "量程",
           "answer": "100 kPa",
           "score": 6.0,
-          "scoring_mode": "calculation"
+          "scoring_mode": "calculation",
+          "calculation": {
+            "final_answers": [
+              {
+                "id": "span",
+                "description": "仪表量程",
+                "expected": 100,
+                "score": 6,
+                "tolerance": 0.1
+              }
+            ]
+          }
         },
         {
           "id": "q43-3",
           "question": "输出对应压力",
           "answer": "100、150、200 kPa",
           "score": 7.0,
-          "scoring_mode": "calculation"
+          "scoring_mode": "calculation",
+          "calculation": {
+            "final_answers": [
+              {
+                "id": "out-4mA",
+                "description": "4mA对应输入压力",
+                "expected": 100,
+                "score": 2.34,
+                "tolerance": 0.1
+              },
+              {
+                "id": "out-12mA",
+                "description": "12mA对应输入压力",
+                "expected": 150,
+                "score": 2.33,
+                "tolerance": 0.1
+              },
+              {
+                "id": "out-20mA",
+                "description": "20mA对应输入压力",
+                "expected": 200,
+                "score": 2.33,
+                "tolerance": 0.1
+              }
+            ]
+          }
         }
       ]
     }
