@@ -119,6 +119,18 @@ def test_admin_composite_detail_displays_selected_language_without_inline_style(
     assert 'style="' not in source
 
 
+def test_detail_review_reads_scores_from_result_container_not_dynamic_ids():
+    source = read_frontend_file("frontend/js/detail.js")
+    review = function_body(source, "async function review", "$('detail').addEventListener")
+    click_handler = function_body(source, "$('detail').addEventListener", "$('regradeBtn')")
+
+    assert ".querySelector('.score-input')" in review
+    assert ".querySelector('.note-input')" in review
+    assert "getElementById(scoreElId)" not in review
+    assert "getElementById(noteElId)" not in review
+    assert "closest('.sub-result')" in click_handler
+
+
 
 def test_exam_script_implements_deduplicated_anti_switch_auto_submit():
     source = read_frontend_file("frontend/js/exam.js")

@@ -65,8 +65,6 @@ function render() {
     if (isComposite) {
       const subHtml = (d.sub_results || []).map(s => {
         const sid = s.sub_question_id;
-        const inputId = `score_${questionId}__${sid}`;
-        const noteId = `note_${questionId}__${sid}`;
         const language = s.selected_language
           ? `<span class="sub-result-language">语言：${esc(s.selected_language)}</span>`
           : '';
@@ -77,8 +75,8 @@ function render() {
           <div class="answer-box"><b>参考：</b><br>${esc(s.reference_answer ?? '')}</div>
           ${s.reason ? `<p><b>理由：</b>${esc(s.reason)}</p>` : ''}
           <div class="toolbar">
-            <input class="score-input" type="number" id="${esc(inputId)}" value="${esc(s.final_score ?? s.score)}">
-            <input class="note-input" type="text" id="${esc(noteId)}" placeholder="子题复核备注">
+            <input class="score-input" type="number" value="${esc(s.final_score ?? s.score)}">
+            <input class="note-input" type="text" placeholder="子题复核备注">
             <button class="btn review-btn" data-qid="${esc(questionId)}" data-sid="${esc(sid)}">保存子题复核</button>
           </div>
         </div>`;
@@ -109,7 +107,7 @@ function render() {
       <div class="answer-box"><b>学生答案：</b><br>${esc(studentAnswer)}</div>
       <div class="answer-box"><b>参考答案：</b><br>${esc(referenceAnswer)}</div>
       ${d.reason ? `<p><b>判分理由：</b>${esc(d.reason)}</p>` : ''}
-      ${subjective ? `<div class="toolbar"><input class="score-input" type="number" id="score_${esc(questionId)}" value="${esc(d.final_score ?? d.score)}"><input class="note-input" type="text" id="note_${esc(questionId)}" placeholder="复核备注"><button class="btn review-btn" data-qid="${esc(questionId)}">保存复核</button></div>` : ''}
+      ${subjective ? `<div class="toolbar"><input class="score-input" type="number" value="${esc(d.final_score ?? d.score)}"><input class="note-input" type="text" placeholder="复核备注"><button class="btn review-btn" data-qid="${esc(questionId)}">保存复核</button></div>` : ''}
     </div>`;
   }).join('');
 }
@@ -122,11 +120,12 @@ async function load() {
   render();
 }
 
-async function review(qid, sid) {
-  const scoreElId = sid ? `score_${qid}__${sid}` : `score_${qid}`;
-  const noteElId = sid ? `note_${qid}__${sid}` : `note_${qid}`;
-  const score = Number($(scoreElId).value);
-  const note = $(noteElId).value;
+async function review(qid, sid, resultContainer) {
+  const scoreInput = resultContainer?.querySelector('.score-input');
+  const noteInput = resultContainer?.querySelector('.note-input');
+  if (!scoreInput || !noteInput) throw new Error('未找到复核输入框');
+  const score = Number(scoreInput.value);
+  const note = noteInput.value;
   const body = { submission_id: Number(id), question_id: qid, new_score: score, note };
   if (sid) body.sub_question_id = sid;
   const res = await authFetch('/api/admin/review', {
@@ -143,7 +142,8 @@ async function review(qid, sid) {
 $('detail').addEventListener('click', (e) => {
   const btn = e.target.closest('.review-btn');
   if (!btn) return;
-  review(btn.dataset.qid, btn.dataset.sid || null).catch(err => toast(err.message));
+  const resultContainer = btn.closest('.sub-result') || btn.closest('.card');
+  review(btn.dataset.qid, btn.dataset.sid || null, resultContainer).catch(err => toast(err.message));
 });
 
 $('regradeBtn').addEventListener('click', async () => {
