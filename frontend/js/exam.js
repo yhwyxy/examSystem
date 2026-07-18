@@ -32,14 +32,10 @@ function getPaperIdFromUrl() {
   return p || null;
 }
 
-function safeQuestionId(id) {
-  const raw = String(id);
-  if (window.CSS && typeof CSS.escape === 'function') return CSS.escape(raw);
-  return raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
-
-function questionControlSelector(q, suffix = '') {
-  return `[name="${safeQuestionId(q.id)}"]${suffix}`;
+function findQuestionControls(qid) {
+  return [...document.querySelectorAll('[name]')].filter(
+    control => control.name === String(qid)
+  );
 }
 
 function findSubquestionControl(tagName, qid, sid) {
@@ -201,12 +197,12 @@ function collectAnswers() {
   const answers = {};
   for (const q of state.exam.questions) {
     if (q.type === 'multiple_choice') {
-      answers[q.id] = [...document.querySelectorAll(questionControlSelector(q, ':checked'))].map(el => el.value);
+      answers[q.id] = findQuestionControls(q.id).filter(control => control.checked).map(control => control.value);
     } else if (q.type === 'true_false') {
-      const el = document.querySelector(questionControlSelector(q, ':checked'));
+      const el = findQuestionControls(q.id).find(control => control.checked);
       answers[q.id] = el ? (el.value === 'true') : null;
     } else if (q.type === 'single_choice') {
-      const el = document.querySelector(questionControlSelector(q, ':checked'));
+      const el = findQuestionControls(q.id).find(control => control.checked);
       answers[q.id] = el ? el.value : null;
     } else {
       const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
@@ -223,7 +219,7 @@ function collectAnswers() {
         }
         answers[q.id] = map;
       } else {
-        const el = document.querySelector(questionControlSelector(q));
+        const el = findQuestionControls(q.id)[0];
         answers[q.id] = el ? el.value : '';
       }
     }

@@ -24,14 +24,17 @@ def test_exam_question_renderer_builds_answer_controls_with_dom_api():
     assert "document.createElement('input')" in source
 
 
-def test_exam_answer_collection_escapes_dynamic_question_ids():
+def test_exam_answer_collection_matches_dynamic_question_ids_without_selectors():
     source = read_frontend_file("frontend/js/exam.js")
     collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
 
-    assert "safeQuestionId" in source
-    assert "CSS.escape" in source
-    assert '`input[name="${q.id}"]:checked`' not in collect_answers
-    assert '`[name="${q.id}"]`' not in collect_answers
+    assert "function findQuestionControls" in source
+    assert "document.querySelectorAll('[name]')" in source
+    assert "control.name === String(qid)" in source
+    assert "control.checked" in collect_answers
+    assert "safeQuestionId" not in source
+    assert "questionControlSelector" not in source
+    assert "[name=\"${" not in collect_answers
 
 
 def test_exam_renders_canonical_subquestions_with_code_language_whitelist():
