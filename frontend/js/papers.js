@@ -345,18 +345,32 @@
   }
 
   function collectSubQuestionsFromUI() {
+    const currentQuestion = editingQuestionIndex >= 0 ? editing.questions[editingQuestionIndex] : null;
+    const previousSubs = Array.isArray(currentQuestion?.subquestions) ? currentQuestion.subquestions : [];
+    const previousById = new Map(previousSubs.map(s => [String(s.id || ''), s]));
     return [...document.querySelectorAll('#qSubQuestionsList .sub-q-row')].map((row, i) => {
       const mode = row.querySelector('.sq-mode').value || 'text';
+      const id = row.querySelector('.sq-id').value.trim() || `s${i+1}`;
+      const previous = previousById.get(String(id)) || previousSubs[i] || {};
       const item = {
-        id: row.querySelector('.sq-id').value.trim() || `s${i+1}`,
+        ...previous,
+        id,
         question: row.querySelector('.sq-stem').value.trim(),
         answer: row.querySelector('.sq-answer').value,
         score: Number(row.querySelector('.sq-score').value) || 0,
         scoring_mode: mode,
       };
+      // Ensure advanced scoring fields survive admin edits even if UI does not expose them.
+      if (previous.calculation && item.calculation === undefined) item.calculation = previous.calculation;
+      if (previous.scoring_points && item.scoring_points === undefined) item.scoring_points = previous.scoring_points;
+      if (previous.scoring_rubric && item.scoring_rubric === undefined) item.scoring_rubric = previous.scoring_rubric;
       const allowedLanguages = [...row.querySelector('.sq-languages').selectedOptions]
         .map(option => option.value);
-      if (mode === 'code') item.allowed_languages = allowedLanguages;
+      if (mode === 'code') {
+        item.allowed_languages = allowedLanguages;
+      } else {
+        delete item.allowed_languages;
+      }
       return item;
     }).filter(s => s.question);
   }

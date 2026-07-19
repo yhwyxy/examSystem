@@ -38,7 +38,10 @@ def test_instrumentation_calculation_and_legal_answers_are_complete(tmp_path):
     instrumentation = json.loads((root / "instrumentation.json").read_text())
     validate_questions(instrumentation)
     q43 = next(q for q in instrumentation["questions"] if q["id"] == "q43")
-    assert q43["subquestions"][0]["scoring_mode"] == "text"
+    q431 = q43["subquestions"][0]
+    assert q431["scoring_mode"] == "calculation"
+    assert [item["expected"] for item in q431["calculation"]["final_answers"]] == [100, 200]
+    assert sum(item["score"] for item in q431["calculation"]["final_answers"]) == q431["score"]
     assert len(q43["subquestions"][2]["calculation"]["final_answers"]) == 3
     legal = json.loads((root / "legal.json").read_text())
     parent = next(q for q in legal["questions"] if q["id"] == "q35")

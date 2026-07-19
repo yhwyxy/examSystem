@@ -903,7 +903,35 @@
           "question": "测量范围（含上下界）",
           "answer": "仪表的测量范围变为100-200 kPa。",
           "score": 7.0,
-          "scoring_mode": "text"
+          "scoring_mode": "calculation",
+          "calculation": {
+            "final_answers": [
+              {
+                "id": "lower-bound",
+                "description": "测量范围下限",
+                "expected": 100,
+                "score": 3.5,
+                "tolerance": 0.1,
+                "keywords": [
+                  "下限",
+                  "100",
+                  "kPa"
+                ]
+              },
+              {
+                "id": "upper-bound",
+                "description": "测量范围上限",
+                "expected": 200,
+                "score": 3.5,
+                "tolerance": 0.1,
+                "keywords": [
+                  "上限",
+                  "200",
+                  "kPa"
+                ]
+              }
+            ]
+          }
         },
         {
           "id": "q43-2",

@@ -111,6 +111,18 @@ def test_admin_editor_writes_canonical_composites_and_language_whitelist():
     assert "item.code_language" not in collect_editor
 
 
+def test_admin_editor_preserves_subquestion_scoring_metadata_on_collect():
+    source = read_frontend_file("frontend/js/papers.js")
+    collect_editor = function_body(
+        source, "function collectSubQuestionsFromUI", "function applyQuestionFromForm"
+    )
+
+    assert "previous" in collect_editor or "previousSubs" in collect_editor
+    assert "calculation" in collect_editor
+    assert "scoring_points" in collect_editor
+    assert "scoring_rubric" in collect_editor
+
+
 def test_admin_composite_detail_displays_selected_language_without_inline_style():
     source = read_frontend_file("frontend/js/detail.js")
 

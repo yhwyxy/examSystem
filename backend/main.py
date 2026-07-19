@@ -378,10 +378,16 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
 
     full = question_loader.load_questions(paper_id)
     qmap = {str(q["id"]): q for q in full.get("questions", [])}
-    for qid, ans in (req.answers or {}).items():
-        q = qmap.get(str(qid))
-        if not q:
-            continue
+    answers = req.answers or {}
+    unknown_qids = sorted(str(qid) for qid in answers.keys() if str(qid) not in qmap)
+    if unknown_qids:
+        raise _error(
+            422,
+            "UNKNOWN_QUESTION_ID",
+            f"提交包含未知题目 ID: {', '.join(unknown_qids)}",
+        )
+    for qid, ans in answers.items():
+        q = qmap[str(qid)]
         try:
             question_loader.validate_answer_shape(q, ans)
         except ValueError as e:
@@ -396,7 +402,7 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
             paper_id=paper_id,
             paper_name=paper_name,
             department=req.department.strip() if req.department else None,
-            answers=req.answers,
+            answers=answers,
             started_at=req.started_at,
             client_ip=request.client.host if request.client else None,
             user_agent=request.headers.get("user-agent"),
@@ -408,7 +414,7 @@ def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
         logger.exception("提交保存失败")
         raise _error(500, "SUBMIT_FAILED", "提交失败，请联系管理员")
 
-    schedule_grading(submission_id, req.answers, paper_id)
+    schedule_grading(submission_id, answers, paper_id)
 
     return {
         "success": True,

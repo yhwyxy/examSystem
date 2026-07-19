@@ -357,6 +357,98 @@ def test_code_subanswer_language_must_be_allowed():
         )
 
 
+def test_update_composite_question_preserves_subquestion_scoring_metadata(papers_env):
+    from backend import paper_store
+
+    paper_store.create_paper(slug="mech", name="机电")
+    paper_store.add_question(
+        "mech",
+        {
+            "id": "c1",
+            "type": "composite",
+            "question": "父题",
+            "score": 7,
+            "subquestions": [
+                {
+                    "id": "s1",
+                    "question": "测量范围",
+                    "answer": "100-200 kPa",
+                    "score": 7,
+                    "scoring_mode": "calculation",
+                    "calculation": {
+                        "final_answers": [
+                            {
+                                "id": "lower",
+                                "description": "下限",
+                                "expected": 100,
+                                "score": 3.5,
+                                "tolerance": 0.1,
+                            },
+                            {
+                                "id": "upper",
+                                "description": "上限",
+                                "expected": 200,
+                                "score": 3.5,
+                                "tolerance": 0.1,
+                            },
+                        ]
+                    },
+                    "scoring_points": [
+                        {"id": "p1", "text": "上下界正确", "score": 7}
+                    ],
+                    "scoring_rubric": "按上下界分别给分",
+                }
+            ],
+        },
+    )
+
+    updated = paper_store.update_question(
+        "mech",
+        "c1",
+        {
+            "id": "c1",
+            "type": "composite",
+            "question": "父题-编辑后",
+            "score": 7,
+            "subquestions": [
+                {
+                    "id": "s1",
+                    "question": "测量范围（含上下界）",
+                    "answer": "100-200 kPa",
+                    "score": 7,
+                    "scoring_mode": "calculation",
+                }
+            ],
+        },
+    )
+
+    sub = updated["subquestions"][0]
+    assert sub["question"] == "测量范围（含上下界）"
+    assert sub["calculation"]["final_answers"][0]["expected"] == 100
+    assert sub["calculation"]["final_answers"][1]["expected"] == 200
+    assert sub["scoring_points"][0]["id"] == "p1"
+    assert sub["scoring_rubric"] == "按上下界分别给分"
+
+
+def test_instrumentation_q43_1_is_calculation_with_two_bounds():
+    import json
+    from pathlib import Path
+
+    from backend.question_loader import validate_questions
+
+    data_path = Path(__file__).resolve().parents[1] / "data" / "papers" / "instrumentation.json"
+    data = json.loads(data_path.read_text(encoding="utf-8"))
+    validate_questions(data)
+
+    q43 = next(q for q in data["questions"] if q["id"] == "q43")
+    q431 = next(s for s in q43["subquestions"] if s["id"] == "q43-1")
+
+    assert q431["scoring_mode"] == "calculation"
+    finals = q431["calculation"]["final_answers"]
+    assert [item["expected"] for item in finals] == [100, 200]
+    assert sum(item["score"] for item in finals) == q431["score"]
+
+
 def test_composite_rejects_duplicate_languages_after_normalization():
     from backend.question_loader import validate_questions
     from fastapi import HTTPException

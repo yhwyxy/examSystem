@@ -27,6 +27,40 @@ _BACKUP_KEEP = 20
 def _error(message: str, code: str, status: int = 400) -> None:
     raise HTTPException(status_code=status, detail={"code": code, "message": message})
 
+_PRESERVED_SUBQUESTION_FIELDS = ("calculation", "scoring_points", "scoring_rubric")
+
+
+def _merge_preserved_subquestion_fields(old: dict[str, Any], new: dict[str, Any]) -> dict[str, Any]:
+    """Keep advanced scoring metadata when clients omit unchanged subquestion fields."""
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return new
+    if old.get("type") != "composite" or new.get("type") != "composite":
+        return new
+    old_subs = old.get("subquestions") or []
+    new_subs = new.get("subquestions") or []
+    if not isinstance(old_subs, list) or not isinstance(new_subs, list):
+        return new
+    old_by_id = {
+        str(s.get("id")): s
+        for s in old_subs
+        if isinstance(s, dict) and s.get("id") is not None
+    }
+    merged_subs: list[Any] = []
+    for sub in new_subs:
+        if not isinstance(sub, dict):
+            merged_subs.append(sub)
+            continue
+        merged = deepcopy(sub)
+        old_sub = old_by_id.get(str(sub.get("id")))
+        if isinstance(old_sub, dict):
+            for key in _PRESERVED_SUBQUESTION_FIELDS:
+                if key not in merged and key in old_sub:
+                    merged[key] = deepcopy(old_sub[key])
+        merged_subs.append(merged)
+    result = deepcopy(new)
+    result["subquestions"] = merged_subs
+    return result
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -309,6 +343,7 @@ def update_question(slug: str, question_id: str, question: dict[str, Any]) -> di
             _error(f"题目不存在: {question_id}", "QUESTION_NOT_FOUND", 404)
         q = deepcopy(question)
         q["id"] = str(question_id)
+        q = _merge_preserved_subquestion_fields(questions[idx], q)
         questions[idx] = q
         paper["questions"] = questions
         ql.recompute_total_score(paper)
