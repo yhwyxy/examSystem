@@ -94,7 +94,8 @@
       <td>${esc(p.submission_count ?? 0)}</td>
       <td class="toolbar">
         <button class="btn secondary paper-edit-btn" type="button" data-slug="${esc(p.slug)}">录入</button>
-        <button class="btn secondary paper-pub-btn" type="button" data-slug="${esc(p.slug)}">发布</button>
+        <button class="btn secondary paper-preview-btn" type="button" data-slug="${esc(p.slug)}">预览</button>
+        <button class="btn secondary paper-pub-btn" type="button" data-slug="${esc(p.slug)}">${p.status === 'open' ? '关闭' : '发布'}</button>
         <button class="btn danger paper-del-btn" type="button" data-slug="${esc(p.slug)}">删除</button>
       </td>
     </tr>`).join('');
@@ -593,6 +594,9 @@
       if (!btn) return;
       const slug = btn.dataset.slug;
       if (btn.classList.contains('paper-edit-btn')) openEditor(slug).catch(err => toast(err.message));
+      if (btn.classList.contains('paper-preview-btn')) {
+        window.open(`/exam?paper=${encodeURIComponent(slug)}&preview=true`, '_blank');
+      }
       if (btn.classList.contains('paper-del-btn')) deletePaper(slug).catch(err => toast(err.message));
       if (btn.classList.contains('paper-pub-btn')) {
         if (typeof window.showView === 'function') window.showView('publish');

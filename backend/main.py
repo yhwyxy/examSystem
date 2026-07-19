@@ -682,6 +682,28 @@ def admin_paper_exam_link(slug: str, request: Request) -> dict[str, Any]:
     return exam_link(request, paper=slug)
 
 
+@app.get("/api/admin/papers/{slug}/preview", dependencies=[Depends(require_admin)])
+def admin_preview_paper(slug: str) -> dict[str, Any]:
+    """管理员预览试卷（跳过开考验证，返回完整数据包括答案）"""
+    paper_id = question_loader.validate_slug(slug)
+    data = question_loader.load_questions(paper_id)
+    if not data.get("questions"):
+        raise _error(400, "EMPTY_QUESTION_BANK", "该专业试卷暂无题目")
+
+    cfg = get_config().exam
+    return {
+        "paper_id": paper_id,
+        "paper_name": data.get("paper_name"),
+        "exam_info": data.get("exam_info", {}),
+        "questions": data["questions"],
+        "is_preview": True,
+        "config": {
+            "duration_minutes": cfg.duration_minutes,
+            "auto_submit": cfg.auto_submit,
+        },
+    }
+
+
 @app.post("/api/admin/reload-questions", dependencies=[Depends(require_admin)])
 def reload_questions_api(paper: str | None = None) -> dict[str, Any]:
     try:

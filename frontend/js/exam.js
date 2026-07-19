@@ -1,6 +1,10 @@
 const AUTO_SUBMIT_AFTER_BLURS = 3;
 const AWAY_TIMEOUT_MS = 30_000;
 
+// 预览模式检测
+const urlParams = new URLSearchParams(window.location.search);
+const isPreview = urlParams.get('preview') === 'true';
+
 const state = {
   exam: null,
   paperId: null,
@@ -13,6 +17,7 @@ const state = {
   awayTimeoutId: null,
   autoSubmitStarted: false,
   antiSwitchSetup: false,
+  showAnswers: true, // 预览模式下默认显示答案
 };
 
 function $(id) { return document.getElementById(id); }
@@ -60,7 +65,19 @@ async function loadExam() {
     throw new Error('缺少 paper 参数');
   }
 
-  const res = await fetch(`/api/exam?paper=${encodeURIComponent(state.paperId)}`);
+  let res;
+  if (isPreview) {
+    // 预览模式：使用管理员预览API
+    res = await fetch(`/api/admin/papers/${encodeURIComponent(state.paperId)}/preview`, {
+      headers: {
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      }
+    });
+  } else {
+    // 正常模式：使用考试API
+    res = await fetch(`/api/exam?paper=${encodeURIComponent(state.paperId)}`);
+  }
+
   const errBody = await res.json().catch(() => ({}));
   if (!res.ok) {
     const msg = errBody.detail?.message || errBody.message || '考试加载失败';
@@ -76,6 +93,11 @@ async function loadExam() {
   if (state.exam.exam_info?.description) descParts.push(state.exam.exam_info.description);
   $('desc').textContent = descParts.join(' · ');
   state.durationSeconds = (state.exam.config?.duration_minutes || state.exam.duration_minutes || 60) * 60;
+
+  // 预览模式：直接显示试卷，跳过登录
+  if (isPreview) {
+    setupPreviewMode();
+  }
 }
 
 function createAnswerOption(q, opt, inputType, options = {}) {
@@ -120,12 +142,12 @@ function renderQuestion(q, idx) {
     if (subs.length) {
       const wrap = document.createElement('div');
       wrap.className = 'composite-answers';
-      for (const s of subs) {
+      subs.forEach((s, subIdx) => {
         const block = document.createElement('div');
         block.className = 'sub-answer';
         const label = document.createElement('div');
         label.className = 'sub-label';
-        label.textContent = `(${s.id}) ${s.question || ''}（${s.score} 分）`;
+        label.textContent = `${subIdx + 1}、${s.question || ''}（${s.score} 分）`;
         block.appendChild(label);
         const languages = Array.isArray(s.allowed_languages) ? s.allowed_languages : [];
         if (s.scoring_mode === 'code') {
@@ -158,7 +180,7 @@ function renderQuestion(q, idx) {
         }
         block.appendChild(ta);
         wrap.appendChild(block);
-      }
+      });
       box.appendChild(wrap);
     } else {
       const ta = document.createElement('textarea');
@@ -191,6 +213,112 @@ function startTimer() {
   };
   tick();
   state.timerId = setInterval(tick, 1000);
+}
+
+// 预览模式：设置预览模式
+function setupPreviewMode() {
+  // 隐藏登录表单
+  const login = $('login');
+  if (login) login.style.display = 'none';
+
+  //显示预览横幅
+  const banner = document.createElement('div');
+  banner.id = 'previewBanner';
+  banner.className = 'preview-banner';
+  banner.innerHTML = `
+    <span>🔍 预览模式 - 当前显示：题目+答案</span>
+    <button id="toggleAnswersBtn" class="btn secondary">隐藏答案</button>
+  `;
+  document.body.insertBefore(banner, document.body.firstChild);
+
+  // 绑定切换按钮
+  $('toggleAnswersBtn').addEventListener('click', toggleAnswers);
+
+  // 显示试卷内容
+  $('examForm').style.display = 'block';
+  const container = $('questions');
+  container.textContent = '';
+  state.exam.questions.forEach((q, idx) => {
+    const questionEl = renderQuestion(q, idx);
+    // 如果显示答案，则添加答案显示
+    if (state.showAnswers) {
+      const answerEl = createAnswerDisplay(q);
+      questionEl.appendChild(answerEl);
+    }
+    container.appendChild(questionEl);
+  });
+
+  // 修改提交按钮
+  const submitBtn = $('submitBtn');
+  if (submitBtn) {
+    submitBtn.textContent = '预览模式（不可提交）';
+    submitBtn.disabled = true;
+  }
+}
+
+// 预览模式：切换答案显示
+function toggleAnswers() {
+  state.showAnswers = !state.showAnswers;
+  const banner = $('previewBanner');
+  if (banner) {
+    banner.querySelector('span').textContent = `预览模式 - 当前显示：${state.showAnswers ? '题目+答案' : '仅题目'}`;
+  }
+  $('toggleAnswersBtn').textContent = state.showAnswers ? '隐藏答案' : '显示答案';
+
+  // 重新渲染试卷
+  const container = $('questions');
+  container.textContent = '';
+  state.exam.questions.forEach((q, idx) => {
+    const questionEl = renderQuestion(q, idx);
+    if (state.showAnswers) {
+      const answerEl = createAnswerDisplay(q);
+      questionEl.appendChild(answerEl);
+    }
+    container.appendChild(questionEl);
+  });
+}
+
+// 预览模式：创建答案显示元素
+function createAnswerDisplay(q) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'answer-display';
+
+  if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+    const correctAnswer = q.answer;
+    const answerText = Array.isArray(correctAnswer) ? correctAnswer.join(', ') : String(correctAnswer);
+    wrapper.innerHTML = `
+      <div class="answer-label">正确答案</div>
+      <div class="answer-content">${answerText}</div>
+    `;
+  } else if (q.type === 'true_false') {
+    const correctAnswer = q.answer ? '正确' : '错误';
+    wrapper.innerHTML = `
+      <div class="answer-label">正确答案</div>
+      <div class="answer-content">${correctAnswer}</div>
+    `;
+  } else {
+    // 主观题/编程题
+    const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
+    if (subs.length) {
+      let html = '<div class="answer-label">参考答案</div>';
+      subs.forEach((s, idx) => {
+        html += `
+          <div class="sub-answer-display">
+            <div class="sub-label">${idx + 1}. ${s.question || ''}</div>
+            <div class="sub-content">${s.answer || '暂无参考答案'}</div>
+          </div>
+        `;
+      });
+      wrapper.innerHTML = html;
+    } else {
+      wrapper.innerHTML = `
+        <div class="answer-label">参考答案</div>
+        <div class="answer-content">${q.answer || '暂无参考答案'}</div>
+      `;
+    }
+  }
+
+  return wrapper;
 }
 
 function collectAnswers() {
@@ -243,6 +371,12 @@ function showSuccess() {
 }
 
 async function submitExam(autoSubmitReason = null) {
+  // 预览模式：禁用提交
+  if (isPreview) {
+    alert('当前为预览模式，试卷不可提交。');
+    return;
+  }
+
   const isAutoSubmit = typeof autoSubmitReason === 'string';
   if (isAutoSubmit) {
     if (state.autoSubmitStarted || state.submitting) return;
@@ -329,6 +463,12 @@ function setupAntiSwitchAutoSubmit() {
 }
 
 async function startExam() {
+  // 预览模式：跳过登录，直接显示试卷
+  if (isPreview) {
+    await loadExam();
+    return;
+  }
+
   const name = $('name').value.trim();
   const employeeId = $('employee_id').value.trim();
   if (!name || !employeeId) {
@@ -360,4 +500,12 @@ async function startExam() {
 $('startBtn').addEventListener('click', startExam);
 $('examForm').addEventListener('submit', submitExam);
 
-loadExam().catch(() => {});
+// 预览模式：自动开始考试
+if (isPreview) {
+  startExam().catch(err => {
+    console.error('预览模式启动失败:', err);
+    showFatal('预览模式启动失败: ' + err.message);
+  });
+} else {
+  loadExam().catch(() => {});
+}

@@ -609,6 +609,7 @@ tbody tr:hover {
   margin-bottom: 12px;
   color: var(--ink);
   font-weight: 800;
+  white-space: pre-wrap;
 }
 
 .option {
@@ -824,7 +825,69 @@ tbody tr:hover {
   border-top: 1px solid var(--line);
 }
 .sub-answer:first-child { padding-top: 0; border-top: 0; }
-.sub-label { color: var(--ink); font-weight: 650; overflow-wrap: anywhere; }
+.sub-label { color: var(--ink); font-weight: 650; overflow-wrap: anywhere; white-space: pre-wrap; }
 .code-language-field { width: min(100%, 260px); }
 .code-language-select { min-width: 0; }
 .q-block { margin-top: 0.75rem; }
+
+/* 预览模式样式 */
+.preview-banner {
+  background: #fff3cd;
+  color: #856404;
+  text-align: center;
+  padding: 0.75rem;
+  font-weight: 500;
+  border-bottom: 1px solid #ffc107;
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+}
+
+.preview-banner .btn {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.answer-display {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 8px;
+}
+
+.answer-label {
+  font-weight: 600;
+  color: #0369a1;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.answer-content {
+  color: #0c4a6e;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.sub-answer-display {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  background: #e0f2fe;
+  border-radius: 6px;
+}
+
+.sub-answer-display .sub-label {
+  font-weight: 600;
+  color: #075985;
+  margin-bottom: 0.5rem;
+}
+
+.sub-answer-display .sub-content {
+  color: #0c4a6e;
+  white-space: pre-wrap;
+}
