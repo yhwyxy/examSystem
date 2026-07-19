@@ -405,7 +405,7 @@ async function submitExam(autoSubmitReason = null) {
       department: ($('department').value || '').trim() || null,
       answers: collectAnswers(),
       started_at: state.startedAt ? new Date(state.startedAt).toISOString() : null,
-      ...(autoSubmitReason ? { auto_submit_reason: autoSubmitReason } : {}),
+      ...(isAutoSubmit ? { auto_submit_reason: autoSubmitReason } : {}),
     };
     const res = await fetch('/api/submit', {
       method: 'POST',
@@ -413,7 +413,19 @@ async function submitExam(autoSubmitReason = null) {
       body: JSON.stringify(payload),
     });
     const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.detail?.message || data.message || '提交失败');
+    if (!res.ok) {
+      const detail = data.detail;
+      let message = data.message || '提交失败';
+      if (typeof detail === 'string') {
+        message = detail;
+      } else if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
+        message = detail.message;
+      } else if (Array.isArray(detail) && detail.length) {
+        // Pydantic 422: 展示可读字段错误，避免只显示“提交失败”
+        message = detail.map((item) => item.msg || JSON.stringify(item)).join('; ');
+      }
+      throw new Error(message);
+    }
     showSuccess();
   } catch (e) {
     toast(e.message || '提交失败');
@@ -498,7 +510,10 @@ async function startExam() {
 }
 
 $('startBtn').addEventListener('click', startExam);
-$('examForm').addEventListener('submit', submitExam);
+$('examForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  submitExam(null);
+});
 
 // 预览模式：自动开始考试
 if (isPreview) {

@@ -166,8 +166,21 @@ def test_exam_submission_sends_reason_only_for_auto_submit():
     submit_body = function_body(source, "async function submitExam", "async function startExam")
 
     assert "async function submitExam(autoSubmitReason = null)" in source
-    assert "...(autoSubmitReason ? { auto_submit_reason: autoSubmitReason } : {})" in submit_body
+    # 表单 submit 会把 Event 传入；只有字符串 reason 才应写入 auto_submit_reason，
+    # 否则会触发后端 Pydantic 422（Literal 校验失败）。
+    assert "const isAutoSubmit = typeof autoSubmitReason === 'string'" in submit_body
+    assert "...(isAutoSubmit ? { auto_submit_reason: autoSubmitReason } : {})" in submit_body
+    assert "...(autoSubmitReason ? { auto_submit_reason: autoSubmitReason } : {})" not in submit_body
     assert "state.autoSubmitStarted" in submit_body
+    # 表单绑定不得把 submit Event 直接传给 submitExam
+    assert "addEventListener('submit', (event) => {" in source
+    assert "submitExam(null);" in source
+    assert "addEventListener('submit', submitExam)" not in source
+
+
+def test_exam_html_cache_busts_exam_js():
+    html = read_frontend_file("frontend/exam.html")
+    assert 'src="/js/exam.js?v=' in html
 
 
 def test_admin_shows_auto_submit_reason_only_when_present():

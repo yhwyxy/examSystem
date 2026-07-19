@@ -64,6 +64,18 @@ def test_submit_request_accepts_only_known_auto_submit_reasons():
         )
 
 
+def test_submit_request_coerces_legacy_event_object_auto_submit_reason_to_none():
+    """旧前端会把 submit Event 序列化成 {isTrusted: true} 塞进 auto_submit_reason。"""
+    req = SubmitRequest(
+        name="张三",
+        employee_id="E001",
+        paper_id="paper-1",
+        answers={"q1": "A"},
+        auto_submit_reason={"isTrusted": True},  # type: ignore[arg-type]
+    )
+    assert req.auto_submit_reason is None
+
+
 def test_submit_rejects_unknown_parent_question_id_and_does_not_persist(
     tmp_path, monkeypatch
 ):

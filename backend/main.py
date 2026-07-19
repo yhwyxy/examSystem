@@ -17,7 +17,7 @@ from typing import Any, Literal
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from fastapi.concurrency import run_in_threadpool
 
 from . import database, exporter, grader, paper_store, question_loader, review_service
@@ -164,7 +164,19 @@ class SubmitRequest(BaseModel):
     department: str | None = None
     answers: dict[str, Any] = Field(default_factory=dict)
     started_at: str | None = None  # 保留字段，但不再用于时间校验
+    # 仅接受已知自动交卷原因；旧前端可能误把 submit Event 序列化成
+    # {"isTrusted": true}，这类非字符串输入按“非自动交卷”处理为 None。
     auto_submit_reason: Literal["third_blur", "blur_timeout_30s"] | None = None
+
+    @field_validator("auto_submit_reason", mode="before")
+    @classmethod
+    def _normalize_auto_submit_reason(cls, value: Any):
+        if value is None or value == "":
+            return None
+        if isinstance(value, str):
+            return value
+        # 兼容旧前端把 DOM Event 误传为对象的情况
+        return None
 
 
 class ExamStartRequest(BaseModel):
@@ -280,6 +292,36 @@ def _shutdown_runtime() -> None:
 
 
 app.router.add_event_handler("shutdown", _shutdown_runtime)
+
+
+# ---------------------------------------------------------------------------
+# 请求校验错误日志（便于排查 422）
+# ---------------------------------------------------------------------------
+
+from fastapi.exceptions import RequestValidationError
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.warning(
+        "请求校验失败 422 path=%s body_errors=%s",
+        request.url.path,
+        exc.errors(),
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+@app.middleware("http")
+async def no_cache_exam_assets(request: Request, call_next):
+    """考试页与脚本禁止缓存，避免修复后仍命中旧 exam.js。"""
+    response = await call_next(request)
+    path = request.url.path
+    if path in {"/", "/exam", "/admin", "/detail"} or path.startswith("/js/") or path.startswith("/css/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+    return response
+
+
 
 
 # ---------------------------------------------------------------------------
