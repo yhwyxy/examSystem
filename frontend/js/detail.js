@@ -63,13 +63,13 @@ function render() {
     const isComposite = d.is_composite && Array.isArray(d.sub_results);
 
     if (isComposite) {
-      const subHtml = (d.sub_results || []).map(s => {
+      const subHtml = (d.sub_results || []).map((s, subIdx) => {
         const sid = s.sub_question_id;
         const language = s.selected_language
           ? `<span class="sub-result-language">语言：${esc(s.selected_language)}</span>`
           : '';
         return `<div class="sub-result card nested">
-          <h4>子题 ${esc(sid)}. ${esc(s.question || '')}</h4>
+          <h4>${subIdx + 1}、${esc(s.question || '')}</h4>
           <p class="muted">满分 ${esc(s.max_score)}，机器分 ${esc(s.score)}，最终分 <b>${esc(s.final_score ?? s.score)}</b> ${language} ${badge(s.review_status)}</p>
           <div class="answer-box"><b>学生：</b><br>${esc(s.student_answer ?? '')}</div>
           <div class="answer-box"><b>参考：</b><br>${esc(s.reference_answer ?? '')}</div>
