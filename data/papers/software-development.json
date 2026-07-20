@@ -406,10 +406,32 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "code",
       "question": "请用你所熟悉的任意一种编程语言写一段嵌套循环代码,请标明所使用的语言。",
       "id": "q16",
-      "answer": "JavaScript：\nfor (var i = 0; i < 10; i++) {\n    if (i == 5) {\n        break;\n    }\n    // ……\n    for (var j = 0; j < 10; j++) {\n        if (j < 9) {\n            continue;\n        }\n        // ……\n    }\n}"
+      "code_language": "python",
+      "answer": "for i in range(5):\n    for j in range(5):\n        s = i + j",
+      "scoring_points": [
+        {
+          "id": "q16_p1",
+          "text": "循环 for while",
+          "score": 4.0
+        },
+        {
+          "id": "q16_p2",
+          "text": "循环 for while",
+          "score": 4.0
+        },
+        {
+          "id": "q16_p3",
+          "text": "变量赋值或表达式计算",
+          "score": 2.0
+        }
+      ],
+      "open_ended": true,
+      "open_ended_kind": "multi_valid",
+      "open_ended_note": "题干允许任意编程语言写嵌套循环；参考答案仅为示例实现，不是唯一代码。",
+      "require_manual_review": true
     },
     {
       "type": "short_answer",
@@ -417,7 +439,29 @@
       "scoring_mode": "text",
       "question": "面向对象的特征有哪些",
       "id": "q17",
-      "answer": "A、抽象：忽略与当前目标无关的方面，以便更充分地关注与当前目标有关的方面。\nB、继承：一种联结类的层次模型，允许和鼓励重用，提供明确表述共性的方法。\nC、封装：把过程和数据包围起来，对数据的访问只能通过已定义的界面。\nD、多态：允许不同类的对象对同一消息作出响应。"
+      "answer": "A、抽象：忽略与当前目标无关的方面，以便更充分地关注与当前目标有关的方面。\nB、继承：一种联结类的层次模型，允许和鼓励重用，提供明确表述共性的方法。\nC、封装：把过程和数据包围起来，对数据的访问只能通过已定义的界面。\nD、多态：允许不同类的对象对同一消息作出响应。",
+      "scoring_points": [
+        {
+          "id": "q17_p1",
+          "text": "抽象",
+          "score": 2.5
+        },
+        {
+          "id": "q17_p2",
+          "text": "继承",
+          "score": 2.5
+        },
+        {
+          "id": "q17_p3",
+          "text": "封装",
+          "score": 2.5
+        },
+        {
+          "id": "q17_p4",
+          "text": "多态",
+          "score": 2.5
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -425,7 +469,31 @@
       "scoring_mode": "text",
       "question": "简要描述HTTP、HTTPS的区别",
       "id": "q18",
-      "answer": "1、HTTP（超文本传输协议）用于在 Web 浏览器和网站服务器之间传递信息。\n2、HTTPS 采用安全套接字层，使传输数据更加安全。\n3、HTTPS 在 HTTP 的基础上增加 SSL/TLS 协议。\n4、使用 HTTPS 协议需要 CA 证书。"
+      "answer": "1、HTTP（超文本传输协议）用于在 Web 浏览器和网站服务器之间传递信息。\n2、HTTPS 采用安全套接字层，使传输数据更加安全。\n3、HTTPS 在 HTTP 的基础上增加 SSL/TLS 协议。\n4、使用 HTTPS 协议需要 CA 证书。",
+      "scoring_points": [
+        {
+          "id": "q18_p1",
+          "text": "HTTP 是超文本传输协议，用于浏览器和服务器之间传递信息",
+          "score": 2.0
+        },
+        {
+          "id": "q18_p2",
+          "text": "HTTPS 是在 HTTP 基础上增加安全传输机制",
+          "score": 3.0,
+          "required": true
+        },
+        {
+          "id": "q18_p3",
+          "text": "HTTPS 使用 SSL 或 TLS 对传输数据加密",
+          "score": 3.0,
+          "required": true
+        },
+        {
+          "id": "q18_p4",
+          "text": "HTTPS 通常需要证书或 CA 认证",
+          "score": 2.0
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -433,7 +501,39 @@
       "scoring_mode": "text",
       "question": "需求调研有哪些方法",
       "id": "q19",
-      "answer": "观察法、体验法、问卷调查法、访谈法、单据分析法、报表分析法等。"
+      "answer": "观察法、体验法、问卷调查法、访谈法、单据分析法、报表分析法等。",
+      "scoring_points": [
+        {
+          "id": "q19_p1",
+          "text": "观察法",
+          "score": 1.5
+        },
+        {
+          "id": "q19_p2",
+          "text": "体验法",
+          "score": 1.5
+        },
+        {
+          "id": "q19_p3",
+          "text": "问卷调查法",
+          "score": 2.0
+        },
+        {
+          "id": "q19_p4",
+          "text": "访谈法",
+          "score": 2.0
+        },
+        {
+          "id": "q19_p5",
+          "text": "单据分析或报表分析",
+          "score": 2.0
+        },
+        {
+          "id": "q19_p6",
+          "text": "其他合理的需求调研或市场分析方法",
+          "score": 1.0
+        }
+      ]
     },
     {
       "type": "essay",
@@ -441,7 +541,39 @@
       "scoring_mode": "text",
       "question": "下面有两张表:\nEMP表:\nEMP表数据：\nEMP_ID | EMP_NAME | DEPT_ID | SALARY\n10022222 | 张三 | 001 | 1000\n10022796 | 李四 | 002 | 5500\n10022696 | 王五 | 002 | 3200\n10022101 | 赵六 | 003 | 2000\nDEPT表:\nDEPT表数据：\nDEPT_ID | DEPT_NAME\n001 | IT部\n002 | 财务部\n003 | 公司办\n写一条SQL语句,查询出工资高于3000的职员的工号、姓名、部门名称。",
       "id": "q20",
-      "answer": "SELECT emp_id, emp_name, dept_name FROM emp, dept WHERE salary > 3000 AND emp.dept_id = dept.dept_id;"
+      "answer": "SELECT emp_id, emp_name, dept_name FROM emp, dept WHERE salary > 3000 AND emp.dept_id = dept.dept_id;",
+      "scoring_points": [
+        {
+          "id": "q20_p1",
+          "text": "SELECT",
+          "score": 2.0
+        },
+        {
+          "id": "q20_p2",
+          "text": "WHERE",
+          "score": 2.0
+        },
+        {
+          "id": "q20_p3",
+          "text": "INNER JOIN 或 JOIN 连接",
+          "score": 3.0
+        },
+        {
+          "id": "q20_p4",
+          "text": "emp_id emp_name dept_name",
+          "score": 3.0
+        },
+        {
+          "id": "q20_p5",
+          "text": "EMP 表和 DEPT 表通过 dept_id 关联",
+          "score": 3.0
+        },
+        {
+          "id": "q20_p6",
+          "text": "salary 大于 3000",
+          "score": 2.0
+        }
+      ]
     },
     {
       "type": "essay",
@@ -449,7 +581,33 @@
       "scoring_mode": "text",
       "question": "找出元素item在给定数组array中的位置\n输入:\n[ 1, 2, 3, 4 ], 3\n输出:\n2\n请使用js、java、C、C#、python中的任意一种来实现",
       "id": "q21",
-      "answer": "JavaScript：\nfunction findIndex(array, item) {\n    return array.indexOf(item);\n}"
+      "answer": "JavaScript：\nfunction findIndex(array, item) {\n    return array.indexOf(item);\n}",
+      "scoring_points": [
+        {
+          "id": "q21_p1",
+          "text": "array",
+          "score": 3.0
+        },
+        {
+          "id": "q21_p2",
+          "text": "indexOf",
+          "score": 7.0
+        },
+        {
+          "id": "q21_p3",
+          "text": "查找元素位置",
+          "score": 3.0
+        },
+        {
+          "id": "q21_p4",
+          "text": "代码表达式或函数调用",
+          "score": 2.0
+        }
+      ],
+      "open_ended": true,
+      "open_ended_kind": "multi_valid",
+      "open_ended_note": "题干允许 js/java/C/C#/python 任意语言实现；参考答案仅为 JavaScript 示例。",
+      "require_manual_review": true
     }
   ]
 }

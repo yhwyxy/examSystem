@@ -816,7 +816,27 @@
       "scoring_mode": "text",
       "question": "氩气通过透气砖吹入钢包,强烈搅拌钢水,其作用和目的是什么?",
       "answer": "1、均匀钢水成分; 2、均匀钢水温度; 3、促使夹杂物碰撞上浮;",
-      "id": "q41"
+      "id": "q41",
+      "scoring_points": [
+        {
+          "id": "q41_p1",
+          "text": "均匀钢水成分",
+          "score": 3.3333,
+          "required": true
+        },
+        {
+          "id": "q41_p2",
+          "text": "均匀钢水温度",
+          "score": 3.3333,
+          "required": true
+        },
+        {
+          "id": "q41_p3",
+          "text": "促使夹杂物碰撞上浮",
+          "score": 3.3334,
+          "required": true
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -824,7 +844,29 @@
       "scoring_mode": "text",
       "question": "结晶器保护渣的作用有哪些?",
       "answer": "绝热保温,防止钢液面结壳;隔绝空气,防止二次氧化; 吸收钢水中夹杂物; 改善润滑及结晶器传热",
-      "id": "q42"
+      "id": "q42",
+      "scoring_points": [
+        {
+          "id": "q42_p1",
+          "text": "绝热保温，防止钢液面结壳",
+          "score": 2.5
+        },
+        {
+          "id": "q42_p2",
+          "text": "隔绝空气，防止二次氧化",
+          "score": 2.5
+        },
+        {
+          "id": "q42_p3",
+          "text": "吸收钢水中夹杂物",
+          "score": 2.5
+        },
+        {
+          "id": "q42_p4",
+          "text": "改善润滑及结晶器传热",
+          "score": 2.5
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -832,13 +874,41 @@
       "scoring_mode": "calculation",
       "calculation": {
         "final_answers": [
-          {"id": "silicomanganese", "description": "硅锰合金加入量", "expected": 753, "score": 10, "tolerance": 0.5, "unit": "kg"},
-          {"id": "ferrosilicon", "description": "硅铁合金加入量", "expected": 135, "score": 10, "tolerance": 0.5, "unit": "kg"}
+          {
+            "id": "silicomanganese",
+            "description": "硅锰合金加入量",
+            "expected": 753,
+            "score": 10,
+            "tolerance": 0.5,
+            "unit": "kg"
+          },
+          {
+            "id": "ferrosilicon",
+            "description": "硅铁合金加入量",
+            "expected": 135,
+            "score": 10,
+            "tolerance": 0.5,
+            "unit": "kg"
+          }
         ]
       },
       "question": "精炼钢水[Mn]和[Si]的调整,计算条件为:\n•   钢水总重量为:100 吨(t)\n•   硅锰合金(Si:17%,Mn:65%)、硅铁(Si:72%)\n•   硅的收得率80%,锰的收得率92%\n•   电炉/转炉出钢成分为[Mn]:0.05% ,[Si]:0.00%\n•   合金化目标: [Mn]:0.50% ,[Si]:0.18%\n计算精炼过程硅锰、硅铁合金的加入量。(保留整数位)\n",
       "answer": "753KG/135KG。",
-      "id": "q43"
+      "id": "q43",
+      "scoring_points": [
+        {
+          "id": "q43_p1",
+          "text": "硅锰合金加入量 753KG",
+          "score": 10.0,
+          "required": true
+        },
+        {
+          "id": "q43_p2",
+          "text": "硅铁合金加入量 135KG",
+          "score": 10.0,
+          "required": true
+        }
+      ]
     }
   ]
 }

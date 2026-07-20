@@ -11,10 +11,13 @@ import re
 import threading
 from dataclasses import dataclass, field
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from . import objective_grader
 from .config import get_config
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 from .question_loader import (
     SUBJECTIVE_TYPES,
     get_subquestions,
@@ -98,11 +101,19 @@ def get_subjective_service() -> SubjectiveScoringService:
                     raise
                 _remote_reranker = reranker
             else:
+                # 从配置读取模型名称或路径；相对路径按项目根目录解析
+                cfg = get_config()
+                model_name = cfg.model.reranker
+                model_path = Path(model_name)
+                if not model_path.is_absolute():
+                    model_path = (_PROJECT_ROOT / model_path).resolve()
+                if model_path.exists():
+                    model_name = str(model_path)
                 # 默认允许加载 CrossEncoder；无 semantic 依赖时库内回退词法相似度
                 _subjective_service = SubjectiveScoringService(
                     allow_model_load=True,
-                    text_model="BAAI/bge-reranker-v2-m3",
-                    code_model="BAAI/bge-reranker-v2-m3",
+                    text_model=model_name,
+                    code_model=model_name,
                 )
         return _subjective_service
 

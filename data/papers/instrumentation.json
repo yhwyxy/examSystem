@@ -857,14 +857,36 @@
           "question": "零位误差",
           "answer": "输入标准信号为零时设备显示不为零的值。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q41-1_p1",
+              "text": "输入标准信号零时",
+              "score": 2.5,
+              "required": true
+            },
+            {
+              "id": "q41-1_p2",
+              "text": "设备显示不为零的值",
+              "score": 2.5,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q41-2",
           "question": "测量范围",
           "answer": "仪器能够测量的最小值与最大值之间的范围。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q41-2_p1",
+              "text": "仪器能够测量的最小尺寸与最大尺寸之间的范围",
+              "score": 5.0,
+              "required": true
+            }
+          ]
         }
       ]
     },
@@ -881,14 +903,30 @@
           "question": "引用误差",
           "answer": "绝对误差与仪表满量程值之比。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-1_p1",
+              "text": "测量的绝对误差与仪表的满量程值之比",
+              "score": 5.0,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q42-2",
           "question": "绝对误差",
           "answer": "测量值与真实值之差。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-2_p1",
+              "text": "测量值与真实值之差",
+              "score": 5.0,
+              "required": true
+            }
+          ]
         }
       ]
     },
@@ -931,7 +969,21 @@
                 ]
               }
             ]
-          }
+          },
+          "scoring_points": [
+            {
+              "id": "q43-1_p1",
+              "text": "测量范围下限 100 kPa",
+              "score": 3.5,
+              "required": true
+            },
+            {
+              "id": "q43-1_p2",
+              "text": "测量范围上限 200 kPa",
+              "score": 3.5,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q43-2",
@@ -949,7 +1001,15 @@
                 "tolerance": 0.1
               }
             ]
-          }
+          },
+          "scoring_points": [
+            {
+              "id": "q43-2_p1",
+              "text": "量程 100 kPa",
+              "score": 6.0,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q43-3",
@@ -981,7 +1041,27 @@
                 "tolerance": 0.1
               }
             ]
-          }
+          },
+          "scoring_points": [
+            {
+              "id": "q43-3_p1",
+              "text": "4mA 对应 100 kPa",
+              "score": 2.34,
+              "required": true
+            },
+            {
+              "id": "q43-3_p2",
+              "text": "12mA 对应 150 kPa",
+              "score": 2.33,
+              "required": true
+            },
+            {
+              "id": "q43-3_p3",
+              "text": "20mA 对应 200 kPa",
+              "score": 2.33,
+              "required": true
+            }
+          ]
         }
       ]
     }

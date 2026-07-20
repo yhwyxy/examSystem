@@ -836,7 +836,39 @@
           "question": "三视图组成及投影规律",
           "answer": "主视图、俯视图、左视图；长对正、高平齐、宽相等。",
           "score": 9.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q41-1_p1",
+              "text": "主视图",
+              "score": 1.5
+            },
+            {
+              "id": "q41-1_p2",
+              "text": "俯视图",
+              "score": 1.5
+            },
+            {
+              "id": "q41-1_p3",
+              "text": "左视图",
+              "score": 1.5
+            },
+            {
+              "id": "q41-1_p4",
+              "text": "长对正",
+              "score": 1.5
+            },
+            {
+              "id": "q41-1_p5",
+              "text": "高平齐",
+              "score": 1.5
+            },
+            {
+              "id": "q41-1_p6",
+              "text": "宽相等",
+              "score": 1.5
+            }
+          ]
         }
       ]
     },
@@ -846,7 +878,24 @@
       "scoring_mode": "text",
       "question": "铰链四杆机构的基本类型",
       "answer": "铰链四杆机构一般分三种基本类型:曲柄摇杆机构、双曲柄机构、双摇杆机构。",
-      "id": "q42"
+      "id": "q42",
+      "scoring_points": [
+        {
+          "id": "q42_p1",
+          "text": "曲柄摇杆机构",
+          "score": 2.0
+        },
+        {
+          "id": "q42_p2",
+          "text": "双曲柄机构",
+          "score": 2.0
+        },
+        {
+          "id": "q42_p3",
+          "text": "双摇杆机构",
+          "score": 2.0
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -867,7 +916,21 @@
       },
       "question": "一齿轮副,主动齿轮齿数z1=30,从动齿轮齿数z2=50,试计算传动比i=?若主动齿轮转速n1=1000r/min,从动齿轮转速n2=?",
       "answer": "i=z2/z1=50/30=5/3\ni=n1/n2     n2=n1/i=1000/(5/3)=`600r/min",
-      "id": "q43"
+      "id": "q43",
+      "scoring_points": [
+        {
+          "id": "q43_p1",
+          "text": "i=z2/z1=50/30=5/3",
+          "score": 5.0,
+          "required": true
+        },
+        {
+          "id": "q43_p2",
+          "text": "n2=n1/i=1000/(5/3)=600r/min",
+          "score": 5.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "composite",
@@ -882,7 +945,34 @@
           "question": "换向阀控制方式",
           "answer": "人力控制、机械控制、电气控制、直接压力控制、先导控制。",
           "score": 15.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q44-1_p1",
+              "text": "人力控制",
+              "score": 3.0
+            },
+            {
+              "id": "q44-1_p2",
+              "text": "机械控制",
+              "score": 3.0
+            },
+            {
+              "id": "q44-1_p3",
+              "text": "电气控制",
+              "score": 3.0
+            },
+            {
+              "id": "q44-1_p4",
+              "text": "直接压力控制",
+              "score": 3.0
+            },
+            {
+              "id": "q44-1_p5",
+              "text": "先导控制",
+              "score": 3.0
+            }
+          ]
         }
       ]
     }

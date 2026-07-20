@@ -28,6 +28,10 @@ review:
 grading:
   sync_grading: true
 
+# 本地模型配置
+model:
+  reranker: "models/models--BAAI--bge-reranker-v2-m3/snapshots/953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e"
+
 admin:
   enable_auth: false
   password: null

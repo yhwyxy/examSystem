@@ -878,7 +878,29 @@
       "scoring_mode": "text",
       "question": "通过哪些途径可以提高化学反应的效果?",
       "answer": "控制反应的温度,压力,反应时间在适宜的范围之内,恰当的催化剂。",
-      "id": "q41"
+      "id": "q41",
+      "scoring_points": [
+        {
+          "id": "q41_p1",
+          "text": "控制反应的温度在适宜的范围之内",
+          "score": 2.5
+        },
+        {
+          "id": "q41_p2",
+          "text": "控制压力在适宜的范围之内",
+          "score": 2.5
+        },
+        {
+          "id": "q41_p3",
+          "text": "控制反应时间在适宜的范围之内",
+          "score": 2.5
+        },
+        {
+          "id": "q41_p4",
+          "text": "选用恰当的催化剂",
+          "score": 2.5
+        }
+      ]
     },
     {
       "type": "composite",
@@ -893,14 +915,58 @@
           "question": "影响因素",
           "answer": "反应物浓度、温度、催化剂、诱导作用。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-1_p1",
+              "text": "反应物的浓度",
+              "score": 1.25
+            },
+            {
+              "id": "q42-1_p2",
+              "text": "温度",
+              "score": 1.25
+            },
+            {
+              "id": "q42-1_p3",
+              "text": "催化剂",
+              "score": 1.25
+            },
+            {
+              "id": "q42-1_p4",
+              "text": "诱导作用",
+              "score": 1.25
+            }
+          ]
         },
         {
           "id": "q42-2",
           "question": "加速方法",
           "answer": "增加浓度、升高温度、加入正催化剂或利用诱导反应。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-2_p1",
+              "text": "增加反应物浓度",
+              "score": 1.25
+            },
+            {
+              "id": "q42-2_p2",
+              "text": "升高溶液温度",
+              "score": 1.25
+            },
+            {
+              "id": "q42-2_p3",
+              "text": "加入正催化剂",
+              "score": 1.25
+            },
+            {
+              "id": "q42-2_p4",
+              "text": "有诱导反应存在",
+              "score": 1.25
+            }
+          ]
         }
       ]
     },
@@ -910,7 +976,34 @@
       "scoring_mode": "text",
       "question": "催化剂在化工产品工业生产上有何意义?",
       "answer": "催化剂在工业生产上可以加快主反应速度、减少副反应。使反应定向进行,缓和反应条件,降低对设备的要求,从而提高设备的生产能力和降低产品成本。",
-      "id": "q43"
+      "id": "q43",
+      "scoring_points": [
+        {
+          "id": "q43_p1",
+          "text": "加快主反应速度",
+          "score": 2.0
+        },
+        {
+          "id": "q43_p2",
+          "text": "减少副反应",
+          "score": 2.0
+        },
+        {
+          "id": "q43_p3",
+          "text": "使反应定向进行",
+          "score": 2.0
+        },
+        {
+          "id": "q43_p4",
+          "text": "缓和反应条件，降低对设备的要求",
+          "score": 2.0
+        },
+        {
+          "id": "q43_p5",
+          "text": "提高设备的生产能力和降低产品成本",
+          "score": 2.0
+        }
+      ]
     },
     {
       "type": "composite",
@@ -925,14 +1018,50 @@
           "question": "鉴别试剂",
           "answer": "选用 Ba(OH)2 溶液分别加入并加热。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q44-1_p1",
+              "text": "选用 Ba(OH)2 试剂",
+              "score": 3.0,
+              "required": true
+            },
+            {
+              "id": "q44-1_p2",
+              "text": "将四种未知试剂配成溶液，分别加入 Ba(OH)2 溶液并加热",
+              "score": 2.0,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q44-2",
           "question": "鉴别现象",
           "answer": "白色沉淀且刺激性气体为硫酸铵；仅气体为氯化铵；仅沉淀为硫酸钠；均无为氯化钠。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q44-2_p1",
+              "text": "出现白色沉淀且产生刺激性气味气体的是硫酸铵",
+              "score": 1.25
+            },
+            {
+              "id": "q44-2_p2",
+              "text": "没有白色沉淀但产生刺激性气味气体的是氯化铵",
+              "score": 1.25
+            },
+            {
+              "id": "q44-2_p3",
+              "text": "只有白色沉淀的是硫酸钠",
+              "score": 1.25
+            },
+            {
+              "id": "q44-2_p4",
+              "text": "没有白色沉淀也不产生刺激性气味气体的是氯化钠",
+              "score": 1.25
+            }
+          ]
         }
       ]
     }

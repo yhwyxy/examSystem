@@ -869,7 +869,27 @@
       "scoring_mode": "text",
       "question": "滴定分析法的基本原理是什么?",
       "answer": "滴定分析是基于物质相互反应完全时,其物质的量满足一定的化学计量关系,根据消耗滴定剂的量与被测物质的量满足摩尔比关系,计算被测物质的含量。",
-      "id": "q41"
+      "id": "q41",
+      "scoring_points": [
+        {
+          "id": "q41_p1",
+          "text": "滴定分析基于物质相互反应完全",
+          "score": 3.0,
+          "required": true
+        },
+        {
+          "id": "q41_p2",
+          "text": "其物质的量满足一定的化学计量关系",
+          "score": 3.0,
+          "required": true
+        },
+        {
+          "id": "q41_p3",
+          "text": "根据消耗滴定剂的量与被测物质的量满足摩尔比关系，计算被测物质的含量",
+          "score": 4.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "composite",
@@ -884,7 +904,27 @@
           "question": "稀硫酸配置方法",
           "answer": "将浓硫酸徐徐加入水中并搅拌散热，不可将水加入酸中。",
           "score": 10.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-1_p1",
+              "text": "将浓H2SO4徐徐加入水中",
+              "score": 4.0,
+              "required": true
+            },
+            {
+              "id": "q42-1_p2",
+              "text": "并加以搅拌以散热",
+              "score": 3.0,
+              "required": true
+            },
+            {
+              "id": "q42-1_p3",
+              "text": "切不可反向进行，否则水迅速蒸发飞溅带出浓H2SO4伤人",
+              "score": 3.0,
+              "required": true
+            }
+          ]
         }
       ]
     },
@@ -901,14 +941,41 @@
           "question": "反应方程式",
           "answer": "Na2CO3 + 2HCl → 2NaCl + H2O + CO2↑。",
           "score": 10.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q43-1_p1",
+              "text": "Na2CO3 + 2HCl",
+              "score": 4.0,
+              "required": true
+            },
+            {
+              "id": "q43-1_p2",
+              "text": "生成 2NaCl + H2O + CO2↑",
+              "score": 4.0,
+              "required": true
+            },
+            {
+              "id": "q43-1_p3",
+              "text": "方程式配平正确",
+              "score": 2.0
+            }
+          ]
         },
         {
           "id": "q43-2",
           "question": "盐酸浓度计算",
           "answer": "0.2000 mol/L。",
           "score": 10.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q43-2_p1",
+              "text": "该盐酸溶液的物质的量浓度为 0.2000 mol/L",
+              "score": 10.0,
+              "required": true
+            }
+          ]
         }
       ]
     }

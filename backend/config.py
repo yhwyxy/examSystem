@@ -73,6 +73,12 @@ class GradingConfig:
 
 
 @dataclass(frozen=True)
+class ModelConfig:
+    """本地模型配置。"""
+    reranker: str = "BAAI/bge-reranker-v2-m3"
+
+
+@dataclass(frozen=True)
 class AdminConfig:
     enable_auth: bool = False
     password: str | None = None
@@ -90,6 +96,7 @@ class AppConfig:
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     review: ReviewConfig = field(default_factory=ReviewConfig)
     grading: GradingConfig = field(default_factory=GradingConfig)
+    model: ModelConfig = field(default_factory=ModelConfig)
     admin: AdminConfig = field(default_factory=AdminConfig)
     export: ExportConfig = field(default_factory=ExportConfig)
 
@@ -150,6 +157,7 @@ def _build_config(raw: dict) -> AppConfig:
             "high_confidence_threshold": 0.75, "need_review_threshold": 0.5, "low_confidence_threshold": 0.35,
         }),
         grading=_build_grading_config(raw.get("grading", {})),
+        model=_section(ModelConfig, "model", {"reranker": "BAAI/bge-reranker-v2-m3"}),
         admin=_section(AdminConfig, "admin", {"enable_auth": False, "password": None}),
         export=_section(ExportConfig, "export", {"format": "xlsx"}),
     )
@@ -177,6 +185,7 @@ def _validate_config(raw: dict) -> None:
         "grading": {
             "sync_grading",
         },
+        "model": {"reranker"},
         "admin": {"enable_auth", "password"},
         "export": {"format"},
     }

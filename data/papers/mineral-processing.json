@@ -791,7 +791,24 @@
       "scoring_mode": "text",
       "question": "矿石可选性研究的三个阶段:",
       "answer": "1)实验室试验 2)中间试验  3)工业试验。",
-      "id": "q41"
+      "id": "q41",
+      "scoring_points": [
+        {
+          "id": "q41_p1",
+          "text": "实验室试验",
+          "score": 3.3333
+        },
+        {
+          "id": "q41_p2",
+          "text": "中间试验",
+          "score": 3.3333
+        },
+        {
+          "id": "q41_p3",
+          "text": "工业试验",
+          "score": 3.3334
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -799,7 +816,21 @@
       "scoring_mode": "text",
       "question": "一台360m2的烧结机月产量为33.5万吨,环冷余热每小时产气为35吨,一个月作业时间为30天,问下该烧结机吨矿产气是多少kg/t?",
       "answer": "吨矿产气量=35*24*28*1000/365000=75.22kg/t",
-      "id": "q42"
+      "id": "q42",
+      "scoring_points": [
+        {
+          "id": "q42_p1",
+          "text": "吨矿产气量=35*24*28*1000/365000",
+          "score": 4.0,
+          "required": true
+        },
+        {
+          "id": "q42_p2",
+          "text": "结果为 75.22kg/t",
+          "score": 6.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -807,7 +838,27 @@
       "scoring_mode": "text",
       "question": "简单解释下物相分析。",
       "answer": "根据矿石中的各种矿物在各种溶剂中的溶解度和溶解速度不同,采用不同浓度的各种溶剂在不同条件下处理所分析的矿样,即可使矿石中各种矿物分离,从而可测出试样中某种元素呈何种矿物存在和含量的多少。",
-      "id": "q43"
+      "id": "q43",
+      "scoring_points": [
+        {
+          "id": "q43_p1",
+          "text": "根据矿石中各种矿物在各种溶剂中的溶解度和溶解速度不同",
+          "score": 4.0,
+          "required": true
+        },
+        {
+          "id": "q43_p2",
+          "text": "采用不同浓度溶剂在不同条件下处理矿样使各种矿物分离",
+          "score": 3.0,
+          "required": true
+        },
+        {
+          "id": "q43_p3",
+          "text": "测出试样中某种元素呈何种矿物存在和含量多少",
+          "score": 3.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -815,7 +866,21 @@
       "scoring_mode": "text",
       "question": "矿物粉碎的目的。",
       "answer": "(1)使物料粒度减小;\n(2)使有用矿物与脉石矿物充分单体解离。",
-      "id": "q44"
+      "id": "q44",
+      "scoring_points": [
+        {
+          "id": "q44_p1",
+          "text": "使物料粒度减小",
+          "score": 5.0,
+          "required": true
+        },
+        {
+          "id": "q44_p2",
+          "text": "使有用矿物与脉石矿物充分单体解离",
+          "score": 5.0,
+          "required": true
+        }
+      ]
     }
   ]
 }

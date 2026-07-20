@@ -874,7 +874,21 @@
       "scoring_mode": "text",
       "question": "请写出国内外知名PLC品牌或DCS品牌",
       "answer": "国外知名品牌:西门子、ABB、施耐德、欧姆龙、TMEIC、艾默生、横河等\n国内知名品牌:浙江中控、江苏科远等",
-      "id": "q41"
+      "id": "q41",
+      "scoring_points": [
+        {
+          "id": "q41_p1",
+          "text": "国外知名品牌：西门子、ABB、施耐德、欧姆龙、TMEIC、艾默生、横河等",
+          "score": 5.0,
+          "required": true
+        },
+        {
+          "id": "q41_p2",
+          "text": "国内知名品牌：浙江中控、江苏科远等",
+          "score": 5.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -882,7 +896,41 @@
       "scoring_mode": "text",
       "question": "请翻译automation、electrical、technology、intelligent的中文,简单解释AI和VR的内容",
       "answer": "automation:自动化;electrical:电气的;technology:技术;intelligent:智能的;\nAI:人工智能(研究、开发用于模拟、延伸和扩展人的智能的理论、方法、技术及应用系统的一门新的技术科学。)\nVR:虚拟现实技术(囊括计算机、电子信息、仿真技术于一体,其基本实现方式是计算机模拟虚拟环境从而给人以环境沉浸感。)",
-      "id": "q42"
+      "id": "q42",
+      "scoring_points": [
+        {
+          "id": "q42_p1",
+          "text": "automation：自动化",
+          "score": 1.5
+        },
+        {
+          "id": "q42_p2",
+          "text": "electrical：电气的",
+          "score": 1.5
+        },
+        {
+          "id": "q42_p3",
+          "text": "technology：技术",
+          "score": 1.5
+        },
+        {
+          "id": "q42_p4",
+          "text": "intelligent：智能的",
+          "score": 1.5
+        },
+        {
+          "id": "q42_p5",
+          "text": "AI：人工智能（研究、开发用于模拟、延伸和扩展人的智能的理论、方法、技术及应用系统）",
+          "score": 2.0,
+          "required": true
+        },
+        {
+          "id": "q42_p6",
+          "text": "VR：虚拟现实技术（计算机模拟虚拟环境从而给人以环境沉浸感）",
+          "score": 2.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "short_answer",
@@ -890,7 +938,24 @@
       "scoring_mode": "text",
       "question": "请阐述自己从事电气工程或自动化专业工作后的打算和想法",
       "answer": "答案各自发挥",
-      "id": "q43"
+      "id": "q43",
+      "scoring_points": [
+        {
+          "id": "q43_p1",
+          "text": "围绕电气工程或自动化专业工作后的打算和想法展开",
+          "score": 10.0,
+          "required": true
+        },
+        {
+          "id": "q43_p2",
+          "text": "表述完整、主题明确（参考答案为各自发挥）",
+          "score": 10.0
+        }
+      ],
+      "open_ended": true,
+      "open_ended_kind": "fully_open",
+      "open_ended_note": "参考答案为“答案各自发挥”，无唯一标准答案。",
+      "require_manual_review": true
     }
   ]
 }

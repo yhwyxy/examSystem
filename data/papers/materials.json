@@ -849,7 +849,21 @@
       },
       "question": "面心立方晶体的晶格常数为a,请计算(110)面与(100)面的夹角β。",
       "answer": "Cosβ=√2/2,β=45°",
-      "id": "q41"
+      "id": "q41",
+      "scoring_points": [
+        {
+          "id": "q41_p1",
+          "text": "Cosβ=√2/2",
+          "score": 5.0,
+          "required": true
+        },
+        {
+          "id": "q41_p2",
+          "text": "β=45°",
+          "score": 5.0,
+          "required": true
+        }
+      ]
     },
     {
       "type": "composite",
@@ -864,14 +878,60 @@
           "question": "钢的淬透性定义",
           "answer": "在规定条件下钢淬火获得马氏体的能力。",
           "score": 10.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-1_p1",
+              "text": "在规定条件下，决定钢材淬硬深度和硬度分布的特性",
+              "score": 5.0,
+              "required": true
+            },
+            {
+              "id": "q42-1_p2",
+              "text": "钢在淬火时能获得马氏体的能力",
+              "score": 5.0,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q42-2",
           "question": "提高淬透性的合金元素",
           "answer": "B、Mn、Mo、Cr、Si、Ni。",
           "score": 10.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q42-2_p1",
+              "text": "B",
+              "score": 1.6667
+            },
+            {
+              "id": "q42-2_p2",
+              "text": "Mn",
+              "score": 1.6667
+            },
+            {
+              "id": "q42-2_p3",
+              "text": "Mo",
+              "score": 1.6667
+            },
+            {
+              "id": "q42-2_p4",
+              "text": "Cr",
+              "score": 1.6667
+            },
+            {
+              "id": "q42-2_p5",
+              "text": "Si",
+              "score": 1.6667
+            },
+            {
+              "id": "q42-2_p6",
+              "text": "Ni",
+              "score": 1.6665
+            }
+          ]
         }
       ]
     },
@@ -888,14 +948,36 @@
           "question": "过冷度定义",
           "answer": "理论结晶温度和实际结晶温度的差值。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q43-1_p1",
+              "text": "过冷度是理论结晶温度和实际结晶温度的差值，即△t=tR-t",
+              "score": 5.0,
+              "required": true
+            }
+          ]
         },
         {
           "id": "q43-2",
           "question": "过冷度影响",
           "answer": "过冷度越大，结晶速度越快、晶粒越细。",
           "score": 5.0,
-          "scoring_mode": "text"
+          "scoring_mode": "text",
+          "scoring_points": [
+            {
+              "id": "q43-2_p1",
+              "text": "过冷度越大，结晶趋势越大，结晶速度越快",
+              "score": 2.5,
+              "required": true
+            },
+            {
+              "id": "q43-2_p2",
+              "text": "晶粒越细小",
+              "score": 2.5,
+              "required": true
+            }
+          ]
         }
       ]
     }
