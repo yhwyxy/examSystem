@@ -410,16 +410,24 @@
       "question": "请用你所熟悉的任意一种编程语言写一段嵌套循环代码,请标明所使用的语言。",
       "id": "q16",
       "code_language": "python",
+      "allowed_languages": ["python", "javascript", "java", "c", "csharp"],
       "answer": "for i in range(5):\n    for j in range(5):\n        s = i + j",
+      "answers_by_language": {
+        "python": "for i in range(5):\n    for j in range(5):\n        s = i + j",
+        "javascript": "for (let i = 0; i < 5; i++) {\n  for (let j = 0; j < 5; j++) {\n    const s = i + j;\n  }\n}",
+        "java": "for (int i = 0; i < 5; i++) {\n  for (int j = 0; j < 5; j++) {\n    int s = i + j;\n  }\n}",
+        "c": "for (int i = 0; i < 5; i++) {\n  for (int j = 0; j < 5; j++) {\n    int s = i + j;\n  }\n}",
+        "csharp": "for (int i = 0; i < 5; i++) {\n  for (int j = 0; j < 5; j++) {\n    int s = i + j;\n  }\n}"
+      },
       "scoring_points": [
         {
           "id": "q16_p1",
-          "text": "循环 for while",
+          "text": "外层循环 for while",
           "score": 4.0
         },
         {
           "id": "q16_p2",
-          "text": "循环 for while",
+          "text": "内层循环 for while",
           "score": 4.0
         },
         {
@@ -430,7 +438,7 @@
       ],
       "open_ended": true,
       "open_ended_kind": "multi_valid",
-      "open_ended_note": "题干允许任意编程语言写嵌套循环；参考答案仅为示例实现，不是唯一代码。",
+      "open_ended_note": "题干允许任意编程语言写嵌套循环；按学生所选语言匹配对应参考答案。",
       "require_manual_review": true
     },
     {
@@ -578,35 +586,76 @@
     {
       "type": "essay",
       "score": 15.0,
-      "scoring_mode": "text",
+      "scoring_mode": "code",
+      "code_language": "javascript",
+      "allowed_languages": ["javascript", "java", "c", "csharp", "python"],
       "question": "找出元素item在给定数组array中的位置\n输入:\n[ 1, 2, 3, 4 ], 3\n输出:\n2\n请使用js、java、C、C#、python中的任意一种来实现",
       "id": "q21",
-      "answer": "JavaScript：\nfunction findIndex(array, item) {\n    return array.indexOf(item);\n}",
+      "answer": "function findIndex(array, item) {\n    return array.indexOf(item);\n}",
+      "answers_by_language": {
+        "javascript": "function findIndex(array, item) {\n    return array.indexOf(item);\n}",
+        "java": "public static int findIndex(int[] array, int item) {\n    for (int i = 0; i < array.length; i++) {\n        if (array[i] == item) return i;\n    }\n    return -1;\n}",
+        "c": "int find_index(int array[], int n, int item) {\n    for (int i = 0; i < n; i++) {\n        if (array[i] == item) return i;\n    }\n    return -1;\n}",
+        "csharp": "static int FindIndex(int[] array, int item) {\n    for (int i = 0; i < array.Length; i++) {\n        if (array[i] == item) return i;\n    }\n    return -1;\n}",
+        "python": "def find_index(array, item):\n    for i, value in enumerate(array):\n        if value == item:\n            return i\n    return -1"
+      },
       "scoring_points": [
         {
           "id": "q21_p1",
-          "text": "array",
+          "text": "接收数组与目标元素作为输入",
           "score": 3.0
         },
         {
           "id": "q21_p2",
-          "text": "indexOf",
+          "text": "遍历或查找数组元素位置",
           "score": 7.0
         },
         {
           "id": "q21_p3",
-          "text": "查找元素位置",
+          "text": "返回目标元素下标或未找到标记",
           "score": 3.0
         },
         {
           "id": "q21_p4",
-          "text": "代码表达式或函数调用",
+          "text": "代码表达式或函数调用结构完整",
           "score": 2.0
         }
       ],
+      "scoring_points_by_language": {
+        "javascript": [
+          {"id": "q21_js_p1", "text": "函数接收 array 与 item", "score": 3.0},
+          {"id": "q21_js_p2", "text": "使用 indexOf 或循环查找位置", "score": 7.0},
+          {"id": "q21_js_p3", "text": "返回查找到的下标", "score": 3.0},
+          {"id": "q21_js_p4", "text": "函数结构完整", "score": 2.0}
+        ],
+        "python": [
+          {"id": "q21_py_p1", "text": "函数接收 array 与 item", "score": 3.0},
+          {"id": "q21_py_p2", "text": "使用 enumerate 或 index 查找位置", "score": 7.0},
+          {"id": "q21_py_p3", "text": "返回查找到的下标", "score": 3.0},
+          {"id": "q21_py_p4", "text": "函数结构完整", "score": 2.0}
+        ],
+        "java": [
+          {"id": "q21_java_p1", "text": "方法接收数组与目标元素", "score": 3.0},
+          {"id": "q21_java_p2", "text": "循环遍历数组比较元素", "score": 7.0},
+          {"id": "q21_java_p3", "text": "返回下标或 -1", "score": 3.0},
+          {"id": "q21_java_p4", "text": "方法结构完整", "score": 2.0}
+        ],
+        "c": [
+          {"id": "q21_c_p1", "text": "函数接收数组、长度与目标元素", "score": 3.0},
+          {"id": "q21_c_p2", "text": "for 循环遍历数组比较", "score": 7.0},
+          {"id": "q21_c_p3", "text": "返回下标或 -1", "score": 3.0},
+          {"id": "q21_c_p4", "text": "函数结构完整", "score": 2.0}
+        ],
+        "csharp": [
+          {"id": "q21_cs_p1", "text": "方法接收数组与目标元素", "score": 3.0},
+          {"id": "q21_cs_p2", "text": "循环遍历数组比较元素", "score": 7.0},
+          {"id": "q21_cs_p3", "text": "返回下标或 -1", "score": 3.0},
+          {"id": "q21_cs_p4", "text": "方法结构完整", "score": 2.0}
+        ]
+      },
       "open_ended": true,
       "open_ended_kind": "multi_valid",
-      "open_ended_note": "题干允许 js/java/C/C#/python 任意语言实现；参考答案仅为 JavaScript 示例。",
+      "open_ended_note": "题干允许 js/java/C/C#/python 任意语言实现；按学生所选语言匹配对应参考答案。",
       "require_manual_review": true
     }
   ]

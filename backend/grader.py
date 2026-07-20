@@ -20,7 +20,9 @@ from .config import get_config
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 from .question_loader import (
     SUBJECTIVE_TYPES,
+    apply_language_reference,
     get_subquestions,
+    normalize_submitted_answer,
     normalize_submitted_subanswer,
 )
 
@@ -413,14 +415,15 @@ async def grade_composite_question(
         sub_ans, selected_language = normalize_submitted_subanswer(
             sub, raw.get(sid, ""), allow_legacy=True
         )
-        sub_q = {
-            **sub,
-            "type": "short_answer",
-            "paper_id": question.get("paper_id"),
-            "id": f"{qid}:{sid}",
-        }
-        if selected_language:
-            sub_q["code_language"] = selected_language
+        sub_q = apply_language_reference(
+            {
+                **sub,
+                "type": "short_answer",
+                "paper_id": question.get("paper_id"),
+                "id": f"{qid}:{sid}",
+            },
+            selected_language,
+        )
         sub_detail = await _run_subjective_grading(sub_q, sub_ans)
         sub_detail["sub_question_id"] = sid
         sub_detail["question_id"] = qid
@@ -477,6 +480,20 @@ async def grade_question(
     if is_composite_question(question):
         return await grade_composite_question(question, student_answer)
     if qtype in SUBJECTIVE_TYPES:
+        mode = str(question.get("scoring_mode") or "text").strip().lower()
+        has_code_lang = bool(question.get("allowed_languages") or question.get("code_language"))
+        if mode == "code" or (has_code_lang and isinstance(student_answer, dict)):
+            try:
+                text, selected_language = normalize_submitted_answer(
+                    question, student_answer, allow_legacy=True
+                )
+            except ValueError:
+                # 非法形状按空答案 + 默认语言处理，避免整卷崩溃
+                text, selected_language = "", question.get("code_language")
+            scored_q = apply_language_reference(question, selected_language)
+            detail = await _run_subjective_grading(scored_q, text)
+            detail["selected_language"] = selected_language
+            return detail
         if isinstance(student_answer, dict):
             student_answer = ""
         return await _run_subjective_grading(question, str(student_answer or ""))

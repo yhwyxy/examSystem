@@ -183,13 +183,35 @@ function renderQuestion(q, idx) {
       });
       box.appendChild(wrap);
     } else {
+      const languages = Array.isArray(q.allowed_languages) ? q.allowed_languages : [];
+      const isCode = q.scoring_mode === 'code' || languages.length > 0 || !!q.code_language;
+      if (isCode && languages.length > 0) {
+        const languageField = document.createElement('label');
+        languageField.className = 'code-language-field';
+        const languageLabel = document.createElement('span');
+        languageLabel.textContent = '编程语言';
+        const select = document.createElement('select');
+        select.className = 'code-language-select';
+        select.name = `${q.id}__language`;
+        select.dataset.qid = String(q.id);
+        for (const language of languages) {
+          const option = document.createElement('option');
+          option.value = language;
+          option.textContent = language;
+          if (q.code_language && language === q.code_language) option.selected = true;
+          select.appendChild(option);
+        }
+        languageField.append(languageLabel, select);
+        box.appendChild(languageField);
+      }
       const ta = document.createElement('textarea');
       ta.name = String(q.id);
       ta.rows = 6;
       ta.placeholder = '请输入答案';
-      if (q.scoring_mode === 'code' || q.code_language) {
+      if (isCode) {
         ta.className = 'code-answer';
-        ta.placeholder = `请输入代码${q.code_language ? '（' + q.code_language + '）' : ''}`;
+        const hintLang = languages.length ? '' : (q.code_language ? `（${q.code_language}）` : '');
+        ta.placeholder = `请输入代码${hintLang}`;
       }
       box.appendChild(ta);
     }
@@ -347,8 +369,22 @@ function collectAnswers() {
         }
         answers[q.id] = map;
       } else {
-        const el = findQuestionControls(q.id)[0];
-        answers[q.id] = el ? el.value : '';
+        const languages = Array.isArray(q.allowed_languages) ? q.allowed_languages : [];
+        const isCode = q.scoring_mode === 'code' || languages.length > 0;
+        const el = findQuestionControls(q.id).find((c) => c.tagName === 'TEXTAREA' || c.tagName === 'INPUT')
+          || findQuestionControls(q.id)[0];
+        const text = el ? el.value : '';
+        if (isCode && languages.length > 0) {
+          const langSelect = document.querySelector(
+            `select.code-language-select[data-qid="${String(q.id)}"]:not([data-sid])`
+          );
+          answers[q.id] = {
+            answer: text,
+            language: langSelect ? langSelect.value : (q.code_language || languages[0] || ''),
+          };
+        } else {
+          answers[q.id] = text;
+        }
       }
     }
   }

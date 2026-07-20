@@ -357,6 +357,76 @@ def test_code_subanswer_language_must_be_allowed():
         )
 
 
+def test_top_level_code_answer_requires_allowed_language():
+    from backend.question_loader import normalize_submitted_answer
+
+    q = {
+        "id": "q16",
+        "scoring_mode": "code",
+        "code_language": "python",
+        "allowed_languages": ["python", "javascript"],
+    }
+    assert normalize_submitted_answer(
+        q, {"answer": "for i in range(1): pass", "language": "JavaScript"}
+    ) == ("for i in range(1): pass", "javascript")
+    with pytest.raises(ValueError, match="INVALID_ANSWER_SHAPE"):
+        normalize_submitted_answer(q, "print(1)", allow_legacy=False)
+    with pytest.raises(ValueError, match="INVALID_CODE_LANGUAGE"):
+        normalize_submitted_answer(q, {"answer": "x", "language": "ruby"})
+
+
+def test_apply_language_reference_overrides_answer_and_points():
+    from backend.question_loader import apply_language_reference
+
+    q = {
+        "id": "q21",
+        "scoring_mode": "code",
+        "code_language": "javascript",
+        "answer": "js-default",
+        "scoring_points": [{"id": "p1", "text": "js", "score": 1}],
+        "answers_by_language": {"python": "def find_index(): pass"},
+        "scoring_points_by_language": {
+            "python": [{"id": "py1", "text": "python loop", "score": 1}]
+        },
+    }
+    applied = apply_language_reference(q, "python")
+    assert applied["code_language"] == "python"
+    assert applied["answer"] == "def find_index(): pass"
+    assert applied["scoring_points"][0]["id"] == "py1"
+    # 默认语言保持原参考
+    defaulted = apply_language_reference(q, "javascript")
+    assert defaulted["answer"] == "js-default"
+
+
+def test_sanitize_strips_multilang_references():
+    from backend.question_loader import sanitize_for_student
+
+    public = sanitize_for_student(
+        [
+            {
+                "id": "q16",
+                "type": "short_answer",
+                "score": 10,
+                "scoring_mode": "code",
+                "code_language": "python",
+                "allowed_languages": ["python", "java"],
+                "answer": "secret",
+                "answers_by_language": {"java": "secret-java"},
+                "scoring_points": [{"id": "p1", "text": "loop", "score": 10}],
+                "scoring_points_by_language": {
+                    "java": [{"id": "j1", "text": "for", "score": 10}]
+                },
+            }
+        ]
+    )[0]
+    assert public["scoring_mode"] == "code"
+    assert public["allowed_languages"] == ["python", "java"]
+    assert "answer" not in public
+    assert "answers_by_language" not in public
+    assert "scoring_points" not in public
+    assert "scoring_points_by_language" not in public
+
+
 def test_update_composite_question_preserves_subquestion_scoring_metadata(papers_env):
     from backend import paper_store
 

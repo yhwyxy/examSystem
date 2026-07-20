@@ -682,6 +682,58 @@ def test_grade_composite_legacy_code_answer_uses_first_allowed_language(monkeypa
     assert detail["sub_results"][0]["selected_language"] == "python"
 
 
+def test_grade_top_level_code_question_uses_selected_language_reference(monkeypatch):
+    import asyncio
+    from backend import grader
+
+    seen = {}
+
+    async def fake_run(question, student_answer):
+        seen["question"] = question
+        seen["answer"] = student_answer
+        return {
+            "question_id": question["id"],
+            "machine_score": 10.0,
+            "final_score": 10.0,
+            "max_score": 10,
+            "score": 10.0,
+            "review_status": "high_confidence",
+            "low_confidence": False,
+        }
+
+    monkeypatch.setattr(grader, "_run_subjective_grading", fake_run)
+    detail = asyncio.run(
+        grader.grade_question(
+            {
+                "id": "q16",
+                "type": "short_answer",
+                "score": 10,
+                "scoring_mode": "code",
+                "code_language": "python",
+                "allowed_languages": ["python", "javascript"],
+                "answer": "for i in range(5):\n    for j in range(5):\n        s = i + j",
+                "answers_by_language": {
+                    "javascript": "for (let i = 0; i < 5; i++) {\n  for (let j = 0; j < 5; j++) {}\n}"
+                },
+                "scoring_points": [{"id": "p1", "text": "nested loop", "score": 10}],
+                "scoring_points_by_language": {
+                    "javascript": [{"id": "js1", "text": "for for", "score": 10}]
+                },
+            },
+            {
+                "answer": "for (let i = 0; i < 5; i++) { for (let j = 0; j < 5; j++) {} }",
+                "language": "javascript",
+            },
+        )
+    )
+
+    assert detail["selected_language"] == "javascript"
+    assert seen["question"]["code_language"] == "javascript"
+    assert "for (let i" in seen["question"]["answer"]
+    assert seen["question"]["scoring_points"][0]["id"] == "js1"
+    assert "for (let i" in seen["answer"]
+
+
 def test_format_answer_for_export_composite():
     from backend.exporter import format_student_answer_for_export, format_score_note_for_export
 

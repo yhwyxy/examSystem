@@ -17,7 +17,7 @@ def function_body(source: str, start: str, end: str) -> str:
 
 def test_exam_question_renderer_builds_answer_controls_with_dom_api():
     source = read_frontend_file("frontend/js/exam.js")
-    render_question = function_body(source, "function renderQuestion", "function renderExam")
+    render_question = function_body(source, "function renderQuestion", "function startTimer")
 
     assert ".innerHTML" not in render_question
     assert "function createAnswerOption" in source
@@ -62,6 +62,26 @@ def test_exam_collects_nested_subquestion_answers_and_selected_language():
     assert "{ answer:" in collect_answers
     assert "subAnswer.language =" in collect_answers
     assert "Object.create(null)" in collect_answers
+
+
+def test_exam_renders_top_level_code_language_select():
+    source = read_frontend_file("frontend/js/exam.js")
+    render_question = function_body(source, "function renderQuestion", "function startTimer")
+
+    assert "q.allowed_languages" in render_question
+    assert "code-language-select" in render_question
+    assert "select.dataset.qid = String(q.id)" in render_question
+    assert "请输入代码" in render_question
+
+
+def test_exam_collects_top_level_code_answer_with_language():
+    source = read_frontend_file("frontend/js/exam.js")
+    collect_answers = function_body(source, "function collectAnswers", "async function submitExam")
+
+    assert "q.allowed_languages" in collect_answers
+    assert "code-language-select" in collect_answers
+    assert "language:" in collect_answers
+    assert "answers[q.id] = {" in collect_answers
 
 
 def test_exam_answer_map_preserves_proto_question_id_for_json_serialization():

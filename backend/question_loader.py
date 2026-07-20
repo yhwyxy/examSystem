@@ -26,7 +26,14 @@ BACKUPS_DIR = DATA_DIR / "backups" / "papers"
 ALLOWED_TYPES = {"single_choice", "multiple_choice", "true_false", "short_answer", "essay", "composite"}
 OBJECTIVE_TYPES = {"single_choice", "multiple_choice", "true_false"}
 SUBJECTIVE_TYPES = {"short_answer", "essay", "composite"}
-SENSITIVE_FIELDS = {"answer", "scoring_rubric", "scoring_points", "calculation"}
+SENSITIVE_FIELDS = {
+    "answer",
+    "answers_by_language",
+    "scoring_rubric",
+    "scoring_points",
+    "scoring_points_by_language",
+    "calculation",
+}
 ALLOWED_SCORING_MODES = {"text", "sql", "code", "calculation"}
 ALLOWED_CODE_LANGUAGES = frozenset({
     "python", "java", "javascript", "typescript", "go",
@@ -89,6 +96,72 @@ def get_subquestions(question: dict[str, Any]) -> list[dict[str, Any]]:
     return value if isinstance(value, list) else []
 
 
+def _normalize_allowed_languages(raw: Any, *, qid: str) -> list[str]:
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        _error(f"题目 {qid} allowed_languages 必须是数组")
+    languages: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        language = _normalize_code_language(item, qid=qid)
+        if not language:
+            continue
+        if language in seen:
+            _error(f"题目 {qid} 的 allowed_languages 不能重复")
+        seen.add(language)
+        languages.append(language)
+    return languages
+
+
+def _normalize_answers_by_language(raw: Any, *, qid: str) -> dict[str, str]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        _error(f"题目 {qid} answers_by_language 必须是对象")
+    out: dict[str, str] = {}
+    for key, value in raw.items():
+        language = _normalize_code_language(key, qid=qid)
+        if not language:
+            continue
+        text = str(value or "").strip()
+        if text:
+            out[language] = text
+    return out
+
+
+def _normalize_scoring_points_by_language(raw: Any, *, qid: str) -> dict[str, list[Any]]:
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        _error(f"题目 {qid} scoring_points_by_language 必须是对象")
+    out: dict[str, list[Any]] = {}
+    for key, value in raw.items():
+        language = _normalize_code_language(key, qid=qid)
+        if not language:
+            continue
+        if not isinstance(value, list):
+            _error(f"题目 {qid} scoring_points_by_language.{language} 必须是数组")
+        if value:
+            out[language] = value
+    return out
+
+
+def apply_language_reference(question: dict[str, Any], language: str | None) -> dict[str, Any]:
+    """按所选语言覆盖参考答案 / 评分点 / code_language（混合方案 C）。"""
+    out = dict(question)
+    lang = str(language or "").strip().lower() or None
+    if lang:
+        out["code_language"] = lang
+        answers_by_lang = out.get("answers_by_language")
+        if isinstance(answers_by_lang, dict) and answers_by_lang.get(lang):
+            out["answer"] = answers_by_lang[lang]
+        points_by_lang = out.get("scoring_points_by_language")
+        if isinstance(points_by_lang, dict) and isinstance(points_by_lang.get(lang), list):
+            out["scoring_points"] = points_by_lang[lang]
+    return out
+
+
 def normalize_submitted_subanswer(
     subquestion: dict[str, Any], raw: Any, *, allow_legacy: bool = False
 ) -> tuple[str, str | None]:
@@ -113,6 +186,45 @@ def normalize_submitted_subanswer(
     return answer, None
 
 
+def normalize_submitted_answer(
+    question: dict[str, Any], raw: Any, *, allow_legacy: bool = False
+) -> tuple[str, str | None]:
+    """校验并规范化顶层主观题答案；代码题可带 language。"""
+    mode = str(question.get("scoring_mode") or "text").strip().lower()
+    allowed = question.get("allowed_languages")
+    if not isinstance(allowed, list):
+        allowed = []
+    default_lang = str(question.get("code_language") or "").strip().lower() or None
+
+    if isinstance(raw, str):
+        if mode == "code" and allowed and not allow_legacy:
+            raise ValueError("INVALID_ANSWER_SHAPE: 代码题答案必须包含 language")
+        if mode == "code":
+            language = (allowed[0] if allowed else default_lang)
+            return raw, language
+        return raw, None
+
+    if isinstance(raw, dict) and isinstance(raw.get("answer", ""), str):
+        answer = raw.get("answer", "")
+        language = raw.get("language")
+        if mode != "code":
+            # 非代码题忽略 language，仅取文本
+            return answer, None
+        normalized = str(language or "").strip().lower()
+        if allowed:
+            if normalized not in allowed:
+                raise ValueError("INVALID_CODE_LANGUAGE: 代码语言不在允许范围内")
+        elif default_lang:
+            if normalized and normalized != default_lang:
+                raise ValueError("INVALID_CODE_LANGUAGE: 代码语言不在允许范围内")
+            normalized = normalized or default_lang
+        elif not normalized:
+            raise ValueError("INVALID_CODE_LANGUAGE: 代码语言不在允许范围内")
+        return answer, normalized
+
+    raise ValueError("INVALID_ANSWER_SHAPE: 答案必须是字符串或包含 answer 的对象")
+
+
 def validate_answer_shape(question: dict[str, Any], answer: Any) -> None:
     """校验提交答案形状。非法时 raise ValueError('INVALID_ANSWER_SHAPE: ...')。"""
     if is_composite_question(question):
@@ -128,6 +240,10 @@ def validate_answer_shape(question: dict[str, Any], answer: Any) -> None:
         submap = {str(s.get("id")): s for s in subs}
         for k, v in answer.items():
             normalize_submitted_subanswer(submap[str(k)], v)
+        return
+    mode = str(question.get("scoring_mode") or "text").strip().lower()
+    if mode == "code" or question.get("allowed_languages") or question.get("code_language"):
+        normalize_submitted_answer(question, answer)
         return
     if isinstance(answer, dict):
         raise ValueError("INVALID_ANSWER_SHAPE: 非复合题答案不能为对象")
@@ -217,9 +333,14 @@ def _validate_subjective_mode_and_language(q: dict[str, Any], *, label: str | No
         mode = str(q.get("scoring_mode") or "text").strip().lower()
 
     lang = _normalize_code_language(q.get("code_language"), qid=qid)
-    allowed_languages = q.get("allowed_languages")
+    allowed_languages = _normalize_allowed_languages(q.get("allowed_languages"), qid=qid)
+    answers_by_language = _normalize_answers_by_language(q.get("answers_by_language"), qid=qid)
+    scoring_points_by_language = _normalize_scoring_points_by_language(
+        q.get("scoring_points_by_language"), qid=qid
+    )
+
     if mode == "code" and not lang and not allowed_languages:
-        _error(f"题目 {qid} 的 scoring_mode=code 时必须提供 code_language")
+        _error(f"题目 {qid} 的 scoring_mode=code 时必须提供 code_language 或 allowed_languages")
     if mode == "sql":
         if lang is None:
             lang = "sql"
@@ -229,6 +350,43 @@ def _validate_subjective_mode_and_language(q: dict[str, Any], *, label: str | No
         q["code_language"] = lang
     elif "code_language" in q and (q.get("code_language") is None or q.get("code_language") == ""):
         q.pop("code_language", None)
+
+    if mode == "code":
+        if allowed_languages:
+            q["allowed_languages"] = allowed_languages
+            default_lang = q.get("code_language") or allowed_languages[0]
+            q["code_language"] = default_lang
+            if default_lang not in allowed_languages:
+                q["allowed_languages"] = [default_lang, *allowed_languages]
+        elif "allowed_languages" in q:
+            q.pop("allowed_languages", None)
+    elif allowed_languages:
+        _error(f"题目 {qid} 仅代码模式可配置 allowed_languages")
+    elif "allowed_languages" in q and not allowed_languages:
+        q.pop("allowed_languages", None)
+
+    allowed_set = set(q.get("allowed_languages") or [])
+    if answers_by_language:
+        if allowed_set:
+            for language in answers_by_language:
+                if language not in allowed_set:
+                    _error(f"题目 {qid} answers_by_language 含未允许语言: {language}")
+        q["answers_by_language"] = answers_by_language
+    elif "answers_by_language" in q:
+        q.pop("answers_by_language", None)
+
+    if scoring_points_by_language:
+        if allowed_set:
+            for language in scoring_points_by_language:
+                if language not in allowed_set:
+                    _error(f"题目 {qid} scoring_points_by_language 含未允许语言: {language}")
+        # 校验各语言评分点结构
+        for language, points in scoring_points_by_language.items():
+            tmp = {"id": f"{qid}:{language}", "score": q.get("score"), "scoring_points": points}
+            _validate_scoring_points(tmp)
+        q["scoring_points_by_language"] = scoring_points_by_language
+    elif "scoring_points_by_language" in q:
+        q.pop("scoring_points_by_language", None)
 
     _validate_scoring_points(q)
     if mode == "calculation":
@@ -431,6 +589,15 @@ def sanitize_for_student(questions: list[dict[str, Any]]) -> list[dict[str, Any]
     for q in questions:
         normalize_composite_question(q)
         public = {k: v for k, v in q.items() if k not in SENSITIVE_FIELDS and k != "subquestions"}
+        # 代码题需向学生暴露模式与可选语言（不含参考答案）
+        if q.get("scoring_mode") == "code" or q.get("code_language") or q.get("allowed_languages"):
+            if q.get("scoring_mode"):
+                public["scoring_mode"] = q.get("scoring_mode")
+            if q.get("allowed_languages"):
+                public["allowed_languages"] = list(q["allowed_languages"])
+            elif q.get("code_language"):
+                # 无下拉时仍提示默认语言
+                public["code_language"] = q.get("code_language")
         if is_composite_question(q):
             public["subquestions"] = []
             for s in get_subquestions(q):
