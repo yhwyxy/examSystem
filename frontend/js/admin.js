@@ -4,7 +4,7 @@ const ADMIN_VIEWS = ['overview', 'papers', 'publish', 'submissions'];
 
 let authToken = localStorage.getItem('admin_token') || '';
 let currentPage = 1;
-let currentView = 'overview';
+let currentView = localStorage.getItem('admin_current_view') || 'overview';
 
 const STATUS_META = {
   reviewed: { className: 'badge-reviewed', label: '已复核' },
@@ -66,6 +66,7 @@ function setTableState(message, visible = true) {
 function showView(view, options = {}) {
   if (!ADMIN_VIEWS.includes(view)) view = 'overview';
   currentView = view;
+  localStorage.setItem('admin_current_view', view);
 
   document.querySelectorAll('.view-panel').forEach(panel => {
     const active = panel.dataset.view === view;
