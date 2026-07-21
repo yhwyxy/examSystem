@@ -124,6 +124,22 @@ function renderQuestion(q, idx) {
   const title = document.createElement('div');
   title.className = 'q-title';
   title.textContent = `${idx + 1}. ${q.question}（${q.score} 分）`;
+  const typeLabels = {
+    single_choice: '单选',
+    multiple_choice: '多选',
+    true_false: '判断',
+    short_answer: '简答',
+    essay: '论述',
+    fill_blank: '填空',
+    calculation: '计算',
+  };
+  const typeLabel = typeLabels[q.type] || null;
+  if (typeLabel) {
+    const badge = document.createElement('span');
+    badge.className = 'q-type-badge';
+    badge.textContent = typeLabel;
+    title.appendChild(badge);
+  }
   box.appendChild(title);
 
   if (q.type === 'single_choice') {

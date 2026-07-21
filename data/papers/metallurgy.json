@@ -135,7 +135,7 @@
       "options": [
         {
           "key": "A",
-          "text": "SiO2、MnO"
+          "text": "SiO₂、MnO"
         },
         {
           "key": "B",
@@ -143,7 +143,7 @@
         },
         {
           "key": "C",
-          "text": "SiO2、P2O5"
+          "text": "SiO₂、P₂O₅"
         }
       ],
       "question": "下列氧化物中是酸性氧化物。",
@@ -366,15 +366,15 @@
       "options": [
         {
           "key": "A",
-          "text": "Fe2O3和Fe3O4"
+          "text": "Fe₂O₃和Fe₃O₄"
         },
         {
           "key": "B",
-          "text": "FeO和Fe3O4"
+          "text": "FeO和Fe₃O₄"
         },
         {
           "key": "C",
-          "text": "FeO和Fe2O3"
+          "text": "FeO和Fe₂O₃"
         }
       ],
       "question": "铁矿石的主要成分是。",
@@ -440,7 +440,7 @@
           "text": "3CaO·2SiO2"
         }
       ],
-      "question": "炉渣中下列化合物熔点最高的是",
+      "question": "炉渣中下列化合物熔点最高的是___",
       "id": "q27"
     },
     {

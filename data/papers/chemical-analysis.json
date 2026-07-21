@@ -644,19 +644,19 @@
       "options": [
         {
           "key": "A",
-          "text": "Fe(OH)3沉淀吸附的NH4Cl"
+          "text": "Fe(OH)₃沉淀吸附的NH₄Cl"
         },
         {
           "key": "B",
-          "text": "NaCl(NH4HCO3)"
+          "text": "NaCl(NH₄HCO₃)"
         },
         {
           "key": "C",
-          "text": "BaSO4沉淀夹带的BaCl2"
+          "text": "BaSO₄沉淀夹带的BaCl₂"
         },
         {
           "key": "D",
-          "text": "SiO2(Fe2O3)"
+          "text": "SiO₂(Fe₂O₃)"
         }
       ],
       "question": "加热或灼烧可除去下列物质中少量杂质(括号中为杂质)的有。",

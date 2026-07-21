@@ -473,11 +473,11 @@
       "options": [
         {
           "key": "A",
-          "text": "m/s2"
+          "text": "m/s²"
         },
         {
           "key": "B",
-          "text": "m/s3"
+          "text": "m/s³"
         },
         {
           "key": "C",
@@ -485,10 +485,10 @@
         },
         {
           "key": "D",
-          "text": "s/m3"
+          "text": "s/m³"
         }
       ],
-      "question": "加速度单位为",
+      "question": "加速度单位为___",
       "id": "q27"
     },
     {

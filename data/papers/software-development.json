@@ -346,7 +346,7 @@
           "text": "Who"
         }
       ],
-      "question": "liunx显示工作路径的命令是",
+      "question": "liunx显示工作路径的命令是___",
       "id": "q13"
     },
     {
@@ -371,7 +371,7 @@
           "text": "范围、进度和质量"
         }
       ],
-      "question": "项目的三重制约是",
+      "question": "项目的三重制约是___",
       "id": "q14"
     },
     {
@@ -400,7 +400,7 @@
           "text": "在服务端运行"
         }
       ],
-      "question": "关于对ajax的描述正确的是",
+      "question": "关于对ajax的描述正确的是___",
       "id": "q15"
     },
     {
@@ -410,7 +410,13 @@
       "question": "请用你所熟悉的任意一种编程语言写一段嵌套循环代码,请标明所使用的语言。",
       "id": "q16",
       "code_language": "python",
-      "allowed_languages": ["python", "javascript", "java", "c", "csharp"],
+      "allowed_languages": [
+        "python",
+        "javascript",
+        "java",
+        "c",
+        "csharp"
+      ],
       "answer": "for i in range(5):\n    for j in range(5):\n        s = i + j",
       "answers_by_language": {
         "python": "for i in range(5):\n    for j in range(5):\n        s = i + j",
@@ -588,7 +594,13 @@
       "score": 15.0,
       "scoring_mode": "code",
       "code_language": "javascript",
-      "allowed_languages": ["javascript", "java", "c", "csharp", "python"],
+      "allowed_languages": [
+        "javascript",
+        "java",
+        "c",
+        "csharp",
+        "python"
+      ],
       "question": "找出元素item在给定数组array中的位置\n输入:\n[ 1, 2, 3, 4 ], 3\n输出:\n2\n请使用js、java、C、C#、python中的任意一种来实现",
       "id": "q21",
       "answer": "function findIndex(array, item) {\n    return array.indexOf(item);\n}",
@@ -623,34 +635,114 @@
       ],
       "scoring_points_by_language": {
         "javascript": [
-          {"id": "q21_js_p1", "text": "函数接收 array 与 item", "score": 3.0},
-          {"id": "q21_js_p2", "text": "使用 indexOf 或循环查找位置", "score": 7.0},
-          {"id": "q21_js_p3", "text": "返回查找到的下标", "score": 3.0},
-          {"id": "q21_js_p4", "text": "函数结构完整", "score": 2.0}
+          {
+            "id": "q21_js_p1",
+            "text": "函数接收 array 与 item",
+            "score": 3.0
+          },
+          {
+            "id": "q21_js_p2",
+            "text": "使用 indexOf 或循环查找位置",
+            "score": 7.0
+          },
+          {
+            "id": "q21_js_p3",
+            "text": "返回查找到的下标",
+            "score": 3.0
+          },
+          {
+            "id": "q21_js_p4",
+            "text": "函数结构完整",
+            "score": 2.0
+          }
         ],
         "python": [
-          {"id": "q21_py_p1", "text": "函数接收 array 与 item", "score": 3.0},
-          {"id": "q21_py_p2", "text": "使用 enumerate 或 index 查找位置", "score": 7.0},
-          {"id": "q21_py_p3", "text": "返回查找到的下标", "score": 3.0},
-          {"id": "q21_py_p4", "text": "函数结构完整", "score": 2.0}
+          {
+            "id": "q21_py_p1",
+            "text": "函数接收 array 与 item",
+            "score": 3.0
+          },
+          {
+            "id": "q21_py_p2",
+            "text": "使用 enumerate 或 index 查找位置",
+            "score": 7.0
+          },
+          {
+            "id": "q21_py_p3",
+            "text": "返回查找到的下标",
+            "score": 3.0
+          },
+          {
+            "id": "q21_py_p4",
+            "text": "函数结构完整",
+            "score": 2.0
+          }
         ],
         "java": [
-          {"id": "q21_java_p1", "text": "方法接收数组与目标元素", "score": 3.0},
-          {"id": "q21_java_p2", "text": "循环遍历数组比较元素", "score": 7.0},
-          {"id": "q21_java_p3", "text": "返回下标或 -1", "score": 3.0},
-          {"id": "q21_java_p4", "text": "方法结构完整", "score": 2.0}
+          {
+            "id": "q21_java_p1",
+            "text": "方法接收数组与目标元素",
+            "score": 3.0
+          },
+          {
+            "id": "q21_java_p2",
+            "text": "循环遍历数组比较元素",
+            "score": 7.0
+          },
+          {
+            "id": "q21_java_p3",
+            "text": "返回下标或 -1",
+            "score": 3.0
+          },
+          {
+            "id": "q21_java_p4",
+            "text": "方法结构完整",
+            "score": 2.0
+          }
         ],
         "c": [
-          {"id": "q21_c_p1", "text": "函数接收数组、长度与目标元素", "score": 3.0},
-          {"id": "q21_c_p2", "text": "for 循环遍历数组比较", "score": 7.0},
-          {"id": "q21_c_p3", "text": "返回下标或 -1", "score": 3.0},
-          {"id": "q21_c_p4", "text": "函数结构完整", "score": 2.0}
+          {
+            "id": "q21_c_p1",
+            "text": "函数接收数组、长度与目标元素",
+            "score": 3.0
+          },
+          {
+            "id": "q21_c_p2",
+            "text": "for 循环遍历数组比较",
+            "score": 7.0
+          },
+          {
+            "id": "q21_c_p3",
+            "text": "返回下标或 -1",
+            "score": 3.0
+          },
+          {
+            "id": "q21_c_p4",
+            "text": "函数结构完整",
+            "score": 2.0
+          }
         ],
         "csharp": [
-          {"id": "q21_cs_p1", "text": "方法接收数组与目标元素", "score": 3.0},
-          {"id": "q21_cs_p2", "text": "循环遍历数组比较元素", "score": 7.0},
-          {"id": "q21_cs_p3", "text": "返回下标或 -1", "score": 3.0},
-          {"id": "q21_cs_p4", "text": "方法结构完整", "score": 2.0}
+          {
+            "id": "q21_cs_p1",
+            "text": "方法接收数组与目标元素",
+            "score": 3.0
+          },
+          {
+            "id": "q21_cs_p2",
+            "text": "循环遍历数组比较元素",
+            "score": 7.0
+          },
+          {
+            "id": "q21_cs_p3",
+            "text": "返回下标或 -1",
+            "score": 3.0
+          },
+          {
+            "id": "q21_cs_p4",
+            "text": "方法结构完整",
+            "score": 2.0
+          }
         ]
       },
       "open_ended": true,
