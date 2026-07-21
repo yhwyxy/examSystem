@@ -288,7 +288,7 @@
           "text": "热电极材料的化学成分和物理性能"
         }
       ],
-      "question": "热电偶的热电特性是由 所决定的___",
+      "question": "热电偶的热电特性是由___所决定的",
       "id": "q19"
     },
     {
@@ -338,7 +338,7 @@
           "text": "功率"
         }
       ],
-      "question": "通常说的负载增加,是指负载 增加___",
+      "question": "通常说的负载增加,是指负载___增加",
       "id": "q21"
     },
     {
@@ -513,7 +513,7 @@
           "text": "T"
         }
       ],
-      "question": "单位时间内流过的体系用符号 表示___",
+      "question": "单位时间内流过的体系用符号___表示",
       "id": "q28"
     },
     {
@@ -938,7 +938,7 @@
       "subquestions": [
         {
           "id": "q43-1",
-          "question": "测量范围（含上下界）",
+          "question": "仪表的测量范围变为多少？",
           "answer": "仪表的测量范围变为100-200 kPa。",
           "score": 7.0,
           "scoring_mode": "calculation",
@@ -987,7 +987,7 @@
         },
         {
           "id": "q43-2",
-          "question": "量程",
+          "question": "仪表量程是多少？",
           "answer": "100 kPa",
           "score": 6.0,
           "scoring_mode": "calculation",
@@ -1013,7 +1013,7 @@
         },
         {
           "id": "q43-3",
-          "question": "输出对应压力",
+          "question": "若仪表的模拟输出量为4-20mA，当输入多少压力时，仪表的输出为4mA、12mA、20mA？",
           "answer": "100、150、200 kPa",
           "score": 7.0,
           "scoring_mode": "calculation",
