@@ -1116,7 +1116,7 @@
       "type": "short_answer",
       "score": 10.0,
       "scoring_mode": "text",
-      "question": "大幅,你好!我是指导员,如果下雨,为了保护产品,请关舱停止作业。",
+      "question": "请将以下中文翻译成英文：\n大幅，你好！我是指导员，如果下雨，为了保护产品，请关舱停止作业。",
       "answer": "HELLO!CHIEF OFFICER!I’M FOREMAN.IF IT IS RAINING, PLEASE CLOSE HATCH COVER AND STOP LOADING IN ORDER TO PROTECT THE PRODUCT.",
       "id": "q51",
       "scoring_points": [
@@ -1150,7 +1150,7 @@
       "type": "short_answer",
       "score": 10.0,
       "scoring_mode": "text",
-      "question": "船长,为了保持船体平衡,我们要换3、5舱作业, 请打开舱口。",
+      "question": "请将以下中文翻译成英文：\n船长，为了保持船体平衡，我们要换3、5舱作业，请打开舱口。",
       "answer": "CAPTAIN! IN ORDER TO KEEP SHIP’S BALANCE,  WE WILL SHIFT TO HOLD NO.3&5,PLEASE OPEN HATCH COVER.",
       "id": "q52",
       "scoring_points": [
