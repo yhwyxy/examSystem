@@ -776,6 +776,7 @@ def test_apply_review_sub_question(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", db_path)
     monkeypatch.setattr(database, "_initialized", False)
     database.init_db()
+    database.create_exam_run(run_id="run-p1", paper_id="p1", round_no=1, public_token_hash=None, status="closed", duration_minutes=60, snapshot_path=None, snapshot_hash=None, is_legacy=1)
 
     detail = [
         {
@@ -808,6 +809,7 @@ def test_apply_review_sub_question(tmp_path, monkeypatch):
         name="张三",
         employee_id="E1",
         paper_id="p1",
+        run_id="run-p1",
         paper_name="P1",
         department="D",
         answers={"c1": {"s1": "a", "s2": "b"}},

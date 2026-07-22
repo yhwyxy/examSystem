@@ -35,3 +35,10 @@ env/
 !.env.example
 
 answer.js
+
+# Exam run snapshots & public tokens (local runtime)
+data/exam_runs/
+
+# Local model caches / vendored wheels
+models/
+packages/

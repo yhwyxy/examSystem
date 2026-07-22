@@ -71,8 +71,48 @@
   }
 
   function statusBadge(st) {
-    if (st === 'open') return '<span class="badge badge-reviewed">开考中</span>';
-    return '<span class="badge badge-pending">未开考</span>';
+    if (st === 'open') return '<span class="badge badge-exam-open exam-status-badge">考试中</span>';
+    if (st === 'closing') return '<span class="badge badge-exam-closing exam-status-badge">收卷中</span>';
+    if (st === 'closed') return '<span class="badge badge-exam-closed exam-status-badge">已关闭</span>';
+    if (st === 'unpublished') return '<span class="badge badge-exam-unpublished exam-status-badge">未发布</span>';
+    return '<span class="badge badge-exam-unpublished exam-status-badge">未发布</span>';
+  }
+
+  function formatExamTime(iso) {
+    if (!iso) return '—';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return String(iso);
+      const pad = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    } catch {
+      return String(iso);
+    }
+  }
+
+  function actionLabel(st) {
+    if (st === 'open') return '结束';
+    if (st === 'closing') return '正在自动收卷';
+    return '发布';
+  }
+
+  function selectedSlugs() {
+    return [...document.querySelectorAll('.paper-check:checked')].map(cb => cb.value);
+  }
+
+  function updateBatchButtons() {
+    const n = selectedSlugs().length;
+    const openBtn = $('batchOpenBtn');
+    const closeBtn = $('batchCloseBtn');
+    if (openBtn) openBtn.disabled = n === 0;
+    if (closeBtn) closeBtn.disabled = n === 0;
+    const all = $('paperCheckAll');
+    if (all) {
+      const boxes = [...document.querySelectorAll('.paper-check')];
+      const checked = boxes.filter(b => b.checked).length;
+      all.checked = boxes.length > 0 && checked === boxes.length;
+      all.indeterminate = checked > 0 && checked < boxes.length;
+    }
   }
 
   function renderPapersList() {
@@ -82,23 +122,32 @@
     if (!papersCache.length) {
       tbody.innerHTML = '';
       if (state) state.textContent = '暂无专业试卷，请点击「新建专业」。';
+      updateBatchButtons();
       return;
     }
     if (state) state.textContent = '';
-    tbody.innerHTML = papersCache.map(p => `<tr>
+    tbody.innerHTML = papersCache.map(p => {
+      const st = p.status || 'unpublished';
+      const closing = st === 'closing';
+      const open = st === 'open';
+      const locked = open || closing;
+      return `<tr>
+      <td><input type="checkbox" class="paper-check" value="${esc(p.slug)}" aria-label="选择 ${esc(p.name)}"></td>
       <td>${esc(p.name)}</td>
       <td><code>${esc(p.slug)}</code></td>
-      <td>${statusBadge(p.status)}</td>
+      <td>${statusBadge(st)}</td>
       <td>${esc(p.question_count ?? 0)}</td>
       <td>${esc(p.total_score ?? 0)}</td>
       <td>${esc(p.submission_count ?? 0)}</td>
       <td class="toolbar">
-        <button class="btn secondary paper-edit-btn" type="button" data-slug="${esc(p.slug)}">录入</button>
+        <button class="btn secondary paper-edit-btn" type="button" data-slug="${esc(p.slug)}" ${locked ? 'disabled' : ''}>录入</button>
         <button class="btn secondary paper-preview-btn" type="button" data-slug="${esc(p.slug)}">预览</button>
-        <button class="btn secondary paper-pub-btn" type="button" data-slug="${esc(p.slug)}">${p.status === 'open' ? '关闭' : '发布'}</button>
-        <button class="btn danger paper-del-btn" type="button" data-slug="${esc(p.slug)}">删除</button>
+        <button class="btn secondary paper-pub-btn" type="button" data-slug="${esc(p.slug)}" data-status="${esc(st)}" ${closing ? 'disabled' : ''}>${actionLabel(st)}</button>
+        <button class="btn danger paper-del-btn" type="button" data-slug="${esc(p.slug)}" ${locked ? 'disabled' : ''}>删除</button>
       </td>
-    </tr>`).join('');
+    </tr>`;
+    }).join('');
+    updateBatchButtons();
   }
 
   async function createPaper() {
@@ -143,7 +192,7 @@
     $('paperEditorTitle').textContent = `编辑：${editing.name}`;
     $('paperEditorStatus').textContent = editing.editable
       ? '可编辑（考试未开放）'
-      : '考试进行中，禁止改题 — 请先在「发布考试」结束考试';
+      : '考试进行中，禁止改题 — 请先在「考试管理」结束考试';
     $('editPaperName').value = editing.name || '';
     $('editExamTitle').value = editing.exam_info.title || '';
     $('editExamDesc').value = editing.exam_info.description || '';
@@ -503,13 +552,296 @@
   }
 
   async function setPaperStatus(slug, open) {
+    if (!open) {
+      const paper = papersCache.find(p => p.slug === slug);
+      const active = paper?.active_sessions ?? 0;
+      const ok = confirm(
+        `确认结束「${slug}」本轮考试？\n当前答题人数约 ${active} 人。\n结束后将立即锁定答题，5 秒后按服务器最新草稿自动提交。`
+      );
+      if (!ok) return;
+    }
     const path = open ? 'open' : 'close';
     const resp = await authFetch(`${API}/papers/${encodeURIComponent(slug)}/${path}`, { method: 'POST' });
     const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(apiError(data, open ? '开考失败' : '结束失败'));
-    toast(open ? '已开考' : '已结束考试');
+    if (!resp.ok) throw new Error(apiError(data, open ? '发布失败' : '结束失败'));
+    if (open) {
+      toast(data.url ? `已发布新轮次：${data.url}` : '已发布新轮次');
+      // 新轮次链接失效旧缓存
+      delete examLinkCache[slug];
+      expandedLinkSlugs.delete(slug);
+    } else {
+      toast(data.status === 'closing' ? `已开始收卷（答题中 ${data.active_sessions ?? 0} 人）` : '已结束考试');
+    }
     await loadPapersList();
-    await loadPublishFor(slug);
+    if (typeof window.PapersAdmin?.loadExams === 'function') {
+      await window.PapersAdmin.loadExams().catch(() => {});
+    }
+  }
+
+  async function batchOpen() {
+    const slugs = selectedSlugs();
+    if (!slugs.length) return toast('请先选择专业');
+    const resp = await authFetch(`${API}/papers/batch/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slugs }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok && !data.papers) throw new Error(apiError(data, '批量发布失败'));
+    const errHint = (data.errors || [])
+      .slice(0, 3)
+      .map(e => `${e.slug}: ${e.message || e.code || '失败'}`)
+      .join('；');
+    const msg = `发布完成：成功 ${data.updated ?? 0}/${data.requested ?? slugs.length}` +
+      (data.errors?.length
+        ? `，失败 ${data.errors.length}${errHint ? `（${errHint}）` : ''}`
+        : '');
+    toast(msg);
+    await loadPapersList();
+    if (typeof window.PapersAdmin?.loadExams === 'function') await window.PapersAdmin.loadExams().catch(() => {});
+  }
+
+  async function batchClose() {
+    const slugs = selectedSlugs();
+    if (!slugs.length) return toast('请先选择专业');
+    const activeTotal = slugs.reduce((s, slug) => {
+      const p = papersCache.find(x => x.slug === slug);
+      return s + (p?.active_sessions || 0);
+    }, 0);
+    if (!confirm(`确认批量结束 ${slugs.length} 场考试？\n当前答题总人数约 ${activeTotal} 人。\n结束后 5 秒按服务器草稿自动提交。`)) return;
+    const resp = await authFetch(`${API}/papers/batch/close`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slugs }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok && !data.papers) throw new Error(apiError(data, '批量结束失败'));
+    toast(`结束完成：成功 ${data.updated ?? 0}/${data.requested ?? slugs.length}`);
+    await loadPapersList();
+    if (typeof window.PapersAdmin?.loadExams === 'function') await window.PapersAdmin.loadExams().catch(() => {});
+  }
+
+  // ---- 考试管理卡片 ----
+  let examsPollTimer = null;
+  /** 展开链接面板的 slug 集合（轮询重绘后保持展开） */
+  const expandedLinkSlugs = new Set();
+  /** slug → 最近一次链接缓存，避免重复请求 */
+  const examLinkCache = Object.create(null);
+  let examsLoading = false;
+  let examsFirstLoad = true;
+
+  function examStatusLabel(st) {
+    if (st === 'open') return '考试中';
+    if (st === 'closing') return '收卷中';
+    if (st === 'closed') return '已关闭';
+    return '未发布';
+  }
+
+  function isPublishViewActive() {
+    const panel = document.getElementById('view-publish');
+    if (!panel) return false;
+    return panel.classList.contains('is-active') && !panel.hidden;
+  }
+
+  function renderExamCard(ex) {
+    const st = ex.status || 'unpublished';
+    const slug = String(ex.paper_id || '');
+    const muted = st === 'closed' ? ' exam-card-muted' : '';
+    const round = ex.round_no != null ? `第 ${esc(ex.round_no)} 轮` : '—';
+    const opened = formatExamTime(ex.opened_at);
+    const closed = st === 'closing' && ex.finalize_at
+      ? formatExamTime(ex.finalize_at)
+      : formatExamTime(ex.closed_at);
+    const openedLabel = ex.opened_at ? '发布时间' : '发布时间';
+    const closedLabel = st === 'closing' ? '收卷截止' : '结束时间';
+    const timesHtml = (!ex.opened_at && !ex.closed_at && st !== 'closing')
+      ? `<div class="exam-card-times exam-card-times-empty"><span class="muted">尚未发布</span></div>`
+      : `<div class="exam-card-times">
+          <div class="exam-time-item">
+            <span class="exam-time-label">${openedLabel}</span>
+            <span class="exam-time-value">${esc(opened)}</span>
+          </div>
+          <div class="exam-time-item">
+            <span class="exam-time-label">${closedLabel}</span>
+            <span class="exam-time-value">${esc(closed)}</span>
+          </div>
+        </div>`;
+
+    let actions = '';
+    if (st === 'open') {
+      actions = `<button class="btn secondary exam-close-btn" type="button" data-slug="${esc(slug)}">结束考试</button>`;
+    } else if (st === 'closing') {
+      actions = `<button class="btn secondary" type="button" disabled>正在自动收卷…</button>`;
+    } else {
+      actions = `<button class="btn exam-open-btn" type="button" data-slug="${esc(slug)}">发布新轮次</button>`;
+    }
+
+    const canLink = ex.has_public_link || st === 'open' || st === 'closing';
+    const expanded = expandedLinkSlugs.has(slug);
+    const cached = examLinkCache[slug];
+    let linkBlock = '';
+    if (!canLink) {
+      linkBlock = `<p class="muted exam-no-link">无可用链接</p>`;
+    } else {
+      const panelBody = expanded
+        ? (cached?.url
+          ? `<div class="exam-link-text">
+               <a href="${esc(cached.url)}" target="_blank" rel="noreferrer">${esc(cached.url)}</a>
+               <button class="btn secondary exam-copy-btn" type="button" data-url="${esc(cached.url)}">复制</button>
+             </div>
+             ${cached.qr_base64
+               ? `<img class="exam-qr" data-slug="${esc(slug)}" src="${esc(cached.qr_base64)}" alt="二维码">`
+               : `<img class="exam-qr is-hidden" data-slug="${esc(slug)}" alt="二维码">`}`
+          : `<p class="muted exam-link-loading">加载中…</p>
+             <img class="exam-qr is-hidden" data-slug="${esc(slug)}" alt="二维码">`)
+        : '';
+      linkBlock = `<div class="exam-link-block" data-slug="${esc(slug)}">
+        <button class="btn secondary exam-link-btn" type="button"
+          data-slug="${esc(slug)}"
+          aria-expanded="${expanded ? 'true' : 'false'}">${expanded ? '收起链接/二维码' : '获取链接/二维码'}</button>
+        <div class="exam-link-panel${expanded ? ' is-open' : ''}" data-slug="${esc(slug)}">
+          ${panelBody}
+        </div>
+      </div>`;
+    }
+
+    return `<article class="exam-card${muted}" data-status="${esc(st)}" data-slug="${esc(slug)}">
+      <div class="exam-card-head">
+        <div class="exam-card-title">
+          <h3>${esc(ex.paper_name || slug)}</h3>
+          <p class="muted exam-card-meta"><code>${esc(slug)}</code><span class="dot">·</span>${round}</p>
+        </div>
+        ${statusBadge(st)}
+      </div>
+      ${timesHtml}
+      <p class="exam-card-stats">时长 ${esc(ex.duration_minutes ?? '—')} 分钟 · 已开始 ${esc(ex.started_count ?? 0)} · 已提交 ${esc(ex.submitted_count ?? 0)} · 答题中 ${esc(ex.active_count ?? 0)}</p>
+      ${linkBlock}
+      <div class="toolbar exam-card-actions">${actions}</div>
+    </article>`;
+  }
+
+  async function loadExams({ silent = false } = {}) {
+    const box = $('examCards');
+    const stateEl = $('examCardsState');
+    if (!box) return [];
+    if (examsLoading) return [];
+    examsLoading = true;
+    if (!silent && examsFirstLoad && stateEl) stateEl.textContent = '加载中…';
+    try {
+      const resp = await authFetch(`${API}/exams`);
+      const data = await resp.json().catch(() => []);
+      if (!resp.ok) throw new Error(apiError(data, '加载考试列表失败'));
+      const items = Array.isArray(data) ? data : [];
+      if (!items.length) {
+        box.innerHTML = '';
+        if (stateEl) stateEl.textContent = '暂无专业。';
+        scheduleExamsPoll(items);
+        return items;
+      }
+      if (stateEl) stateEl.textContent = '';
+      box.innerHTML = items.map(renderExamCard).join('');
+      // 展开中但尚未缓存链接的卡片，补拉一次
+      items.forEach(ex => {
+        const slug = String(ex.paper_id || '');
+        if (expandedLinkSlugs.has(slug) && !examLinkCache[slug]) {
+          fetchExamLinkForCard(slug, { force: true }).catch(() => {});
+        }
+      });
+      scheduleExamsPoll(items);
+      examsFirstLoad = false;
+      return items;
+    } finally {
+      examsLoading = false;
+    }
+  }
+
+  function scheduleExamsPoll(items) {
+    if (examsPollTimer) {
+      clearInterval(examsPollTimer);
+      examsPollTimer = null;
+    }
+    const hasClosing = (items || []).some(x => x.status === 'closing');
+    // 收卷中 1s 轮询，便于 5s 缓冲结束后立刻切到「已关闭」
+    const ms = hasClosing ? 1000 : 15000;
+    examsPollTimer = setInterval(() => {
+      if (isPublishViewActive()) {
+        loadExams({ silent: true }).catch(() => {});
+      }
+    }, ms);
+  }
+
+  async function fetchExamLinkForCard(slug, { force = false } = {}) {
+    if (!force && examLinkCache[slug]) {
+      applyLinkCacheToDom(slug);
+      return examLinkCache[slug];
+    }
+    const resp = await authFetch(`${API}/papers/${encodeURIComponent(slug)}/exam-link`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiError(data, '获取链接失败'));
+    examLinkCache[slug] = {
+      url: data.url || '',
+      qr_base64: data.qr_base64 || '',
+      message: data.message || '',
+    };
+    applyLinkCacheToDom(slug);
+    return examLinkCache[slug];
+  }
+
+  function applyLinkCacheToDom(slug) {
+    const panel = document.querySelector(`.exam-link-panel[data-slug="${CSS.escape(slug)}"]`);
+    if (!panel || !panel.classList.contains('is-open')) return;
+    const cached = examLinkCache[slug];
+    if (!cached) {
+      panel.innerHTML = `<p class="muted exam-link-loading">加载中…</p>`;
+      return;
+    }
+    if (cached.url) {
+      panel.innerHTML = `<div class="exam-link-text">
+          <a href="${esc(cached.url)}" target="_blank" rel="noreferrer">${esc(cached.url)}</a>
+          <button class="btn secondary exam-copy-btn" type="button" data-url="${esc(cached.url)}">复制</button>
+        </div>
+        ${cached.qr_base64
+          ? `<img class="exam-qr" data-slug="${esc(slug)}" src="${esc(cached.qr_base64)}" alt="二维码">`
+          : ''}`;
+    } else {
+      panel.innerHTML = `<p class="muted">${esc(cached.message || '暂无链接')}</p>`;
+    }
+  }
+
+  async function toggleExamLinkPanel(slug) {
+    if (expandedLinkSlugs.has(slug)) {
+      expandedLinkSlugs.delete(slug);
+      const btn = document.querySelector(`.exam-link-btn[data-slug="${CSS.escape(slug)}"]`);
+      const panel = document.querySelector(`.exam-link-panel[data-slug="${CSS.escape(slug)}"]`);
+      if (btn) {
+        btn.textContent = '获取链接/二维码';
+        btn.setAttribute('aria-expanded', 'false');
+      }
+      if (panel) {
+        panel.classList.remove('is-open');
+        panel.innerHTML = '';
+      }
+      return;
+    }
+    expandedLinkSlugs.add(slug);
+    const btn = document.querySelector(`.exam-link-btn[data-slug="${CSS.escape(slug)}"]`);
+    const panel = document.querySelector(`.exam-link-panel[data-slug="${CSS.escape(slug)}"]`);
+    if (btn) {
+      btn.textContent = '收起链接/二维码';
+      btn.setAttribute('aria-expanded', 'true');
+    }
+    if (panel) {
+      panel.classList.add('is-open');
+      panel.innerHTML = examLinkCache[slug]
+        ? '' // filled below
+        : `<p class="muted exam-link-loading">加载中…</p>`;
+    }
+    try {
+      await fetchExamLinkForCard(slug);
+    } catch (e) {
+      if (panel) panel.innerHTML = `<p class="muted">${esc(e.message || '获取失败')}</p>`;
+      throw e;
+    }
   }
 
   function bind() {
@@ -603,24 +935,36 @@
     });
 
     const papersTbody = $('papersTbody');
-    if (papersTbody) papersTbody.addEventListener('click', e => {
-      const btn = e.target.closest('button');
-      if (!btn) return;
-      const slug = btn.dataset.slug;
-      if (btn.classList.contains('paper-edit-btn')) openEditor(slug).catch(err => toast(err.message));
-      if (btn.classList.contains('paper-preview-btn')) {
-        window.open(`/exam?paper=${encodeURIComponent(slug)}&preview=true`, '_blank');
-      }
-      if (btn.classList.contains('paper-del-btn')) deletePaper(slug).catch(err => toast(err.message));
-      if (btn.classList.contains('paper-pub-btn')) {
-        if (typeof window.showView === 'function') window.showView('publish');
-        const sel = $('publishPaperSelect');
-        if (sel) {
-          sel.value = slug;
-          loadPublishFor(slug).catch(err => toast(err.message));
+    if (papersTbody) {
+      papersTbody.addEventListener('click', e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const slug = btn.dataset.slug;
+        if (btn.classList.contains('paper-edit-btn')) openEditor(slug).catch(err => toast(err.message));
+        if (btn.classList.contains('paper-preview-btn')) {
+          window.open(`/exam?paper=${encodeURIComponent(slug)}&preview=true`, '_blank');
         }
-      }
+        if (btn.classList.contains('paper-del-btn')) deletePaper(slug).catch(err => toast(err.message));
+        if (btn.classList.contains('paper-pub-btn')) {
+          const st = btn.dataset.status;
+          if (st === 'closing') return;
+          const open = st !== 'open';
+          setPaperStatus(slug, open).catch(err => toast(err.message));
+        }
+      });
+      papersTbody.addEventListener('change', e => {
+        if (e.target.classList.contains('paper-check')) updateBatchButtons();
+      });
+    }
+    const paperCheckAll = $('paperCheckAll');
+    if (paperCheckAll) paperCheckAll.addEventListener('change', () => {
+      document.querySelectorAll('.paper-check').forEach(cb => { cb.checked = paperCheckAll.checked; });
+      updateBatchButtons();
     });
+    const batchOpenBtn = $('batchOpenBtn');
+    if (batchOpenBtn) batchOpenBtn.addEventListener('click', () => batchOpen().catch(e => toast(e.message)));
+    const batchCloseBtn = $('batchCloseBtn');
+    if (batchCloseBtn) batchCloseBtn.addEventListener('click', () => batchClose().catch(e => toast(e.message)));
 
     const pubSel = $('publishPaperSelect');
     if (pubSel) pubSel.addEventListener('change', () => {
@@ -638,11 +982,76 @@
       if (!slug) return toast('请选择专业');
       setPaperStatus(slug, false).catch(e => toast(e.message));
     });
+
+    const examCards = $('examCards');
+    if (examCards) examCards.addEventListener('click', e => {
+      const btn = e.target.closest('button');
+      if (!btn) return;
+      const slug = btn.dataset.slug;
+      if (btn.classList.contains('exam-open-btn')) setPaperStatus(slug, true).catch(err => toast(err.message));
+      if (btn.classList.contains('exam-close-btn')) setPaperStatus(slug, false).catch(err => toast(err.message));
+      if (btn.classList.contains('exam-link-btn')) {
+        toggleExamLinkPanel(slug).catch(err => toast(err.message));
+      }
+      if (btn.classList.contains('exam-copy-btn')) {
+        const url = btn.dataset.url;
+        if (url && navigator.clipboard) {
+          navigator.clipboard.writeText(url).then(() => toast('已复制链接')).catch(() => toast(url));
+        }
+      }
+    });
+    const refreshExams = $('refreshExamsBtn');
+    if (refreshExams) {
+      refreshExams.addEventListener('click', () => {
+        examsFirstLoad = true;
+        loadExams().catch(e => toast(e.message));
+      });
+    }
+    const resetRoundsBtn = $('resetRoundsBtn');
+    if (resetRoundsBtn) {
+      resetRoundsBtn.addEventListener('click', () => resetRounds().catch(e => toast(e.message)));
+    }
+  }
+
+  async function resetRounds() {
+    const ok = confirm(
+      '确认重置全部考试轮次？\n\n' +
+      '• 将清除各专业的轮次记录、考试链接、试卷快照与未交卷会话\n' +
+      '• 历史成绩提交仍保留\n' +
+      '• 考试中 / 收卷中的专业会跳过\n' +
+      '• 重置后再次发布将从第 1 轮开始\n\n' +
+      '此操作不可恢复。'
+    );
+    if (!ok) return;
+    const resp = await authFetch(`${API}/exams/reset-rounds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slugs: [] }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok && data.updated == null) throw new Error(apiError(data, '重置轮次失败'));
+
+    // 清空链接展开缓存
+    Object.keys(examLinkCache).forEach(k => { delete examLinkCache[k]; });
+    expandedLinkSlugs.clear();
+
+    const errHint = (data.errors || [])
+      .slice(0, 3)
+      .map(e => `${e.slug}: ${e.message || e.code || '失败'}`)
+      .join('；');
+    toast(
+      `轮次重置：成功 ${data.updated ?? 0}/${data.requested ?? 0}` +
+      (data.errors?.length ? `，跳过/失败 ${data.errors.length}${errHint ? `（${errHint}）` : ''}` : '')
+    );
+    examsFirstLoad = true;
+    await loadPapersList();
+    await loadExams().catch(() => {});
   }
 
   window.PapersAdmin = {
     loadPapersList,
     loadPublishFor,
+    loadExams,
     fillPaperSelects,
     getPapers: () => papersCache,
   };

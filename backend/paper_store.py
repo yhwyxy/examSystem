@@ -110,10 +110,26 @@ def _find_meta(index: dict[str, Any], slug: str) -> dict[str, Any] | None:
     return None
 
 
+def _has_active_run(slug: str) -> bool:
+    try:
+        from . import exam_run_service
+        return exam_run_service.has_active_run(slug)
+    except Exception:
+        return False
+
+
+def _has_any_run(slug: str) -> bool:
+    try:
+        from . import exam_run_service
+        return exam_run_service.has_any_run(slug)
+    except Exception:
+        return False
+
+
 def _assert_editable(meta: dict[str, Any] | None, slug: str) -> None:
     if not meta:
         _error(f"试卷不存在: {slug}", "PAPER_NOT_FOUND", 404)
-    if meta.get("status") == ql.PAPER_STATUS_OPEN:
+    if _has_active_run(slug) or meta.get("status") == ql.PAPER_STATUS_OPEN:
         _error("考试进行中，禁止修改试卷；请先结束考试", "PAPER_OPEN_LOCKED", 409)
 
 
@@ -194,14 +210,21 @@ def get_paper_full(slug: str) -> dict[str, Any]:
     if not meta:
         _error(f"试卷不存在: {slug}", "PAPER_NOT_FOUND", 404)
     data = ql.load_questions(slug)
+    active = _has_active_run(slug)
+    derived = "open"
+    try:
+        from . import exam_run_service
+        derived = exam_run_service.derived_status_for_paper(slug)
+    except Exception:
+        derived = meta.get("status") or ql.PAPER_STATUS_CLOSED
     return {
         "meta": meta,
         "paper_id": data.get("paper_id") or slug,
         "name": data.get("name") or meta.get("name"),
         "exam_info": data.get("exam_info") or {},
         "questions": data.get("questions") or [],
-        "status": meta.get("status"),
-        "editable": meta.get("status") != ql.PAPER_STATUS_OPEN,
+        "status": derived,
+        "editable": not active and derived not in ("open", "closing"),
     }
 
 
@@ -257,10 +280,10 @@ def delete_paper(slug: str, *, has_submissions: bool) -> None:
         meta = _find_meta(index, slug)
         if not meta:
             _error(f"试卷不存在: {slug}", "PAPER_NOT_FOUND", 404)
-        if meta.get("status") == ql.PAPER_STATUS_OPEN:
+        if _has_active_run(slug) or meta.get("status") == ql.PAPER_STATUS_OPEN:
             _error("请先结束考试再删除专业", "PAPER_OPEN_LOCKED", 409)
-        if has_submissions:
-            _error("该专业已有提交记录，禁止删除", "PAPER_HAS_SUBMISSIONS", 409)
+        if has_submissions or _has_any_run(slug):
+            _error("该专业已有考试轮次或提交记录，禁止删除", "PAPER_HAS_SUBMISSIONS", 409)
 
         path = ql.paper_path(slug)
         if path.exists():
@@ -278,7 +301,8 @@ def delete_paper(slug: str, *, has_submissions: bool) -> None:
         ql.clear_question_cache(slug)
 
 
-def set_status(slug: str, status: str) -> dict[str, Any]:
+def set_status(slug: str, status: str, *, force: bool = False) -> dict[str, Any]:
+    """兼容写入 index.json 状态。运行态以 exam_runs 为准；force 跳过空卷校验（收卷同步用）。"""
     if status not in {ql.PAPER_STATUS_OPEN, ql.PAPER_STATUS_CLOSED}:
         _error("status 仅允许 open 或 closed", "INVALID_REQUEST")
     slug = ql.validate_slug(slug)
@@ -287,7 +311,7 @@ def set_status(slug: str, status: str) -> dict[str, Any]:
         meta = _find_meta(index, slug)
         if not meta:
             _error(f"试卷不存在: {slug}", "PAPER_NOT_FOUND", 404)
-        if status == ql.PAPER_STATUS_OPEN:
+        if status == ql.PAPER_STATUS_OPEN and not force:
             paper = ql._read_paper_file(slug)
             questions = paper.get("questions") or []
             if not questions:
@@ -297,6 +321,11 @@ def set_status(slug: str, status: str) -> dict[str, Any]:
         meta["updated_at"] = _now_iso()
         _save_index_unlocked(index)
         return dict(meta)
+
+
+def sync_index_status_only(slug: str, status: str) -> dict[str, Any]:
+    """仅同步 index 兼容字段，不做空卷/结构校验。供 exam_run_service 调用。"""
+    return set_status(slug, status, force=True)
 
 
 def next_question_id(questions: list[dict[str, Any]]) -> str:

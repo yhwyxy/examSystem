@@ -93,7 +93,7 @@ def export_submissions_xlsx(paper_id: str | None = None) -> bytes:
     ws.title = "考试成绩"
 
     base_headers = [
-        "ID", "姓名", "工号", "专业编码", "专业名称", "部门",
+        "ID", "姓名", "工号", "专业编码", "专业名称", "轮次", "部门",
         "客观题分", "主观题机器分", "主观题最终分", "总分", "复核状态", "提交时间",
     ]
     headers = base_headers + q_headers
@@ -126,9 +126,17 @@ def export_submissions_xlsx(paper_id: str | None = None) -> bytes:
                 if qid:
                     details_by_qid[qid] = d
 
+        if r.get("run_is_legacy"):
+            round_label = "历史数据"
+        elif r.get("round_no") is not None:
+            round_label = f"第{r.get('round_no')}轮"
+        else:
+            round_label = ""
+
         base = [
             r.get("id"), r.get("name"), r.get("employee_id"),
             r.get("paper_id") or "", r.get("paper_name") or "",
+            round_label,
             r.get("department"),
             r.get("objective_score"), r.get("subjective_score_machine"),
             r.get("subjective_score_final"), r.get("total_score"),
