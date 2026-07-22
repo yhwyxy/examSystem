@@ -904,3 +904,177 @@ tbody tr:hover {
   color: #0c4a6e;
   white-space: pre-wrap;
 }
+
+
+/* ---- exam runs / draft autosave ---- */
+.draft-status {
+  margin-top: 0.35rem;
+  font-size: 0.85rem;
+}
+.exam-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+.exam-card {
+  border: 1px solid var(--border, #d8dee6);
+  border-radius: 12px;
+  padding: 1rem 1.05rem;
+  background: var(--panel, #fff);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+}
+.exam-card-muted {
+  opacity: 0.78;
+  background: #fafbfc;
+}
+.exam-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+.exam-card-title {
+  min-width: 0;
+  flex: 1;
+}
+.exam-card-head h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.exam-card-meta {
+  margin: 0.2rem 0 0;
+  font-size: 0.82rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exam-card-meta .dot {
+  opacity: 0.55;
+}
+.exam-status-badge {
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1.2;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+.badge-exam-open {
+  background: #dcfae6;
+  color: var(--green, #067647);
+}
+.badge-exam-closing {
+  background: #fef0c7;
+  color: var(--amber, #b54708);
+  animation: pulse 1.5s infinite;
+}
+.badge-exam-closed {
+  background: #f2f4f7;
+  color: #475467;
+}
+.badge-exam-unpublished {
+  background: #eef4ff;
+  color: var(--blue-strong, #175cd3);
+}
+.exam-card-times {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+}
+.exam-card-times-empty {
+  display: block;
+  padding: 0.45rem 0.65rem;
+}
+.exam-time-item {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.exam-time-label {
+  font-size: 0.72rem;
+  color: #667085;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+.exam-time-value {
+  font-size: 0.84rem;
+  color: #101828;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exam-card-stats {
+  margin: 0;
+  font-size: 0.86rem;
+  color: #344054;
+  line-height: 1.4;
+}
+.exam-link-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.exam-link-panel {
+  display: none;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #eef2f6;
+}
+.exam-link-panel.is-open {
+  display: flex;
+}
+.exam-link-text {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+  font-size: 0.82rem;
+  word-break: break-all;
+}
+.exam-link-text a {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.exam-qr {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--border, #e5e7eb);
+  background: #fff;
+}
+.exam-card-actions {
+  margin-top: auto;
+}
+.exam-no-link {
+  margin: 0;
+  font-size: 0.85rem;
+}
+.exam-form.is-locked input,
+.exam-form.is-locked textarea,
+.exam-form.is-locked select {
+  pointer-events: none;
+  opacity: 0.85;
+}

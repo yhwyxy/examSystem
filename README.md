@@ -65,8 +65,8 @@ SubjectiveScoringService(
 
 访问：
 
-- 员工考试端：http://localhost:8000/exam?paper=专业编码（须由管理端发布）
-- 管理后台：http://localhost:8000/admin（试卷录入 / 分专业发布）
+- 员工考试端：`http://localhost:8000/exam?paper=专业编码&run=轮次token`（由管理端发布后生成）
+- 管理后台：http://localhost:8000/admin（试卷录入 / 考试管理）
 - API 文档：http://localhost:8000/docs
 
 ## 安全配置
@@ -129,14 +129,19 @@ set_subjective_service(SubjectiveScoringService(
 
 ```text
 data/papers/
-  index.json          # 专业索引与开考状态
-  mech.json           # 某专业试卷
+  index.json          # 专业索引（兼容字段；运行态以 SQLite 轮次为准）
+  mech.json           # 某专业可编辑试卷
   elec.json
+data/exam_runs/
+  {run_id}.json       # 发布时不可变快照
+  {run_id}.token      # 管理端重建链接用的公开 token（仅文件系统）
 ```
 
-- 管理后台 → **试卷 / 专业**：新建专业、录入题目、保存整卷。
-- **发布考试**：按专业开考/结束，生成 `http://局域网IP:8000/exam?paper=专业编码` 链接与二维码。
-- **非考试阶段**（`closed`）可自由改题；**开考中**（`open`）禁止改题，须先结束考试。
+- 管理后台 → **试卷 / 专业**：新建专业、录入题目、保存整卷；支持批量发布/结束。
+- **考试管理**：查看各专业当前/最近轮次、链接与答题人数；「发布」创建新轮次，链接形如 `/exam?paper=slug&run=token`。
+- **非考试阶段**可自由改题；**考试中 / 收卷中**禁止改题；存在历史轮次时禁止硬删除试卷。
+- 考生答题过程每约 2 秒自动保存服务器草稿；管理员结束考试后进入 5 秒收卷缓冲，到期按最新草稿自动提交（`admin_closed`）。
+- 部署升级前请备份 `data/exam.db`，并确保没有进行中的考试。
 - 员工端必须通过带 `paper` 的链接进入；接口自动脱敏（移除 `answer` / `scoring_rubric` / `scoring_points`）。
 - 首次启动若仅有旧文件 `data/questions.json`，会迁移为 `papers/default.json`。
 - 同一工号可考多个专业；同一专业不可重复提交。

@@ -276,3 +276,74 @@ def test_admin_shell_is_fixed_two_pane_layout():
     assert "panel.hidden" in js
     assert 'data-view="overview"' in html
     assert 'href="#overview"' not in html
+
+
+
+def test_admin_nav_label_is_exam_management():
+    html = read_frontend_file("frontend/admin.html")
+    assert "考试管理" in html
+    assert 'data-view="publish"' in html
+    assert "batchOpenBtn" in html
+    assert "batchCloseBtn" in html
+    assert "examCards" in html
+
+
+def test_papers_list_supports_batch_and_inline_publish():
+    source = read_frontend_file("frontend/js/papers.js")
+    assert "batchOpen" in source
+    assert "batchClose" in source
+    assert "paper-check" in source
+    assert "正在自动收卷" in source
+    # publish action calls API in place, not only navigate
+    assert "setPaperStatus(slug, open)" in source
+
+
+def test_exam_js_requires_run_token_and_draft_loop():
+    source = read_frontend_file("frontend/js/exam.js")
+    assert "getRunTokenFromUrl" in source
+    assert "saveDraftNow" in source
+    assert "DRAFT_LOOP_MS" in source
+    assert "session_id" in source
+    assert "session_token" in source
+    assert "handleClosingStatus" in source
+    # personal deadline timer, no paper-level remaining global countdown label invent
+    assert "deadlineAt" in source
+    assert "本轮考试已结束" in source or "run_status" in source
+
+
+def test_exam_html_has_draft_status_indicator():
+    html = read_frontend_file("frontend/exam.html")
+    assert 'id="draftStatus"' in html
+
+
+def test_exam_management_cards_have_toggleable_link_panel_and_status_layout():
+    source = read_frontend_file("frontend/js/papers.js")
+    css = read_frontend_file("frontend/css/style.css")
+    assert "toggleExamLinkPanel" in source
+    assert "收起链接/二维码" in source
+    assert "exam-link-panel" in source
+    assert "exam-card-times" in source
+    assert "badge-exam-open" in source
+    assert "badge-exam-closing" in source
+    assert "badge-exam-closed" in source
+    assert ".exam-status-badge" in css
+    assert ".exam-link-panel.is-open" in css
+    assert "white-space: nowrap" in css
+    assert "hasClosing ? 1000" in source
+
+
+def test_exam_management_has_reset_rounds_control():
+    html = read_frontend_file("frontend/admin.html")
+    js = read_frontend_file("frontend/js/papers.js")
+    assert 'id="resetRoundsBtn"' in html
+    assert "重置轮次" in html
+    assert "resetRounds" in js
+    assert "/exams/reset-rounds" in js
+
+
+def test_admin_submissions_table_has_round_column():
+    html = read_frontend_file("frontend/admin.html")
+    assert "轮次" in html
+    js = read_frontend_file("frontend/js/admin.js")
+    assert "formatRound" in js
+    assert "admin_closed" in js

@@ -71,8 +71,9 @@ def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, 
             "review_status": "reviewed",
         },
     ]
+    database.create_exam_run(run_id="run-p1", paper_id="p1", round_no=1, public_token_hash=None, status="closed", duration_minutes=60, snapshot_path=None, snapshot_hash=None, is_legacy=1)
     submission_id = database.insert_submission(
-        name="重评测试", employee_id="E-REGR", paper_id="p1", paper_name="P1",
+        name="重评测试", employee_id="E-REGR", paper_id="p1", run_id="run-p1", paper_name="P1",
         department="D", answers={"q1": "A", "q2": {"s1": "a", "s2": "b"}},
         grading_detail=original_detail,
         scores={
@@ -133,7 +134,7 @@ def test_regrade_preserves_only_reviewed_scores_and_recomputes_totals(tmp_path, 
         ],
     )
 
-    async def fake_grade_submission(answers, paper_id=None):
+    async def fake_grade_submission(answers, paper_id=None, run_id=None):
         assert paper_id == "p1"
         return graded
 
@@ -213,7 +214,7 @@ def test_regrade_submission_awaits_grader_and_persists_complete_result(monkeypat
     calls = []
     saved = []
 
-    async def fake_grade_submission(answers, paper_id=None):
+    async def fake_grade_submission(answers, paper_id=None, run_id=None):
         calls.append((answers, paper_id))
         return graded
 

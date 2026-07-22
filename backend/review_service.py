@@ -174,7 +174,11 @@ def regrade_submission(submission_id: int) -> dict[str, Any]:
     loop = asyncio.new_event_loop()
     try:
         new_result = loop.run_until_complete(
-            grade_submission(answers, paper_id=submission.get("paper_id") or "default")
+            grade_submission(
+                answers,
+                paper_id=submission.get("paper_id") or "default",
+                run_id=submission.get("run_id"),
+            )
         )
     finally:
         loop.close()

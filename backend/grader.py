@@ -515,11 +515,18 @@ def aggregate_review_status(details: list[dict[str, Any]]) -> str:
     return "reviewed"
 
 
-async def grade_submission(answers: dict[str, Any], paper_id: str | None = None) -> GradingResult:
-    """完整判分入口，返回 GradingResult。须指定 paper_id。"""
-    from .question_loader import load_questions
+async def grade_submission(
+    answers: dict[str, Any],
+    paper_id: str | None = None,
+    run_id: str | None = None,
+) -> GradingResult:
+    """完整判分入口，返回 GradingResult。优先使用轮次快照。"""
+    from .question_loader import load_questions, load_questions_for_run
 
-    data = load_questions(paper_id)
+    if run_id:
+        data = load_questions_for_run(run_id)
+    else:
+        data = load_questions(paper_id)
     questions = data.get("questions", [])
     q_map = {q["id"]: q for q in questions}
 

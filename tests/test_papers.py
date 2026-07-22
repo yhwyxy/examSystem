@@ -64,12 +64,15 @@ def papers_env(tmp_path, monkeypatch):
     from backend import question_loader as ql
     from backend import paper_store
     from backend import database
+    from backend import exam_run_service
 
     papers = tmp_path / "papers"
     papers.mkdir()
     backups = tmp_path / "backups" / "papers"
     backups.mkdir(parents=True)
     (papers / "index.json").write_text(json.dumps({"papers": []}), encoding="utf-8")
+    runs = tmp_path / "exam_runs"
+    runs.mkdir()
 
     monkeypatch.setattr(ql, "PAPERS_DIR", papers)
     monkeypatch.setattr(ql, "INDEX_PATH", papers / "index.json")
@@ -83,6 +86,10 @@ def papers_env(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", db_path)
     database._initialized = False
     database.init_db()
+
+    monkeypatch.setattr(exam_run_service, "EXAM_RUNS_DIR", runs)
+    monkeypatch.setattr(exam_run_service, "PROJECT_ROOT", tmp_path)
+    exam_run_service.set_grading_scheduler(lambda *a, **k: None)
     return tmp_path
 
 
@@ -143,7 +150,7 @@ def test_calculation_question_schema_is_accepted():
 
 
 def test_create_save_open_close_and_exam_flow(papers_env):
-    from backend import paper_store, question_loader
+    from backend import paper_store, exam_run_service, database
     from backend.main import app
 
     meta = paper_store.create_paper(slug="mech", name="机电")
@@ -157,42 +164,58 @@ def test_create_save_open_close_and_exam_flow(papers_env):
     assert full["exam_info"]["total_score"] == 15
     assert len(full["questions"]) == 2
 
-    # closed: student cannot load
     client = TestClient(app)
+    # no run token
     r = client.get("/api/exam", params={"paper": "mech"})
-    assert r.status_code == 403
+    assert r.status_code == 400
 
-    paper_store.set_status("mech", "open")
+    r = client.post("/api/admin/papers/mech/open")
+    assert r.status_code == 200
+    token = r.json()["public_token"]
+
     # open: cannot edit
     with pytest.raises(Exception):
         paper_store.add_question("mech", {
             "type": "true_false", "question": "x", "answer": True, "score": 1,
         })
 
-    r = client.get("/api/exam", params={"paper": "mech"})
+    r = client.get("/api/exam", params={"paper": "mech", "run": token})
     assert r.status_code == 200
     body = r.json()
     assert body["paper_id"] == "mech"
     assert "answer" not in body["questions"][0]
     assert "scoring_points" not in body["questions"][1]
 
-    # start + submit
-    r = client.post("/api/exam/start", json={"employee_id": "E1", "paper_id": "mech"})
+    r = client.post("/api/exam/start", json={
+        "employee_id": "E1", "paper_id": "mech", "run_token": token, "name": "张三",
+    })
     assert r.status_code == 200
+    sess = r.json()
     r = client.post("/api/submit", json={
-        "name": "张三",
-        "employee_id": "E1",
-        "paper_id": "mech",
+        "session_id": sess["session_id"],
+        "session_token": sess["session_token"],
         "answers": {"q1": "B", "q2": "资源导向 HTTP"},
     })
     assert r.status_code == 200
 
-    # duplicate same paper
-    client.post("/api/exam/start", json={"employee_id": "E1", "paper_id": "mech"})
-    r = client.post("/api/submit", json={
-        "name": "张三", "employee_id": "E1", "paper_id": "mech", "answers": {"q1": "A"},
+    # duplicate same run
+    r = client.post("/api/exam/start", json={
+        "employee_id": "E1", "paper_id": "mech", "run_token": token, "name": "张三",
     })
-    assert r.status_code == 409
+    # already submitted: start may restore submitted session or reject
+    # try submit again via new session if created
+    if r.status_code == 200 and r.json().get("session_token"):
+        r2 = client.post("/api/submit", json={
+            "session_id": r.json()["session_id"],
+            "session_token": r.json()["session_token"],
+            "answers": {"q1": "A"},
+        })
+        assert r2.status_code in (409, 403)
+    else:
+        # resume without token then submit with stored - still duplicate
+        pass
+    # ensure unique: second submit for same employee/run fails if we create somehow
+    assert database.submission_count(paper_id="mech") == 1
 
     # second paper allowed for same employee
     paper_store.create_paper(slug="elec", name="电气")
@@ -201,16 +224,32 @@ def test_create_save_open_close_and_exam_flow(papers_env):
         "exam_info": {"title": "电气考试", "passing_score": 3},
         "questions": [_sample_questions()[0]],
     })
-    paper_store.set_status("elec", "open")
-    r = client.post("/api/exam/start", json={"employee_id": "E1", "paper_id": "elec"})
+    r = client.post("/api/admin/papers/elec/open")
     assert r.status_code == 200
+    token2 = r.json()["public_token"]
+    r = client.post("/api/exam/start", json={
+        "employee_id": "E1", "paper_id": "elec", "run_token": token2, "name": "张三",
+    })
+    assert r.status_code == 200
+    sess2 = r.json()
     r = client.post("/api/submit", json={
-        "name": "张三", "employee_id": "E1", "paper_id": "elec", "answers": {"q1": "B"},
+        "session_id": sess2["session_id"],
+        "session_token": sess2["session_token"],
+        "answers": {"q1": "B"},
     })
     assert r.status_code == 200
 
-    paper_store.set_status("mech", "closed")
-    # after close editable again
+    # close mech (begin closing then force finalize) then editable
+    client.post("/api/admin/papers/mech/close")
+    run = database.get_active_run_for_paper("mech") or database.get_latest_run_for_paper("mech")
+    if run and run["status"] == "closing":
+        with database.db_cursor() as conn:
+            conn.execute(
+                "UPDATE exam_runs SET finalize_at = '2000-01-01T00:00:00+00:00' WHERE id = ?",
+                (run["id"],),
+            )
+        exam_run_service.finalize_run(run["id"])
+
     paper_store.update_question("mech", "q1", {
         "id": "q1",
         "type": "single_choice",
@@ -234,12 +273,20 @@ def test_paper_exam_link_uses_request_origin(papers_env):
     from backend.main import app
 
     paper_store.create_paper(slug="mech", name="机电")
+    paper_store.save_paper("mech", {
+        "name": "机电",
+        "exam_info": {"title": "机电考试", "passing_score": 3},
+        "questions": [_sample_questions()[0]],
+    })
     client = TestClient(app, base_url="https://exam.example.com")
+    r = client.post("/api/admin/papers/mech/open")
+    assert r.status_code == 200
+    token = r.json()["public_token"]
 
     r = client.get("/api/admin/papers/mech/exam-link")
 
     assert r.status_code == 200
-    assert r.json()["url"] == "https://exam.example.com/exam?paper=mech"
+    assert r.json()["url"] == f"https://exam.example.com/exam?paper=mech&run={token}"
 
 
 def test_sanitize_scoring_points():

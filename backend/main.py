@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
 from fastapi.concurrency import run_in_threadpool
 
-from . import database, exporter, grader, paper_store, question_loader, review_service
+from . import database, exam_run_service, exporter, grader, paper_store, question_loader, review_service
 from .config import get_config, reload_config
 from .utils import generate_qr_base64, get_lan_ip, parse_iso
 
@@ -144,26 +144,13 @@ def _error(status: int, code: str, message: str) -> HTTPException:
 
 
 # ---------------------------------------------------------------------------
-# 考试开始时间记录（服务器端，防篡改）
-# ---------------------------------------------------------------------------
-# 考试「开始时间」改为 DB 持久化（exam_sessions 表），避免：
-#   1) 进程重启导致已开始考生无法提交
-#   2) 全局内存字典无界增长（长期未提交的记录堆积）
-# 详见 database.upsert_exam_session / pop_exam_session / cleanup_exam_sessions
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # 模型
 # ---------------------------------------------------------------------------
 
 class SubmitRequest(BaseModel):
-    name: str
-    employee_id: str
-    paper_id: str
-    department: str | None = None
+    session_id: str
+    session_token: str
     answers: dict[str, Any] = Field(default_factory=dict)
-    started_at: str | None = None  # 保留字段，但不再用于时间校验
     # 仅接受已知自动交卷原因；旧前端可能误把 submit Event 序列化成
     # {"isTrusted": true}，这类非字符串输入按“非自动交卷”处理为 None。
     auto_submit_reason: Literal["third_blur", "blur_timeout_30s"] | None = None
@@ -175,13 +162,30 @@ class SubmitRequest(BaseModel):
             return None
         if isinstance(value, str):
             return value
-        # 兼容旧前端把 DOM Event 误传为对象的情况
         return None
 
 
 class ExamStartRequest(BaseModel):
-    employee_id: str
     paper_id: str
+    run_token: str
+    name: str
+    employee_id: str
+    department: str | None = None
+
+
+class DraftRequest(BaseModel):
+    session_token: str
+    revision: int
+    answers: dict[str, Any] = Field(default_factory=dict)
+
+
+class BatchSlugsRequest(BaseModel):
+    slugs: list[str] = Field(min_length=1)
+
+
+class ResetRoundsRequest(BaseModel):
+    """slugs 为空或省略时重置全部可重置专业。"""
+    slugs: list[str] = Field(default_factory=list)
 
 
 class CreatePaperRequest(BaseModel):
@@ -229,21 +233,25 @@ def _get_grading_executor() -> ThreadPoolExecutor:
     return _grading_executor
 
 
-def schedule_grading(submission_id: int, answers: dict[str, Any], paper_id: str) -> None:
-    """后台线程执行评分，保持提交接口快速返回。
-
-    使用全局有界线程池（默认 4 workers）+ 复用单个事件循环模式，
-    避免每次提交新建线程/事件循环导致资源耗尽。
-    队满时提交请求排队等待，不会丢失。
-    """
-    def _background_grade(sub_id: int, submitted_answers: dict[str, Any], pid: str) -> None:
-        # 复用调用线程的事件循环：grader.grade_submission 是 async，
-        # 但在线程池 worker 中无 running loop，新建一个并立即关闭。
-        # 相比旧实现，线程数受 max_workers 约束，避免无界增长。
+def schedule_grading(
+    submission_id: int,
+    answers: dict[str, Any],
+    paper_id: str,
+    run_id: str | None = None,
+) -> None:
+    """后台线程执行评分，保持提交接口快速返回。"""
+    def _background_grade(
+        sub_id: int,
+        submitted_answers: dict[str, Any],
+        pid: str,
+        rid: str | None,
+    ) -> None:
         import asyncio
         loop = asyncio.new_event_loop()
         try:
-            result = loop.run_until_complete(grader.grade_submission(submitted_answers, paper_id=pid))
+            result = loop.run_until_complete(
+                grader.grade_submission(submitted_answers, paper_id=pid, run_id=rid)
+            )
             database.update_submission_grading_result(
                 submission_id=sub_id,
                 grading_detail=result.grading_detail,
@@ -255,9 +263,12 @@ def schedule_grading(submission_id: int, answers: dict[str, Any], paper_id: str)
                 },
                 review_status=result.review_status,
             )
-            logger.info("后台评分完成: submission_id=%d paper=%s status=%s", sub_id, pid, result.review_status)
+            logger.info(
+                "后台评分完成: submission_id=%d paper=%s run=%s status=%s",
+                sub_id, pid, rid, result.review_status,
+            )
         except Exception:
-            logger.exception("后台评分失败: submission_id=%d paper=%s", sub_id, pid)
+            logger.exception("后台评分失败: submission_id=%d paper=%s run=%s", sub_id, pid, rid)
             try:
                 database.update_submission_grading_result(
                     submission_id=sub_id,
@@ -272,16 +283,19 @@ def schedule_grading(submission_id: int, answers: dict[str, Any], paper_id: str)
             loop.close()
 
     try:
-        _get_grading_executor().submit(_background_grade, submission_id, answers, paper_id)
+        _get_grading_executor().submit(_background_grade, submission_id, answers, paper_id, run_id)
     except RuntimeError:
-        # executor 已关闭（如进程退出），降级同步评分避免丢任务
         logger.warning("评分线程池不可用，降级同步评分: submission_id=%d", submission_id)
-        _background_grade(submission_id, answers, paper_id)
+        _background_grade(submission_id, answers, paper_id, run_id)
 
 
 def _shutdown_runtime() -> None:
-    """等待后台评分结束后关闭远端评分连接。"""
+    """停止收卷循环，等待后台评分结束后关闭远端评分连接。"""
     global _grading_executor
+    try:
+        exam_run_service.stop_finalize_loop()
+    except Exception:
+        logger.exception("停止收卷循环失败")
     executor = _grading_executor
     _grading_executor = None
     try:
@@ -291,6 +305,14 @@ def _shutdown_runtime() -> None:
         grader.close_subjective_service()
 
 
+def _startup_runtime() -> None:
+    """启动收卷循环并恢复未完成任务。"""
+    exam_run_service.set_grading_scheduler(schedule_grading)
+    exam_run_service.resume_on_startup()
+    exam_run_service.start_finalize_loop()
+
+
+app.router.add_event_handler("startup", _startup_runtime)
 app.router.add_event_handler("shutdown", _shutdown_runtime)
 
 
@@ -330,17 +352,25 @@ async def no_cache_exam_assets(request: Request, call_next):
 
 @app.middleware("http")
 async def rate_limit_middleware(request: Request, call_next):
-    # 管理端单独配额，避免导出等大请求被考生流量挤占
+    # 管理端单独配额；草稿/状态按会话限流，避免与 IP 共用
     path = request.url.path
     is_admin = path.startswith("/api/admin") or path.startswith("/admin")
     ip = request.client.host if request.client else "unknown"
-    key = f"admin:{ip}" if is_admin else ip
+    if "/api/exam/sessions/" in path and ("/draft" in path or path.rstrip("/").endswith("/status")):
+        parts = path.strip("/").split("/")
+        sid = parts[3] if len(parts) >= 4 else "unknown"
+        key = f"session:{sid}"
+        max_req = 60
+    elif is_admin:
+        key = f"admin:{ip}"
+        max_req = 120
+    else:
+        key = ip
+        max_req = 60
     try:
-        # 管理端 120/min，考生端 60/min
-        _check_rate_limit(key, max_requests=120 if is_admin else 60)
+        _check_rate_limit(key, max_requests=max_req)
     except HTTPException:
         return JSONResponse(status_code=429, content={"detail": "请求过于频繁，请稍后再试"})
-    # 不再吞掉其他异常：仅捕获限流 HTTPException，其余异常向上抛由 FastAPI 处理
     return await call_next(request)
 
 
@@ -348,123 +378,72 @@ async def rate_limit_middleware(request: Request, call_next):
 # 考试端
 # ---------------------------------------------------------------------------
 
+def _service_call(fn, *args, **kwargs):
+    try:
+        return fn(*args, **kwargs)
+    except exam_run_service.ServiceError as e:
+        raise e.as_http() from e
+
+
 @app.get("/api/exam")
-def get_exam(paper: str | None = None) -> dict[str, Any]:
-    """获取指定专业的脱敏试卷。必须提供 paper 参数。"""
+def get_exam(paper: str | None = None, run: str | None = None) -> dict[str, Any]:
+    """获取指定轮次的脱敏试卷。需要 paper + run token。"""
     _assert_global_time_window()
     if not paper or not str(paper).strip():
         raise _error(400, "PAPER_REQUIRED", "请使用管理员发放的专业考试链接（缺少 paper 参数）")
-    paper_id = question_loader.validate_slug(paper)
-    meta = question_loader.assert_paper_open(paper_id)
-    cfg = get_config().exam
-    data = question_loader.public_exam_payload(paper_id)
-    if not data.get("questions"):
-        raise _error(400, "EMPTY_QUESTION_BANK", "该专业试卷暂无题目")
-    server_time = datetime.now(timezone.utc).isoformat()
-    return {
-        "paper_id": paper_id,
-        "paper_name": data.get("paper_name") or meta.get("name"),
-        "exam_info": data["exam_info"],
-        "questions": data["questions"],
-        "server_time": server_time,
-        "duration_minutes": cfg.duration_minutes,
-        "auto_submit": cfg.auto_submit,
-        "config": {
-            "duration_minutes": cfg.duration_minutes,
-            "auto_submit": cfg.auto_submit,
-        },
-    }
+    if not run or not str(run).strip():
+        raise _error(400, "RUN_REQUIRED", "请使用管理员发放的考试链接（缺少 run 参数）")
+    return _service_call(exam_run_service.get_public_exam, str(paper).strip(), str(run).strip())
 
 
 @app.post("/api/exam/start")
 def exam_start(req: ExamStartRequest, request: Request) -> dict[str, Any]:
-    """考生点击「开始答题」时调用，服务器记录开始时间并返回。"""
+    """开始或恢复考试会话。"""
     _assert_global_time_window()
-    employee_id = req.employee_id.strip()
-    if not employee_id:
-        raise _error(400, "INVALID_EMPLOYEE_ID", "请提供工号")
-    paper_id = question_loader.validate_slug(req.paper_id)
-    question_loader.assert_paper_open(paper_id)
-    now = datetime.now(timezone.utc)
-    database.upsert_exam_session(
-        employee_id=employee_id, paper_id=paper_id, started_at=now.isoformat()
+    return _service_call(
+        exam_run_service.start_or_resume_session,
+        paper_id=req.paper_id,
+        run_token=req.run_token,
+        name=req.name,
+        employee_id=req.employee_id,
+        department=req.department,
+        client_ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
     )
-    return {
-        "started_at": now.isoformat(),
-        "server_time": now.isoformat(),
-        "paper_id": paper_id,
-    }
+
+
+@app.put("/api/exam/sessions/{session_id}/draft")
+def save_draft(session_id: str, req: DraftRequest) -> dict[str, Any]:
+    _assert_global_time_window()
+    return _service_call(
+        exam_run_service.save_draft,
+        session_id,
+        session_token=req.session_token,
+        revision=req.revision,
+        answers=req.answers,
+    )
+
+
+@app.get("/api/exam/sessions/{session_id}/status")
+def exam_session_status(session_id: str, session_token: str) -> dict[str, Any]:
+    _assert_global_time_window()
+    return _service_call(
+        exam_run_service.get_session_status,
+        session_id,
+        session_token,
+    )
 
 
 @app.post("/api/submit")
 def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
     _assert_global_time_window()
-    cfg = get_config().exam
-
-    employee_id = req.employee_id.strip()
-    paper_id = question_loader.validate_slug(req.paper_id)
-    meta = question_loader.assert_paper_open(paper_id)
-    paper_name = meta.get("name")
-
-    started_at_iso = database.pop_exam_session(employee_id, paper_id)
-    if started_at_iso is None:
-        raise _error(403, "EXAM_NOT_STARTED", "请先开始考试")
-    server_start = parse_iso(started_at_iso)
-
-    now = datetime.now(timezone.utc)
-    elapsed = (now - server_start).total_seconds()
-    if elapsed < -60:
-        raise _error(403, "EXAM_TIMEOUT", "考试时间异常，提交被拒绝")
-    if elapsed > cfg.duration_minutes * 60 + cfg.grace_period_seconds:
-        raise _error(403, "EXAM_TIMEOUT", "考试已超时，提交被拒绝")
-
-    full = question_loader.load_questions(paper_id)
-    qmap = {str(q["id"]): q for q in full.get("questions", [])}
-    answers = req.answers or {}
-    unknown_qids = sorted(str(qid) for qid in answers.keys() if str(qid) not in qmap)
-    if unknown_qids:
-        raise _error(
-            422,
-            "UNKNOWN_QUESTION_ID",
-            f"提交包含未知题目 ID: {', '.join(unknown_qids)}",
-        )
-    for qid, ans in answers.items():
-        q = qmap[str(qid)]
-        try:
-            question_loader.validate_answer_shape(q, ans)
-        except ValueError as e:
-            message = str(e)
-            code = "INVALID_CODE_LANGUAGE" if message.startswith("INVALID_CODE_LANGUAGE") else "INVALID_ANSWER_SHAPE"
-            raise _error(422, code, message) from e
-
-    try:
-        submission_id = database.insert_submission_pending(
-            name=req.name.strip(),
-            employee_id=employee_id,
-            paper_id=paper_id,
-            paper_name=paper_name,
-            department=req.department.strip() if req.department else None,
-            answers=answers,
-            started_at=req.started_at,
-            client_ip=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-            auto_submit_reason=req.auto_submit_reason,
-        )
-    except Exception as e:
-        if "UNIQUE" in str(e).upper():
-            raise _error(409, "DUPLICATE_SUBMISSION", "该员工已在本专业提交，不能重复提交")
-        logger.exception("提交保存失败")
-        raise _error(500, "SUBMIT_FAILED", "提交失败，请联系管理员")
-
-    schedule_grading(submission_id, answers, paper_id)
-
-    return {
-        "success": True,
-        "submission_id": submission_id,
-        "status": "grading",
-        "paper_id": paper_id,
-        "message": "提交成功，系统正在评分中",
-    }
+    return _service_call(
+        exam_run_service.submit_manual,
+        session_id=req.session_id,
+        session_token=req.session_token,
+        answers=req.answers or {},
+        auto_submit_reason=req.auto_submit_reason,
+    )
 
 
 @app.get("/api/submission/{submission_id}/status")
@@ -540,24 +519,53 @@ def _exam_base_url(request: Request) -> str:
 
 @app.get("/api/admin/exam-link", dependencies=[Depends(require_admin)])
 def exam_link(request: Request, paper: str | None = None) -> dict[str, Any]:
-    """返回考试链接和二维码；建议传 paper 生成专业专属链接。"""
+    """返回当前活动轮次或最近轮次链接。legacy 无 token 时仅返回状态。"""
+    if not paper or not str(paper).strip():
+        raise _error(400, "PAPER_REQUIRED", "请指定专业 paper 参数")
+    slug = question_loader.validate_slug(paper)
+    meta = question_loader.get_paper_meta(slug)
+    if not meta:
+        raise _error(404, "PAPER_NOT_FOUND", f"试卷不存在: {slug}")
+    active = database.get_active_run_for_paper(slug)
+    latest = active or database.get_latest_run_for_paper(slug)
     base = _exam_base_url(request)
-    if paper:
-        paper_id = question_loader.validate_slug(paper)
-        meta = question_loader.get_paper_meta(paper_id)
-        if not meta:
-            raise _error(404, "PAPER_NOT_FOUND", f"试卷不存在: {paper_id}")
-        url = f"{base}/exam?paper={paper_id}"
+    status = exam_run_service.derived_status_for_paper(slug)
+    if not latest or latest.get("is_legacy") or not latest.get("public_token_hash"):
         return {
-            "url": url,
-            "qr_base64": generate_qr_base64(url),
-            "paper_id": paper_id,
+            "paper_id": slug,
             "paper_name": meta.get("name"),
-            "status": meta.get("status"),
+            "status": status,
+            "url": None,
+            "qr_base64": "",
+            "round_no": latest.get("round_no") if latest else None,
+            "run_id": latest.get("id") if latest else None,
+            "message": "当前无可用考试链接，请先发布新轮次",
         }
-    # 兼容：无 paper 时返回提示性入口（不可直接作答）
-    url = f"{base}/exam"
-    return {"url": url, "qr_base64": generate_qr_base64(url), "message": "请为具体专业生成链接"}
+    token = exam_run_service.get_run_public_token(str(latest["id"]))
+    if not token:
+        return {
+            "paper_id": slug,
+            "paper_name": meta.get("name"),
+            "status": status,
+            "url": None,
+            "qr_base64": "",
+            "round_no": latest.get("round_no"),
+            "run_id": latest.get("id"),
+            "message": "本轮链接密钥不可用，请发布新轮次",
+            "base_url": base,
+        }
+    url = exam_run_service.build_exam_url(base, slug, token)
+    return {
+        "paper_id": slug,
+        "paper_name": meta.get("name"),
+        "status": status,
+        "url": url,
+        "qr_base64": generate_qr_base64(url),
+        "round_no": latest.get("round_no"),
+        "run_id": latest.get("id"),
+        "public_token": token,
+        "base_url": base,
+    }
 
 
 @app.get("/api/admin/stats", dependencies=[Depends(require_admin)])
@@ -570,20 +578,27 @@ def admin_submissions(
     keyword: str | None = None,
     review_status: str | None = None,
     paper_id: str | None = None,
-    sort_by: str | None = None,
-    order: str | None = None,
-    limit: int = 100,
+    run_id: str | None = None,
+    sort_by: str = "submitted_at",
+    order: str = "desc",
+    limit: int = 50,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    """支持分页的成绩列表。"""
-    limit = max(1, min(limit, 500))
-    offset = max(0, offset)
-    return database.list_submissions(
-        keyword=keyword, review_status=review_status, paper_id=paper_id,
-        sort_by=sort_by or "submitted_at",
-        order=order or "desc",
-        limit=limit, offset=offset,
+    rows = database.list_submissions(
+        keyword=keyword,
+        review_status=review_status,
+        paper_id=paper_id,
+        run_id=run_id,
+        sort_by=sort_by,
+        order=order,
+        limit=limit,
+        offset=offset,
     )
+    # 列表不返回大字段
+    for r in rows:
+        r.pop("answers_json", None)
+        r.pop("grading_detail_json", None)
+    return rows
 
 
 @app.get("/api/admin/submissions/{submission_id}", dependencies=[Depends(require_admin)])
@@ -654,6 +669,21 @@ def admin_list_papers() -> list[dict[str, Any]]:
         item = dict(p)
         slug = str(p.get("slug") or "")
         item["submission_count"] = database.submission_count(slug) if slug else 0
+        if slug:
+            try:
+                item["status"] = exam_run_service.derived_status_for_paper(slug)
+            except Exception:
+                pass
+            active = database.get_active_run_for_paper(slug)
+            if active:
+                item["active_sessions"] = database.count_active_sessions_for_run(str(active["id"]))
+                item["round_no"] = active.get("round_no")
+                item["run_id"] = active.get("id")
+            else:
+                latest = database.get_latest_run_for_paper(slug)
+                item["active_sessions"] = 0
+                item["round_no"] = latest.get("round_no") if latest else None
+                item["run_id"] = latest.get("id") if latest else None
         out.append(item)
     return out
 
@@ -713,16 +743,69 @@ def admin_reorder_questions(slug: str, req: ReorderQuestionsRequest) -> dict[str
     return paper_store.reorder_questions(slug, req.ids)
 
 
+# 批量路由必须注册在 /papers/{slug}/open|close 之前，
+# 否则 FastAPI 会把 path 段 "batch" 当成 slug，返回 试卷不存在: batch。
+@app.post("/api/admin/papers/batch/open", dependencies=[Depends(require_admin)])
+def admin_batch_open(req: BatchSlugsRequest, request: Request) -> dict[str, Any]:
+    result = exam_run_service.batch_open(req.slugs)
+    base = _exam_base_url(request)
+    for p in result.get("papers") or []:
+        token = p.get("public_token")
+        if token:
+            url = exam_run_service.build_exam_url(base, p["slug"], token)
+            p["url"] = url
+            p["qr_base64"] = generate_qr_base64(url)
+    return result
+
+
+@app.post("/api/admin/papers/batch/close", dependencies=[Depends(require_admin)])
+def admin_batch_close(req: BatchSlugsRequest) -> dict[str, Any]:
+    return exam_run_service.batch_close(req.slugs)
+
+
 @app.post("/api/admin/papers/{slug}/open", dependencies=[Depends(require_admin)])
-def admin_open_paper(slug: str) -> dict[str, Any]:
-    meta = paper_store.set_status(slug, question_loader.PAPER_STATUS_OPEN)
-    return {"success": True, "paper": meta}
+def admin_open_paper(slug: str, request: Request) -> dict[str, Any]:
+    run = _service_call(exam_run_service.open_run, slug)
+    base = _exam_base_url(request)
+    url = exam_run_service.build_exam_url(base, slug, run["public_token"])
+    return {
+        "success": True,
+        "status": run["status"],
+        "run_id": run["id"],
+        "round_no": run["round_no"],
+        "duration_minutes": run["duration_minutes"],
+        "public_token": run["public_token"],
+        "url": url,
+        "qr_base64": generate_qr_base64(url),
+        "paper": {
+            "slug": slug,
+            "name": run.get("paper_name"),
+            "status": "open",
+        },
+    }
 
 
 @app.post("/api/admin/papers/{slug}/close", dependencies=[Depends(require_admin)])
 def admin_close_paper(slug: str) -> dict[str, Any]:
-    meta = paper_store.set_status(slug, question_loader.PAPER_STATUS_CLOSED)
-    return {"success": True, "paper": meta}
+    result = _service_call(exam_run_service.begin_close, slug)
+    return result
+
+
+@app.get("/api/admin/exams", dependencies=[Depends(require_admin)])
+def admin_list_exams() -> list[dict[str, Any]]:
+    # 管理端轮询时顺带收卷到期轮次，避免仅依赖后台线程时 UI 长时间停在「收卷中」
+    try:
+        exam_run_service.scan_and_finalize_due_runs()
+    except Exception:
+        logger.exception("管理端列表触发收卷扫描失败")
+    return exam_run_service.list_exam_summaries()
+
+
+@app.post("/api/admin/exams/reset-rounds", dependencies=[Depends(require_admin)])
+def admin_reset_rounds(req: ResetRoundsRequest | None = None) -> dict[str, Any]:
+    """清除考试轮次（已关闭/未发布专业）。slugs 为空则重置全部可重置专业。"""
+    slugs = list(req.slugs) if req and req.slugs else None
+    return exam_run_service.reset_rounds(slugs)
 
 
 @app.get("/api/admin/papers/{slug}/exam-link", dependencies=[Depends(require_admin)])

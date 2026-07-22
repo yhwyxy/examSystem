@@ -49,7 +49,8 @@ async function authFetch(url, options = {}) {
 }
 
 function render() {
-  $('summary').textContent = `${submission.name || ''} / ${submission.employee_id || ''} / 总分 ${submission.total_score ?? ''} / ${submission.review_status || ''}`;
+  const roundLabel = submission.run_is_legacy ? '历史数据' : (submission.round_no != null ? `第${submission.round_no}轮` : '');
+  $('summary').textContent = `${submission.name || ''} / ${submission.employee_id || ''} / ${roundLabel ? roundLabel + ' / ' : ''}总分 ${submission.total_score ?? ''} / ${submission.review_status || ''}`;
 
   if (submission.review_status === 'grading') {
     $('detail').innerHTML = '<div class="panel result-panel"><h2>评分进行中</h2><p class="muted form-note">该试卷正在后台评分，请稍后刷新页面查看结果。</p><button class="btn" onclick="location.reload()">刷新页面</button></div>';

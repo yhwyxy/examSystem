@@ -752,6 +752,44 @@ def public_exam_payload(paper_id: str) -> dict[str, Any]:
     }
 
 
+def public_exam_payload_from_paper(
+    paper: dict[str, Any],
+    paper_id: str,
+    *,
+    status: str | None = None,
+) -> dict[str, Any]:
+    meta = get_paper_meta(paper_id) or {}
+    return {
+        "paper_id": paper_id,
+        "paper_name": paper.get("name") or meta.get("name") or paper_id,
+        "status": status if status is not None else meta.get("status", PAPER_STATUS_CLOSED),
+        "exam_info": paper.get("exam_info") or {},
+        "questions": sanitize_for_student(paper.get("questions") or []),
+    }
+
+
+def load_questions_for_run(run_id: str) -> dict[str, Any]:
+    """加载轮次快照；legacy/缺失快照时回退当前可编辑试卷。"""
+    from . import database
+
+    run = database.get_run_by_id(run_id)
+    if not run:
+        _error(f"考试轮次不存在: {run_id}", "RUN_NOT_FOUND", 404)
+    paper_id = str(run.get("paper_id") or "")
+    snap = run.get("snapshot_path")
+    if snap and not run.get("is_legacy"):
+        path = Path(str(snap))
+        if not path.is_absolute():
+            path = PROJECT_ROOT / path
+        if path.exists():
+            with path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    # fallback
+    return load_questions(paper_id)
+
+
 def assert_paper_open(paper_id: str) -> dict[str, Any]:
     meta = get_paper_meta(paper_id)
     if not meta:

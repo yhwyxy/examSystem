@@ -1,23 +1,34 @@
 const AUTO_SUBMIT_AFTER_BLURS = 3;
 const AWAY_TIMEOUT_MS = 30_000;
+const DRAFT_LOOP_MS = 2000;
 
-// 预览模式检测
 const urlParams = new URLSearchParams(window.location.search);
 const isPreview = urlParams.get('preview') === 'true';
 
 const state = {
   exam: null,
   paperId: null,
+  runToken: null,
   startedAt: null,
+  deadlineAt: null,
   durationSeconds: 0,
   timerId: null,
+  draftLoopId: null,
   submitting: false,
   blurCount: 0,
   isPageAway: false,
   awayTimeoutId: null,
   autoSubmitStarted: false,
   antiSwitchSetup: false,
-  showAnswers: true, // 预览模式下默认显示答案
+  showAnswers: true,
+  sessionId: null,
+  sessionToken: null,
+  draftRevision: 0,
+  dirty: false,
+  saving: false,
+  locked: false,
+  runStatus: null,
+  finalizeAt: null,
 };
 
 function $(id) { return document.getElementById(id); }
@@ -35,6 +46,43 @@ function getPaperIdFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const p = (params.get('paper') || '').trim();
   return p || null;
+}
+
+function getRunTokenFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const r = (params.get('run') || '').trim();
+  return r || null;
+}
+
+function sessionStorageKey() {
+  return `examSession:${state.paperId}:${state.runToken}`;
+}
+
+function saveSessionLocal() {
+  if (!state.sessionId || !state.sessionToken) return;
+  try {
+    sessionStorage.setItem(sessionStorageKey(), JSON.stringify({
+      sessionId: state.sessionId,
+      sessionToken: state.sessionToken,
+      employeeId: ($('employee_id')?.value || '').trim(),
+      name: ($('name')?.value || '').trim(),
+      department: ($('department')?.value || '').trim(),
+    }));
+  } catch (_) {}
+}
+
+function loadSessionLocal() {
+  try {
+    const raw = sessionStorage.getItem(sessionStorageKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function setDraftStatus(text) {
+  const el = $('draftStatus');
+  if (el) el.textContent = text;
 }
 
 function findQuestionControls(qid) {
@@ -58,24 +106,86 @@ function showFatal(message) {
   if (form) form.style.display = 'none';
 }
 
+function markDirty() {
+  if (state.locked || state.submitting) return;
+  state.dirty = true;
+  setDraftStatus('未保存');
+}
+
+function applyAnswersToForm(answers) {
+  if (!answers || !state.exam?.questions) return;
+  for (const q of state.exam.questions) {
+    const ans = answers[q.id];
+    if (ans == null) continue;
+    if (q.type === 'multiple_choice' && Array.isArray(ans)) {
+      findQuestionControls(q.id).forEach(c => { c.checked = ans.map(String).includes(String(c.value)); });
+    } else if (q.type === 'true_false') {
+      findQuestionControls(q.id).forEach(c => {
+        c.checked = String(c.value) === String(!!ans);
+      });
+    } else if (q.type === 'single_choice') {
+      findQuestionControls(q.id).forEach(c => { c.checked = String(c.value) === String(ans); });
+    } else {
+      const subs = Array.isArray(q.subquestions) ? q.subquestions : [];
+      if (subs.length && ans && typeof ans === 'object') {
+        for (const s of subs) {
+          const sub = ans[s.id];
+          const text = sub && typeof sub === 'object' ? (sub.answer ?? '') : (sub ?? '');
+          const ta = findSubquestionControl('textarea', q.id, s.id);
+          if (ta) ta.value = text;
+          if (s.scoring_mode === 'code' && sub && typeof sub === 'object' && sub.language) {
+            const sel = findSubquestionControl('select', q.id, s.id);
+            if (sel) sel.value = sub.language;
+          }
+        }
+      } else {
+        const el = findQuestionControls(q.id).find((c) => c.tagName === 'TEXTAREA' || c.tagName === 'INPUT')
+          || findQuestionControls(q.id)[0];
+        if (el) {
+          if (ans && typeof ans === 'object' && 'answer' in ans) {
+            el.value = ans.answer ?? '';
+            const langSelect = document.querySelector(
+              `select.code-language-select[data-qid="${String(q.id)}"]:not([data-sid])`
+            );
+            if (langSelect && ans.language) langSelect.value = ans.language;
+          } else {
+            el.value = ans ?? '';
+          }
+        }
+      }
+    }
+  }
+}
+
+function lockExamInputs(message) {
+  state.locked = true;
+  document.querySelectorAll('#examForm input, #examForm textarea, #examForm select, #submitBtn').forEach(el => {
+    el.disabled = true;
+  });
+  if (message) toast(message);
+}
+
 async function loadExam() {
   state.paperId = getPaperIdFromUrl();
+  state.runToken = getRunTokenFromUrl();
   if (!state.paperId) {
-    showFatal('请使用管理员发放的专业考试链接（地址中需包含 paper 参数，例如 /exam?paper=mech）。');
+    showFatal('请使用管理员发放的专业考试链接（地址中需包含 paper 参数）。');
     throw new Error('缺少 paper 参数');
   }
 
   let res;
   if (isPreview) {
-    // 预览模式：使用管理员预览API
     res = await fetch(`/api/admin/papers/${encodeURIComponent(state.paperId)}/preview`, {
       headers: {
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
+        'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('admin_token') || ''}`
       }
     });
   } else {
-    // 正常模式：使用考试API
-    res = await fetch(`/api/exam?paper=${encodeURIComponent(state.paperId)}`);
+    if (!state.runToken) {
+      showFatal('请使用管理员发放的考试链接（地址中需包含 run 参数，例如 /exam?paper=mech&run=...）。');
+      throw new Error('缺少 run 参数');
+    }
+    res = await fetch(`/api/exam?paper=${encodeURIComponent(state.paperId)}&run=${encodeURIComponent(state.runToken)}`);
   }
 
   const errBody = await res.json().catch(() => ({}));
@@ -87,14 +197,21 @@ async function loadExam() {
 
   state.exam = errBody;
   state.paperId = state.exam.paper_id || state.paperId;
+  state.runStatus = state.exam.run_status || null;
+  state.finalizeAt = state.exam.finalize_at || null;
   $('title').textContent = state.exam.exam_info?.title || state.exam.paper_name || '企业考试';
   const descParts = [];
   if (state.exam.paper_name) descParts.push(`专业：${state.exam.paper_name}`);
+  if (state.exam.round_no) descParts.push(`第 ${state.exam.round_no} 轮`);
   if (state.exam.exam_info?.description) descParts.push(state.exam.exam_info.description);
   $('desc').textContent = descParts.join(' · ');
   state.durationSeconds = (state.exam.config?.duration_minutes || state.exam.duration_minutes || 60) * 60;
 
-  // 预览模式：直接显示试卷，跳过登录
+  if (!isPreview && (state.exam.closed || state.exam.run_status === 'closed')) {
+    showFatal(state.exam.message || '本轮考试已结束');
+    return;
+  }
+
   if (isPreview) {
     setupPreviewMode();
   }
@@ -407,8 +524,10 @@ function collectAnswers() {
   return answers;
 }
 
-function showSuccess() {
+
+function showSuccess(submissionId) {
   if (state.timerId) clearInterval(state.timerId);
+  if (state.draftLoopId) clearInterval(state.draftLoopId);
   $('login').style.display = 'none';
   $('examForm').style.display = 'none';
   $('successPanel').style.display = 'block';
@@ -418,16 +537,171 @@ function showSuccess() {
   h2.textContent = '提交成功';
   const p = document.createElement('p');
   p.className = 'muted';
-  p.textContent = '系统已收到答卷，成绩由管理员复核后公布，请勿重复提交。';
+  p.textContent = submissionId
+    ? `系统已收到答卷（编号 ${submissionId}），成绩由管理员复核后公布。`
+    : '系统已收到答卷，成绩由管理员复核后公布，请勿重复提交。';
   rc.append(h2, p);
 }
 
+function startTimerFromDeadline() {
+  const tick = () => {
+    if (!state.deadlineAt) return;
+    const leftMs = Math.max(0, state.deadlineAt - Date.now());
+    const left = Math.floor(leftMs / 1000);
+    const m = Math.floor(left / 60);
+    const s = left % 60;
+    $('timer').textContent = `${pad(m)}:${pad(s)}`;
+    if (left <= 0) {
+      clearInterval(state.timerId);
+      const autoSubmit = state.exam.config?.auto_submit ?? state.exam.auto_submit ?? true;
+      if (autoSubmit && !state.locked) submitExam(null);
+      else if ($('submitBtn')) $('submitBtn').disabled = true;
+    }
+  };
+  tick();
+  state.timerId = setInterval(tick, 1000);
+}
+
+async function saveDraftNow({ beacon = false } = {}) {
+  if (!state.sessionId || !state.sessionToken || state.locked) return false;
+  if (!state.dirty && !beacon) return true;
+  const answers = collectAnswers();
+  const revision = state.draftRevision + 1;
+  const payload = {
+    session_token: state.sessionToken,
+    revision,
+    answers,
+  };
+  state.saving = true;
+  setDraftStatus('保存中');
+  try {
+    if (beacon && navigator.sendBeacon) {
+      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+      const ok = navigator.sendBeacon(`/api/exam/sessions/${encodeURIComponent(state.sessionId)}/draft`, blob);
+      if (ok) {
+        state.draftRevision = revision;
+        state.dirty = false;
+        setDraftStatus(`已保存 ${new Date().toLocaleTimeString()}`);
+      } else {
+        setDraftStatus('未保存');
+      }
+      return ok;
+    }
+    const res = await fetch(`/api/exam/sessions/${encodeURIComponent(state.sessionId)}/draft`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      if (data.detail?.code === 'STALE_DRAFT_REVISION') {
+        state.dirty = false;
+        setDraftStatus('已保存（服务器版本）');
+        return true;
+      }
+      if (data.detail?.code === 'RUN_CLOSING' || data.detail?.code === 'RUN_CLOSED') {
+        await handleClosingStatus(data.detail?.code === 'RUN_CLOSED' ? 'closed' : 'closing', data.detail?.message);
+        return false;
+      }
+      throw new Error(data.detail?.message || '草稿保存失败');
+    }
+    state.draftRevision = data.draft_revision ?? revision;
+    state.dirty = false;
+    if (data.run_status) state.runStatus = data.run_status;
+    if (data.finalize_at) state.finalizeAt = data.finalize_at;
+    const t = data.draft_saved_at ? new Date(data.draft_saved_at) : new Date();
+    setDraftStatus(`已保存 ${t.toLocaleTimeString()}`);
+    if (data.run_status === 'closing' || data.run_status === 'closed') {
+      await handleClosingStatus(data.run_status);
+    }
+    return true;
+  } catch (e) {
+    setDraftStatus('未保存');
+    return false;
+  } finally {
+    state.saving = false;
+  }
+}
+
+async function pollSessionStatus() {
+  if (!state.sessionId || !state.sessionToken) return;
+  try {
+    const res = await fetch(
+      `/api/exam/sessions/${encodeURIComponent(state.sessionId)}/status?session_token=${encodeURIComponent(state.sessionToken)}`
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return;
+    state.runStatus = data.run_status;
+    state.finalizeAt = data.finalize_at;
+    if (data.session_status === 'submitted' || data.submission_id) {
+      stopDraftLoop();
+      showSuccess(data.submission_id);
+      return;
+    }
+    if (data.run_status === 'closing' || data.run_status === 'closed') {
+      await handleClosingStatus(data.run_status);
+    }
+  } catch (_) {}
+}
+
+async function handleClosingStatus(status, message) {
+  if (state.locked && status === 'closing') {
+    await pollSessionStatus();
+    return;
+  }
+  lockExamInputs(message || '考试已结束，正在自动收卷');
+  stopAntiSwitch();
+  if (state.timerId) clearInterval(state.timerId);
+  state.dirty = true;
+  await saveDraftNow();
+  setDraftStatus('考试已结束，正在自动收卷');
+  // keep polling for submission
+  if (!state.draftLoopId) {
+    state.draftLoopId = setInterval(() => {
+      pollSessionStatus().catch(() => {});
+    }, 1500);
+  }
+}
+
+function stopAntiSwitch() {
+  state.antiSwitchSetup = true; // prevent re-bind; listeners stay but handlers early-return via locked/submitting
+  state.isPageAway = false;
+  clearAwayTimer();
+}
+
+function startDraftLoop() {
+  if (state.draftLoopId) clearInterval(state.draftLoopId);
+  state.draftLoopId = setInterval(async () => {
+    if (state.locked) {
+      await pollSessionStatus();
+      return;
+    }
+    if (state.dirty) await saveDraftNow();
+    else await pollSessionStatus();
+  }, DRAFT_LOOP_MS);
+}
+
+function stopDraftLoop() {
+  if (state.draftLoopId) {
+    clearInterval(state.draftLoopId);
+    state.draftLoopId = null;
+  }
+}
+
+function bindAnswerChangeListeners() {
+  const form = $('examForm');
+  if (!form || form.dataset.boundChanges) return;
+  form.dataset.boundChanges = '1';
+  form.addEventListener('input', markDirty);
+  form.addEventListener('change', markDirty);
+}
+
 async function submitExam(autoSubmitReason = null) {
-  // 预览模式：禁用提交
   if (isPreview) {
     alert('当前为预览模式，试卷不可提交。');
     return;
   }
+  if (state.locked) return;
 
   const isAutoSubmit = typeof autoSubmitReason === 'string';
   if (isAutoSubmit) {
@@ -439,24 +713,19 @@ async function submitExam(autoSubmitReason = null) {
     autoSubmitReason.preventDefault();
   }
   if (state.submitting) return;
-
-  const name = $('name').value.trim();
-  const employeeId = $('employee_id').value.trim();
-  if (!name || !employeeId) {
-    toast('请填写姓名和工号');
+  if (!state.sessionId || !state.sessionToken) {
+    toast('请先开始考试');
     return;
   }
 
   state.submitting = true;
   $('submitBtn').disabled = true;
   try {
+    await saveDraftNow();
     const payload = {
-      name,
-      employee_id: employeeId,
-      paper_id: state.paperId,
-      department: ($('department').value || '').trim() || null,
+      session_id: state.sessionId,
+      session_token: state.sessionToken,
       answers: collectAnswers(),
-      started_at: state.startedAt ? new Date(state.startedAt).toISOString() : null,
       ...(isAutoSubmit ? { auto_submit_reason: autoSubmitReason } : {}),
     };
     const res = await fetch('/api/submit', {
@@ -468,17 +737,19 @@ async function submitExam(autoSubmitReason = null) {
     if (!res.ok) {
       const detail = data.detail;
       let message = data.message || '提交失败';
-      if (typeof detail === 'string') {
-        message = detail;
-      } else if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) {
-        message = detail.message;
-      } else if (Array.isArray(detail) && detail.length) {
-        // Pydantic 422: 展示可读字段错误，避免只显示“提交失败”
+      if (typeof detail === 'string') message = detail;
+      else if (detail && typeof detail === 'object' && !Array.isArray(detail) && detail.message) message = detail.message;
+      else if (Array.isArray(detail) && detail.length) {
         message = detail.map((item) => item.msg || JSON.stringify(item)).join('; ');
+      }
+      if (detail?.code === 'RUN_CLOSING') {
+        await handleClosingStatus('closing', message);
+        return;
       }
       throw new Error(message);
     }
-    showSuccess();
+    stopDraftLoop();
+    showSuccess(data.submission_id);
   } catch (e) {
     toast(e.message || '提交失败');
     state.submitting = false;
@@ -495,7 +766,7 @@ function clearAwayTimer() {
 }
 
 function handlePageAway() {
-  if (state.isPageAway || state.autoSubmitStarted || !state.startedAt) return;
+  if (state.locked || state.isPageAway || state.autoSubmitStarted || !state.startedAt) return;
   state.isPageAway = true;
   state.blurCount += 1;
   if (state.blurCount >= AUTO_SUBMIT_AFTER_BLURS) {
@@ -526,8 +797,21 @@ function setupAntiSwitchAutoSubmit() {
   window.addEventListener('focus', handlePageReturn);
 }
 
+function enterExamUI(answers) {
+  $('login').style.display = 'none';
+  $('examForm').style.display = 'block';
+  const container = $('questions');
+  container.textContent = '';
+  state.exam.questions.forEach((q, idx) => container.appendChild(renderQuestion(q, idx)));
+  if (answers) applyAnswersToForm(answers);
+  bindAnswerChangeListeners();
+  startTimerFromDeadline();
+  setupAntiSwitchAutoSubmit();
+  startDraftLoop();
+  setDraftStatus(state.draftRevision ? '已保存' : '未保存');
+}
+
 async function startExam() {
-  // 预览模式：跳过登录，直接显示试卷
   if (isPreview) {
     await loadExam();
     return;
@@ -543,21 +827,83 @@ async function startExam() {
     const res = await fetch('/api/exam/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id: employeeId, paper_id: state.paperId }),
+      body: JSON.stringify({
+        employee_id: employeeId,
+        paper_id: state.paperId,
+        run_token: state.runToken,
+        name,
+        department: ($('department').value || '').trim() || null,
+      }),
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.detail?.message || '开始考试失败');
 
-    state.startedAt = Date.now();
-    $('login').style.display = 'none';
-    $('examForm').style.display = 'block';
-    const container = $('questions');
-    container.textContent = '';
-    state.exam.questions.forEach((q, idx) => container.appendChild(renderQuestion(q, idx)));
-    startTimer();
-    setupAntiSwitchAutoSubmit();
+    state.sessionId = data.session_id;
+    if (data.session_token) state.sessionToken = data.session_token;
+    else {
+      const local = loadSessionLocal();
+      if (local?.sessionToken && local.sessionId === data.session_id) {
+        state.sessionToken = local.sessionToken;
+      } else {
+        throw new Error('无法恢复会话凭证，请使用同一浏览器继续考试');
+      }
+    }
+    state.draftRevision = data.draft_revision || 0;
+    state.deadlineAt = data.deadline_at ? new Date(data.deadline_at).getTime() : (Date.now() + state.durationSeconds * 1000);
+    state.startedAt = data.started_at ? new Date(data.started_at).getTime() : Date.now();
+    state.runStatus = data.run_status || state.runStatus;
+    saveSessionLocal();
+    enterExamUI(data.answers || {});
   } catch (e) {
     toast(e.message || '开始失败');
+  }
+}
+
+async function tryResumeSession() {
+  const local = loadSessionLocal();
+  if (!local?.sessionId || !local?.sessionToken) return false;
+  if (local.name) $('name').value = local.name;
+  if (local.employeeId) $('employee_id').value = local.employeeId;
+  if (local.department) $('department').value = local.department;
+  try {
+    const res = await fetch(
+      `/api/exam/sessions/${encodeURIComponent(local.sessionId)}/status?session_token=${encodeURIComponent(local.sessionToken)}`
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return false;
+    if (data.session_status === 'submitted' || data.submission_id) {
+      showSuccess(data.submission_id);
+      return true;
+    }
+    // resume via start to get draft answers + deadlines
+    const startRes = await fetch('/api/exam/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: local.employeeId,
+        paper_id: state.paperId,
+        run_token: state.runToken,
+        name: local.name || '考生',
+        department: local.department || null,
+      }),
+    });
+    const startData = await startRes.json().catch(() => ({}));
+    if (!startRes.ok) return false;
+    state.sessionId = startData.session_id || local.sessionId;
+    state.sessionToken = local.sessionToken;
+    state.draftRevision = startData.draft_revision || 0;
+    state.deadlineAt = startData.deadline_at ? new Date(startData.deadline_at).getTime() : null;
+    state.startedAt = startData.started_at ? new Date(startData.started_at).getTime() : Date.now();
+    state.runStatus = startData.run_status || data.run_status;
+    if (data.run_status === 'closing' || data.run_status === 'closed') {
+      enterExamUI(startData.answers || {});
+      await handleClosingStatus(data.run_status);
+      return true;
+    }
+    enterExamUI(startData.answers || {});
+    return true;
+  } catch (_) {
+    return false;
   }
 }
 
@@ -567,12 +913,20 @@ $('examForm').addEventListener('submit', (event) => {
   submitExam(null);
 });
 
-// 预览模式：自动开始考试
+window.addEventListener('pagehide', () => {
+  if (state.dirty && state.sessionId) saveDraftNow({ beacon: true });
+});
+window.addEventListener('beforeunload', () => {
+  if (state.dirty && state.sessionId) saveDraftNow({ beacon: true });
+});
+
 if (isPreview) {
   startExam().catch(err => {
     console.error('预览模式启动失败:', err);
     showFatal('预览模式启动失败: ' + err.message);
   });
 } else {
-  loadExam().catch(() => {});
+  loadExam()
+    .then(() => tryResumeSession())
+    .catch(() => {});
 }

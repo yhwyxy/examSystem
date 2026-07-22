@@ -30,7 +30,7 @@
       <nav class="nav-list" aria-label="后台导航">
         <button class="nav-item active" type="button" data-view="overview">总览</button>
         <button class="nav-item" type="button" data-view="papers">试卷 / 专业</button>
-        <button class="nav-item" type="button" data-view="publish">发布考试</button>
+        <button class="nav-item" type="button" data-view="publish">考试管理</button>
         <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
         <a class="nav-item" href="/">考试端</a>
       </nav>
@@ -60,7 +60,7 @@
               </div>
             </div>
             <div class="toolbar">
-              <button class="btn secondary" type="button" data-view-jump="publish">去发布考试</button>
+              <button class="btn secondary" type="button" data-view-jump="publish">去考试管理</button>
               <button class="btn secondary" type="button" data-view-jump="submissions">查看成绩列表</button>
             </div>
           </section>
@@ -75,6 +75,8 @@
               <p class="muted">每个专业一份当前试卷；非考试阶段可自由改题。</p>
             </div>
             <div class="toolbar">
+              <button class="btn secondary" id="batchOpenBtn" type="button" disabled>批量发布</button>
+              <button class="btn secondary" id="batchCloseBtn" type="button" disabled>批量结束</button>
               <button class="btn" id="createPaperBtn" type="button">新建专业</button>
             </div>
           </header>
@@ -90,6 +92,7 @@
               <table>
                 <thead>
                   <tr>
+                    <th style="width:40px"><input type="checkbox" id="paperCheckAll" aria-label="全选专业"></th>
                     <th>名称</th>
                     <th>编码</th>
                     <th>状态</th>
@@ -236,40 +239,26 @@
         <section class="view-panel" id="view-publish" data-view="publish">
           <header class="topbar">
             <div>
-              <p class="eyebrow">PUBLISH</p>
-              <h1>发布考试</h1>
-              <p class="muted">生成考试链接和二维码，发给考生即可开考。</p>
+              <p class="eyebrow">EXAMS</p>
+              <h1>考试管理</h1>
+              <p class="muted">查看各专业当前轮次、链接与答题人数；结束考试将在 5 秒后按服务器草稿自动收卷。</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn secondary" id="refreshExamsBtn" type="button">刷新</button>
+              <button class="btn danger" id="resetRoundsBtn" type="button" title="清除已关闭专业的轮次，下次发布从第 1 轮开始">重置轮次</button>
             </div>
           </header>
           <section class="panel" id="publish">
-            <div class="section-head">
-              <div>
-                <p class="eyebrow">LINK</p>
-                <h2>按专业发布</h2>
-              </div>
-            </div>
-            <div class="form-grid">
-              <label>选择专业
-                <select id="publishPaperSelect"></select>
-              </label>
-              <label>状态
-                <input id="publishStatus" type="text" disabled>
-              </label>
-            </div>
-            <div class="toolbar" style="margin:0.8rem 0">
-              <button class="btn" id="openExamBtn" type="button">开考</button>
-              <button class="btn secondary" id="closeExamBtn" type="button">结束考试</button>
-              <button class="btn secondary" id="copyLinkBtn" type="button">复制链接</button>
-            </div>
-            <div class="publish-layout">
-              <div class="link-box">
-                <p class="muted">一专业一链接：仅开放中的专业可被考生打开。</p>
-                <a id="examLink" class="exam-link" href="#" target="_blank" rel="noreferrer"></a>
-              </div>
-              <div>
-                <img id="examQR" alt="考试二维码">
-              </div>
-            </div>
+            <div id="examCards" class="exam-cards"></div>
+            <p id="examCardsState" class="muted"></p>
+            <!-- 保留隐藏元素以兼容旧脚本 -->
+            <select id="publishPaperSelect" class="is-hidden" aria-hidden="true"></select>
+            <input id="publishStatus" type="hidden">
+            <a id="examLink" class="is-hidden" href="#"></a>
+            <img id="examQR" class="is-hidden" alt="">
+            <button id="openExamBtn" class="is-hidden" type="button"></button>
+            <button id="closeExamBtn" class="is-hidden" type="button"></button>
+            <button id="copyLinkBtn" class="is-hidden" type="button"></button>
           </section>
         </section>
 
@@ -316,6 +305,7 @@
                     <th>姓名</th>
                     <th>工号</th>
                   <th>专业</th>
+                    <th>轮次</th>
                     <th>部门</th>
                     <th>客观分</th>
                     <th>主观分</th>

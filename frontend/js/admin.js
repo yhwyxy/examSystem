@@ -89,16 +89,10 @@ function showView(view, options = {}) {
   } else if (view === 'overview') {
     loadStats().catch(e => toast(e.message));
   } else if (view === 'publish') {
-    if (window.PapersAdmin) {
-      window.PapersAdmin.loadPapersList()
-        .then(() => {
-          const sel = document.getElementById('publishPaperSelect');
-          if (sel && sel.value) return window.PapersAdmin.loadPublishFor(sel.value);
-          return window.PapersAdmin.loadPublishFor('');
-        })
-        .catch(e => toast(e.message));
-    } else {
-      loadExamLink().catch(e => toast(e.message));
+    if (window.PapersAdmin?.loadExams) {
+      window.PapersAdmin.loadExams().catch(e => toast(e.message));
+    } else if (window.PapersAdmin) {
+      window.PapersAdmin.loadPapersList().catch(e => toast(e.message));
     }
   } else if (view === 'papers') {
     if (window.PapersAdmin) {
@@ -231,6 +225,13 @@ function renderPagination(hasMore) {
 function formatAutoSubmitReason(reason) {
   if (reason === 'third_blur') return '切屏达到 3 次，自动交卷';
   if (reason === 'blur_timeout_30s') return '单次切屏达到 30 秒，自动交卷';
+  if (reason === 'admin_closed') return '管理员收卷自动提交';
+  return '';
+}
+
+function formatRound(r) {
+  if (r.run_is_legacy) return '历史数据';
+  if (r.round_no != null) return `第${r.round_no}轮`;
   return '';
 }
 
@@ -241,6 +242,7 @@ function renderRows(rows) {
     <td>${esc(r.name)}</td>
     <td>${esc(r.employee_id)}</td>
     <td>${esc(r.paper_name || r.paper_id || '')}</td>
+    <td>${esc(formatRound(r))}</td>
     <td>${esc(r.department || '')}</td>
     <td>${esc(r.objective_score)}</td>
     <td>${esc(r.subjective_score_final)}</td>
