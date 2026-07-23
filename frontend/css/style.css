@@ -1277,8 +1277,8 @@ tbody tr:hover {
 }
 .exam-card-times {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.45rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem 0.75rem;
   padding: 0.6rem 0.75rem;
   border-radius: var(--radius);
   background: var(--bg-soft);
@@ -1290,21 +1290,18 @@ tbody tr:hover {
 }
 .exam-time-item {
   min-width: 0;
-  display: grid;
-  grid-template-columns: 2.5em minmax(0, 1fr);
-  align-items: baseline;
-  column-gap: 0.5rem;
-  row-gap: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
 }
 .exam-time-label {
   font-size: 0.72rem;
   color: var(--muted);
   font-weight: 600;
   letter-spacing: 0;
-  flex-shrink: 0;
 }
 .exam-time-value {
-  font-size: 0.84rem;
+  font-size: 0.82rem;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum" 1;
@@ -1312,6 +1309,12 @@ tbody tr:hover {
   overflow: visible;
   text-overflow: clip;
   letter-spacing: -0.01em;
+}
+
+@media (max-width: 360px) {
+  .exam-card-times {
+    grid-template-columns: 1fr;
+  }
 }
 .exam-card-stats {
   margin: 0;
