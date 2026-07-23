@@ -84,7 +84,8 @@
       const d = new Date(iso);
       if (Number.isNaN(d.getTime())) return String(iso);
       const pad = n => String(n).padStart(2, '0');
-      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      // Compact slash date keeps publish/end times on one row in cards
+      return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
     } catch {
       return String(iso);
     }
