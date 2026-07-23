@@ -20,12 +20,13 @@
   --amber-soft: #fff4e5;
   --red: #bf4800;
   --red-soft: #ffefe5;
-  /* Graphite blue-black sidebar */
-  --sidebar: #16181d;
-  --sidebar-soft: #252830;
-  --sidebar-muted: #8e9199;
-  --sidebar-line: rgba(255, 255, 255, 0.08);
-  --sidebar-active-bg: rgba(0, 113, 227, 0.14);
+  /* Light Apple sidebar — cohesive with canvas */
+  --sidebar: #f5f5f7;
+  --sidebar-soft: #e8e8ed;
+  --sidebar-muted: #86868b;
+  --sidebar-line: rgba(0, 0, 0, 0.08);
+  --sidebar-active-bg: #ffffff;
+  --sidebar-text: #1d1d1f;
   --sidebar-width: 248px;
   --shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
   --shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.06);
@@ -350,7 +351,7 @@ label {
   min-height: 100vh;
   overflow-y: auto;
   background: var(--sidebar);
-  color: #f5f5f7;
+  color: var(--sidebar-text);
   padding: 28px 14px;
   border-right: 1px solid var(--sidebar-line);
 }
@@ -360,7 +361,7 @@ label {
   top: 0;
   min-height: 100vh;
   background: var(--sidebar);
-  color: #f5f5f7;
+  color: var(--sidebar-text);
   padding: 28px 14px;
   border-right: 1px solid var(--sidebar-line);
 }
@@ -376,7 +377,7 @@ label {
   font-size: 17px;
   font-weight: 600;
   letter-spacing: -0.022em;
-  color: #f5f5f7;
+  color: var(--sidebar-text);
   line-height: 1.25;
 }
 
@@ -403,7 +404,7 @@ label {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  color: rgba(245, 245, 247, 0.86);
+  color: var(--ink-soft);
   padding: 10px 12px 10px 14px;
   font: inherit;
   font-size: 14px;
@@ -411,12 +412,12 @@ label {
   letter-spacing: -0.01em;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 
 a.nav-item {
   text-decoration: none;
-  color: rgba(245, 245, 247, 0.86);
+  color: var(--ink-soft);
 }
 
 a.nav-item:hover {
@@ -424,15 +425,15 @@ a.nav-item:hover {
 }
 
 .nav-item:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  background: rgba(0, 0, 0, 0.04);
+  color: var(--sidebar-text);
 }
 
 .nav-item.active {
   background: var(--sidebar-active-bg);
-  color: #fff;
+  color: var(--sidebar-text);
   font-weight: 600;
-  box-shadow: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.04);
 }
 
 .nav-item.active::before {
@@ -451,7 +452,7 @@ a.nav-item:hover {
   padding: 12px 14px;
   border: 1px solid var(--sidebar-line);
   border-radius: var(--radius);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.65);
   color: var(--sidebar-muted);
   font-size: 12px;
   line-height: 1.45;
