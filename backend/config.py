@@ -188,6 +188,17 @@ def _validate_config(raw: dict) -> None:
         "model": {"reranker"},
         "admin": {"enable_auth", "password"},
         "export": {"format"},
+        # 以下段由 Go 服务消费 (Task 1+); Python 端忽略, 但允许存在不警告
+        "database": {
+            "url", "max_conns", "min_conns",
+            "connect_timeout_seconds", "statement_timeout_seconds",
+        },
+        "draft": {"min_server_interval_ms", "max_json_bytes"},
+        "worker": {
+            "poll_interval_ms", "concurrency",
+            "lease_seconds", "heartbeat_seconds", "max_attempts",
+        },
+        "logging": {"directory"},
     }
 
     errors: list[str] = []
