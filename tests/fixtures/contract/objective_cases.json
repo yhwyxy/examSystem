@@ -1,0 +1,156 @@
+{
+  "single_choice": [
+    {
+      "answer": [
+        "A"
+      ],
+      "student": [
+        "A"
+      ],
+      "score": 8.0,
+      "expected": 8.0,
+      "note": "单选正确"
+    },
+    {
+      "answer": [
+        "B"
+      ],
+      "student": [
+        "A"
+      ],
+      "score": 8.0,
+      "expected": 0.0,
+      "note": "单选错误"
+    },
+    {
+      "answer": [
+        "A"
+      ],
+      "student": [],
+      "score": 8.0,
+      "expected": 0.0,
+      "note": "单选空答案"
+    }
+  ],
+  "true_false": [
+    {
+      "answer": [
+        "正确"
+      ],
+      "student": [
+        "正确"
+      ],
+      "score": 6.0,
+      "expected": 6.0,
+      "note": "判断正确"
+    },
+    {
+      "answer": [
+        "正确"
+      ],
+      "student": [
+        "错误"
+      ],
+      "score": 6.0,
+      "expected": 0.0,
+      "note": "判断错误"
+    },
+    {
+      "answer": [
+        "true"
+      ],
+      "student": [
+        true
+      ],
+      "score": 6.0,
+      "expected": 6.0,
+      "note": "bool True"
+    },
+    {
+      "answer": [
+        "false"
+      ],
+      "student": [
+        false
+      ],
+      "score": 6.0,
+      "expected": 6.0,
+      "note": "bool False"
+    },
+    {
+      "answer": [
+        "正确"
+      ],
+      "student": [],
+      "score": 6.0,
+      "expected": 0.0,
+      "note": "判断空答案"
+    }
+  ],
+  "multiple_choice_partial": [
+    {
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "student": [
+        "A",
+        "B",
+        "C"
+      ],
+      "score": 10.0,
+      "partial": true,
+      "expected": 10.0,
+      "note": "多选全对"
+    },
+    {
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "student": [
+        "A",
+        "B"
+      ],
+      "score": 10.0,
+      "partial": true,
+      "expected": 3.3333333333333335,
+      "note": "多选少选按比例"
+    },
+    {
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "student": [
+        "A",
+        "D"
+      ],
+      "score": 10.0,
+      "partial": true,
+      "expected": 0.0,
+      "note": "含错项 0"
+    },
+    {
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ],
+      "student": [
+        "A",
+        "B"
+      ],
+      "score": 10.0,
+      "partial": false,
+      "expected": 0.0,
+      "note": "partial=false 少选 0"
+    }
+  ],
+  "notes": [
+    "分数精度保留到 6 位有效数字/小数"
+  ]
+}

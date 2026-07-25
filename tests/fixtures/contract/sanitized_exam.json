@@ -1,0 +1,111 @@
+{
+  "paper_id": "go-contract-paper",
+  "questions": [
+    {
+      "id": "c-single",
+      "type": "single_choice",
+      "question": "PostgreSQL 原生支持的行级锁是?",
+      "score": 8.0,
+      "options": [
+        {
+          "key": "A",
+          "text": "FOR UPDATE SKIP LOCKED"
+        },
+        {
+          "key": "B",
+          "text": "SELECT LOCK"
+        },
+        {
+          "key": "C",
+          "text": "LOCK TABLE"
+        },
+        {
+          "key": "D",
+          "text": "BEGIN EXCLUSIVE"
+        }
+      ]
+    },
+    {
+      "id": "c-multi",
+      "type": "multiple_choice",
+      "question": "本次选择 PostgreSQL 的关键能力包括(多选):",
+      "score": 12.0,
+      "options": [
+        {
+          "key": "A",
+          "text": "pg_advisory_lock"
+        },
+        {
+          "key": "B",
+          "text": "FOR UPDATE SKIP LOCKED"
+        },
+        {
+          "key": "C",
+          "text": "jsonb indexing"
+        },
+        {
+          "key": "D",
+          "text": "FILE-based mutex"
+        }
+      ]
+    },
+    {
+      "id": "c-truefalse",
+      "type": "true_false",
+      "question": "Go goroutine 比 OS 线程更轻量",
+      "score": 5.0,
+      "options": [
+        {
+          "key": "正确",
+          "text": "正确"
+        },
+        {
+          "key": "错误",
+          "text": "错误"
+        }
+      ]
+    },
+    {
+      "id": "c-text",
+      "type": "short_answer",
+      "scoring_mode": "text",
+      "question": "请简述 SQLite 不能支撑本次迁移的核心原因(20 字内)",
+      "score": 15.0
+    },
+    {
+      "id": "c-code",
+      "type": "short_answer",
+      "scoring_mode": "code",
+      "code_language": "python",
+      "allowed_languages": [
+        "python",
+        "go"
+      ],
+      "question": "实现一个返回两个整数之和的函数(代码题, 可选 python/go)",
+      "score": 20.0
+    },
+    {
+      "id": "c-composite",
+      "type": "composite",
+      "question": "综合题: 含主观文本子题与代码子题",
+      "score": 40.0,
+      "subquestions": [
+        {
+          "id": "c-composite-1",
+          "question": "子题1: 主观文本, 解释什么是 transactional outbox",
+          "score": 20.0,
+          "scoring_mode": "text"
+        },
+        {
+          "id": "c-composite-2",
+          "question": "子题2: 写一个 SKIP LOCKED 取队任务的 SQL",
+          "score": 20.0,
+          "scoring_mode": "code",
+          "allowed_languages": [
+            "sql"
+          ]
+        }
+      ]
+    }
+  ]
+}

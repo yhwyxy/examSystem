@@ -1,0 +1,137 @@
+{
+  "name": "Go-Contract 固定试卷",
+  "paper_id": "go-contract-paper",
+  "exam_info": {
+    "title": "Go-Contract 固定试卷(契约基线)",
+    "description": "Task 0 固定题库, 含单选/多选/判断/文本/代码/复合 全题型",
+    "total_score": 100.0,
+    "passing_score": 60
+  },
+  "questions": [
+    {
+      "id": "c-single",
+      "type": "single_choice",
+      "question": "PostgreSQL 原生支持的行级锁是?",
+      "score": 8.0,
+      "options": [
+        {
+          "key": "A",
+          "text": "FOR UPDATE SKIP LOCKED"
+        },
+        {
+          "key": "B",
+          "text": "SELECT LOCK"
+        },
+        {
+          "key": "C",
+          "text": "LOCK TABLE"
+        },
+        {
+          "key": "D",
+          "text": "BEGIN EXCLUSIVE"
+        }
+      ],
+      "answer": "A"
+    },
+    {
+      "id": "c-multi",
+      "type": "multiple_choice",
+      "question": "本次选择 PostgreSQL 的关键能力包括(多选):",
+      "score": 12.0,
+      "options": [
+        {
+          "key": "A",
+          "text": "pg_advisory_lock"
+        },
+        {
+          "key": "B",
+          "text": "FOR UPDATE SKIP LOCKED"
+        },
+        {
+          "key": "C",
+          "text": "jsonb indexing"
+        },
+        {
+          "key": "D",
+          "text": "FILE-based mutex"
+        }
+      ],
+      "answer": [
+        "A",
+        "B",
+        "C"
+      ]
+    },
+    {
+      "id": "c-truefalse",
+      "type": "true_false",
+      "question": "Go goroutine 比 OS 线程更轻量",
+      "score": 5.0,
+      "options": [
+        {
+          "key": "正确",
+          "text": "正确"
+        },
+        {
+          "key": "错误",
+          "text": "错误"
+        }
+      ],
+      "answer": true
+    },
+    {
+      "id": "c-text",
+      "type": "short_answer",
+      "scoring_mode": "text",
+      "question": "请简述 SQLite 不能支撑本次迁移的核心原因(20 字内)",
+      "score": 15.0,
+      "answer": "SQLite 缺 SKIP LOCKED 与 advisory_lock, 不能多进程并发写。"
+    },
+    {
+      "id": "c-code",
+      "type": "short_answer",
+      "scoring_mode": "code",
+      "code_language": "python",
+      "allowed_languages": [
+        "python",
+        "go"
+      ],
+      "question": "实现一个返回两个整数之和的函数(代码题, 可选 python/go)",
+      "score": 20.0,
+      "answer": "def add(a, b):\n    return a + b\n",
+      "answers_by_language": {
+        "python": "def add(a, b):\n    return a + b\n",
+        "go": "func add(a, b int) int {\n    return a + b\n}\n"
+      }
+    },
+    {
+      "id": "c-composite",
+      "type": "composite",
+      "question": "综合题: 含主观文本子题与代码子题",
+      "score": 40.0,
+      "subquestions": [
+        {
+          "id": "c-composite-1",
+          "question": "子题1: 主观文本, 解释什么是 transactional outbox",
+          "score": 20.0,
+          "scoring_mode": "text",
+          "answer": "transactional outbox 是把外部副作用与本地事务同写一个 DB 事务的模式。"
+        },
+        {
+          "id": "c-composite-2",
+          "question": "子题2: 写一个 SKIP LOCKED 取队任务的 SQL",
+          "score": 20.0,
+          "scoring_mode": "code",
+          "code_language": "sql",
+          "allowed_languages": [
+            "sql"
+          ],
+          "answer": "SELECT id FROM jobs ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1;",
+          "answers_by_language": {
+            "sql": "SELECT id FROM jobs ORDER BY id FOR UPDATE SKIP LOCKED LIMIT 1;"
+          }
+        }
+      ]
+    }
+  ]
+}
