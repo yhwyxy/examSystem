@@ -24,8 +24,14 @@ embedding = [
 scoring = [
     "subjective-scoring[text,sql,code,remote]",
 ]
+migration = [
+    # Task 3: SQLite -> PostgreSQL 一次性迁移脚本用
+    # cp312 wheel 在 macOS arm64 / Linux x86-64 / Win AMD64 都齐
+    "psycopg[binary]>=3.2,<4",
+]
 dev = [
     "pytest>=8.0",
+    "psycopg[binary]>=3.2,<4",
 ]
 
 [tool.uv]
