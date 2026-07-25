@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/yhwyxy/examSystem/internal/config"
+	"github.com/yhwyxy/examSystem/internal/db"
 	"github.com/yhwyxy/examSystem/internal/httpapi"
 )
 
@@ -179,9 +180,36 @@ func cmdMigrate(args []string) error {
 		return fmt.Errorf("preflight: %w", err)
 	}
 
-	// Task 1 占位: 实际 migrations 由 Task 2 落地
-	fmt.Fprintln(os.Stdout, "migrate stub: Task 2 will implement schema migrations.")
-	fmt.Fprintf(os.Stdout, "(would connect to: %s)\n", maskedDBURL(cfg.Database.URL))
+	// Task 2: 真实迁移
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	pool, err := db.Open(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	defer pool.Close()
+
+	res, err := db.Migrate(ctx, pool)
+	if err != nil {
+		return fmt.Errorf("migrate: %w", err)
+	}
+
+	if len(res.Applied) == 0 {
+		fmt.Fprintln(os.Stdout, "migrate: database schema is current, nothing to apply.")
+	} else {
+		fmt.Fprintf(os.Stdout, "migrate: applied %d migration(s):\n", len(res.Applied))
+		for _, v := range res.Applied {
+			fmt.Fprintf(os.Stdout, "  + %s\n", v)
+		}
+	}
+	if len(res.Skipped) > 0 {
+		fmt.Fprintf(os.Stdout, "migrate: %d already applied (skipped):\n", len(res.Skipped))
+		for _, v := range res.Skipped {
+			fmt.Fprintf(os.Stdout, "  = %s\n", v)
+		}
+	}
+	fmt.Fprintf(os.Stdout, "migrate: db url %s\n", maskedDBURL(cfg.Database.URL))
 	return nil
 }
 
