@@ -177,6 +177,10 @@ func writeJSONString(b *strings.Builder, s string) {
 // 与 Python open_run_snapshot 等价: 文件 path 必须在合法 snapshot 根目录下;
 // 期望 sha256Hex != "" 则比对计算 sha256 == 期望, 不一致报 ErrChecksumMismatch.
 //
+// 解码使用 UseNumber (与 Service.Open 计算 snapshot_hash 的 LoadDocumentUseNumber
+// 同源), 以保证 int 与 float 在 canonical JSON 中分别以 "60" / "60.0" 写出,
+// 使重算 hash 与已入库的 snapshot_hash 一致.
+//
 // 此处只做读 + 校验; 路径防逃逸交给调用方 (store.go safeResolveWithinRoot),
 // 因为本函数不应自行决定 root.
 func LoadSnapshot(path, expectedSHA256Hex string) (*Snapshot, error) {
@@ -185,7 +189,9 @@ func LoadSnapshot(path, expectedSHA256Hex string) (*Snapshot, error) {
 		return nil, fmt.Errorf("papers.LoadSnapshot: %w", err)
 	}
 	var doc Document
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	dec.UseNumber()
+	if err := dec.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("papers.LoadSnapshot parse: %w", err)
 	}
 	sum, err := ComputeSHA256(doc)
