@@ -8,7 +8,7 @@
 
 当前系统基于 Python (FastAPI + Uvicorn) 单进程 + SQLite，在默认配置下同时在线答题约 50–100 人；齐交卷峰值更低。目标是支持 **最高 500 人同时在线考试**，部署在 **普通办公 Windows 主机 + 本机 PostgreSQL Windows 服务**。
 
-选择 **方案 B：Go 重写 API + PostgreSQL + Python 评分 Worker**，兼顾性能、Windows 友好部署、以及不重写 `subjective-scoring` 的投入产出比。
+选择 **方案 B：Go 重写 API + PostgreSQL + Python 评分 Worker**，兼顾性能、Windows 友好部署、以及不重写 `subjective-scoring` 的投入产出比。**一期除 `subjective-scoring` 外，后端主体全部由 Go 重写**；客观题在 Go 交卷路径即时判分，Python Worker 仅负责主观题评分与写回。
 
 ## 第 1 节：目标、边界与成功标准
 
@@ -55,8 +55,9 @@
 目标架构下：
 
 - 交卷 API **始终先落库并返回** `submission_id` + `grading_status=pending|grading|done|failed`
+- **客观题**在 Go 交卷路径即时判分并写入 `submissions`（客观分立即可见）
+- **主观题**由 Python Worker 异步评分，完成后回写 `subjective_score_machine` / `subjective_score_final` / `total_score`（同时更新 `review_status`）
 - 前端已有 `/api/submission/{id}/status`，继续用轮询看评分进度（可小改文案）
-- 客观题可在 Go 内即时算；主观题由 Worker 异步回写（一期统一在 Worker 内算整卷）
 
 ---
 
@@ -86,7 +87,7 @@
 | 进程 | 职责 | 崩溃影响 |
 |---|---|---|
 | **PostgreSQL** | 真源：轮次/会话/草稿/提交/任务 | 全站不可用（预期） |
-| **exam-server.exe** | HTTP API + 静态资源 + 收卷循环 + 客观题 | 考生断连；数据在 PG 不丢；重启可恢复 |
+| **exam-server.exe** | HTTP API + 静态资源 + 收卷循环 + **客观题判分** | 考生断连；数据在 PG 不丢；重启可恢复 |
 | **scoring-worker** | 主观题评分、写回成绩 | 交卷仍成功，成绩排队；重启继续捞任务 |
 
 ### 2.2 Go 模块边界（建议包结构）
@@ -96,11 +97,11 @@ cmd/exam-server/          # main：配置、HTTP、生命周期
 internal/
   config/                 # YAML + 环境变量
   db/                     # pgx 连接池、迁移
-  auth/                   # admin cookie/session、token hash
+  auth/                   # admin Bearer token 鉴权、token hash
   papers/                 # 试卷 CRUD、快照读写（文件）
   runs/                   # exam_runs 状态机、发布/关闭
   sessions/               # 开考、草稿、会话鉴权
-  submit/                 # 交卷、幂等、pending 落库
+  submit/                 # 交卷流水线（含 Go 客观题判分 + grading_jobs 入队）
   objective/              # 客观题判分（从 Python 移植）
   review/                 # 人工复核、regrade 入队
   export/                 # Excel 导出
@@ -112,16 +113,18 @@ internal/
 
 **原则：** 路由层不直接拼 SQL；业务在 `runs/sessions/submit`；评分调度只写 `grading_jobs`，不内嵌 Python。
 
-### 2.3 Python Worker 边界
+### 2.3 Python Worker 边界（仅主观题）
 
 ```text
 scoring_worker/
-  main.py                 # 抢任务循环
-  grader_bridge.py        # 复用/包装现有 backend.grader 逻辑
+  main.py                 # 抢 grading_jobs（仅含主观题的提交）
+  grader_bridge.py        # 调 subjective-scoring，只算主观部分
   claim.py                # FOR UPDATE SKIP LOCKED
 ```
 
-第一期允许 Worker **复用现有 `backend/grader.py` + `subjective-scoring`**，通过读 PG 任务、写回结果对接；不必先把评分逻辑迁到独立包。长期可抽成独立 Python 包，与 Go 解耦。
+Worker **只处理主观题评分**：从 PG 读 answers 中主观题型，调用 `subjective-scoring`，写回 `subjective_score_machine` / `subjective_score_final` / `total_score` 与 `grading_detail_json`（合并客观分）。
+
+Worker **不复用 `backend/grader.py` 的全量 `grade_submission`**，因为客观题已在 Go 侧判完、落库；Worker 只补主观分与合计总分。
 
 ### 2.4 队列选型（无 Redis）
 
@@ -200,7 +203,7 @@ CREATE UNIQUE INDEX uq_exam_runs_active
 | answers_json | JSONB | |
 | grading_detail_json | JSONB NOT NULL DEFAULT '[]' | |
 | objective_score / subjective_score_machine / subjective_score_final / total_score | DOUBLE PRECISION | |
-| review_status | TEXT | pending / auto_passed / need_review / reviewed 等（保持现语义） |
+| review_status | TEXT | grading / auto_scored / need_review / low_confidence / reviewed 等（保持现语义） |
 | **grading_status** | TEXT NOT NULL | **pending / grading / done / failed**（新增，对外可映射） |
 | **grading_error** | TEXT | 失败原因摘要 |
 | **graded_at** | TIMESTAMPTZ | |
@@ -349,20 +352,25 @@ frontend_recommended_interval_ms: 5000
 
 **齐开考：** 纯 PG 插入 + 唯一约束，Go 无全局锁；500 人 1–2 分钟散开为设计目标，**同一两秒硬齐开**仍建议业务错峰。
 
-### 6.2 交卷（热路径，必须短）
+### 6.2 交卷（热路径，必须短；含客观题判分）
 
 事务内：
 
-1. 鉴权 session，校验 run=`open`、未提交、deadline+grace
+1. 鉴权 session，校验 run=`open`、未提交、deadline
 2. 校验 answers（对照快照题型）
-3. `INSERT submissions`（scores 先 0，`grading_status=pending`）
-4. `UPDATE exam_sessions SET status=submitted`
-5. `INSERT grading_jobs (... status=queued)`
-6. COMMIT
+3. **Go 即时判客观题**（single/multiple/true_false），计算 `objective_score`
+4. `INSERT submissions`（含已算 `objective_score`、`grading_detail_json` 初步版；`subjective_score_machine` / `subjective_score_final` / `total_score` 暂 0；`grading_status=pending`；`review_status=grading`）
+5. `UPDATE exam_sessions SET status=submitted`
+6. **若含主观题** → `INSERT grading_jobs (... status=queued)`；**若纯客观题** → 直接 `grading_status=done`，`review_status` 按规则自动判定（`auto_scored` 或 `need_review`）
+7. COMMIT
 
-然后立即返回。**Worker 内统一算整卷**（实现简单，与现 `grade_submission` 一致）。
+然后立即返回（含 `objective_score` 与 `grading_status`）。
 
-### 6.3 Worker 抢任务
+**Worker 后续只做主观题评分**（§6.3），完成后回写主观分数并重算 `total_score`。
+
+**纯客观卷：** 交卷即出分，不产生 `grading_jobs`。
+
+### 6.3 Worker 抢任务（仅主观题）
 
 ```sql
 BEGIN;
@@ -383,7 +391,7 @@ COMMIT;
 
 评分成功：
 
-- 写 `submissions` 分数 + `grading_detail_json` + `grading_status=done` + `review_status`
+- 写 `submissions`：`subjective_score_machine` / `subjective_score_final` + 更新 `total_score`（= `objective_score` + 主观分）+ 追加 `grading_detail_json` + `grading_status=done` + `review_status`（按现 `aggregate_review_status` 逻辑）
 - job → `done`
 
 失败：
@@ -396,7 +404,7 @@ COMMIT;
 保持现语义：
 
 ```text
-open → closing（5s 只读写最终草稿）→ 批量按 draft 生成 pending submission + jobs → closed
+open → closing（5s 只读写最终草稿）→ 批量按 draft 生成 submission：Go 先判客观题，含主观题的入 grading_jobs → closed
 ```
 
 收卷循环在 **Go finalize 协程**（每秒扫描 `finalize_at <= now()`），幂等条件更新。
@@ -405,8 +413,8 @@ open → closing（5s 只读写最终草稿）→ 批量按 draft 生成 pending
 
 `grading.sync_grading`：
 
-- **目标架构默认 false**（忽略 true，或 true 仅 dev 单测）
-- 文档明确：500 人场景禁止同步等主观题
+- 仓库 `config.yaml` 已默认 `false`（异步）；代码 fallback 为 `true`
+- **目标架构：`sync_grading` 一律忽略为 async**（即使配置为 true 也不在交卷请求中阻塞等主观题）
 
 ---
 
@@ -415,7 +423,7 @@ open → closing（5s 只读写最终草稿）→ 批量按 draft 生成 pending
 | 项 | 设计 |
 |---|---|
 | 限流 | Go 进程内 token bucket（按 IP+路由）；多实例时不共享——**单机单 exam-server 即可** |
-| Admin | 密码 + HttpOnly cookie/session（行为对齐现网） |
+| Admin | Bearer token（`Authorization: Bearer <token>`，前端 `localStorage.admin_token`，一期对齐现网） |
 | Session token | 只存 hash；客户端持有明文 |
 | CORS | 配置 `allow_origins`，内网可 `*` 但不建议生产习惯 |
 | 输入限制 | draft/answers 体积上限，防恶意大包 |
@@ -491,12 +499,13 @@ worker:
 
 | 题型 | 执行位置 | 说明 |
 |---|---|---|
-| single/multiple/true_false | Python Worker（一期）或 Go（二期） | 一期跟 `grade_submission` 走，避免分叉 |
+| single/multiple/true_false | **Go（一期）** | 交卷路径即时判分；判分逻辑从 Python 移植 |
 | short_answer / essay / composite | Python `subjective-scoring` | **不迁移** |
 | 人工复核 | Go API 写 PG | 与现 review 语义一致 |
-| 重评 | Go 入队 | Worker 重跑 |
+| 重评 | Go 入队 | 纯客观题 Go 重算后直接写回，无 job；含主观题的 Worker 重跑 |
+| 总分合计 | Go（客观分立即可见）+ Python Worker（主观分回写时合并覆盖 `total_score`） |
 
-**二期可选：** 客观题挪到 Go 交卷路径，缩短「可见客观分」时间；非 500 硬前置。
+**一期即 Go 全量判客观题，不再设「二期迁移客观题」阶段。**
 
 ---
 
@@ -537,7 +546,7 @@ worker:
 
 ### 12.1 正确性
 
-- 移植/重写：run 状态机、draft CAS、closing 收卷、重复提交、超时 grace
+- 移植/重写：run 状态机、draft CAS、closing 收卷、重复提交、**客观题判分**、纯客观卷 E2E
 - 迁移工具：空库/有历史提交
 - Worker：lease 过期回收、死信、regrade
 
@@ -563,7 +572,7 @@ worker:
 | 阶段 | 内容 | 产出 |
 |---|---|---|
 | **P0** | PG schema + 迁移脚本 + 本地 docker/Windows PG 开发环境 | 可导入数据 |
-| **P1** | Go：health、config、papers 只读、exam start/draft/status/submit | 考生主路径通 |
+| **P1** | Go：health、config、papers 只读、exam start/draft/status/submit（含客观题判分） | 考生主路径通 |
 | **P2** | grading_jobs + Python worker 打通 | 异步评分 E2E |
 | **P3** | admin API 全量 + 收卷循环 + export | 功能对齐 |
 | **P4** | 前端草稿间隔 + 状态展示小改 | 体验 |
@@ -579,6 +588,7 @@ worker:
 | 风险 | 缓解 |
 |---|---|
 | Go 重写 API 行为有偏差 | 契约测试对照现网响应；分阶段替换路由 |
+| 客观题判分移植偏差 | 逐题型对照 Python 判分逻辑与现网 grading_detail 输出；压测验证纯客观卷 |
 | 本地 embedding 内存爆 | 默认远程 rerank；worker concurrency=1~2 |
 | NAT 限流误伤 | draft 按 session 限流；管理端出口白名单 |
 | 双写文件+PG 不一致 | 发布快照与 run 行同事务尽量「先写文件再提交 PG」，失败清理 |
@@ -590,7 +600,7 @@ worker:
 | 语言 | Go API |
 | DB | PostgreSQL |
 | 队列 | PG job 表 |
-| 评分 | Python worker + subjective-scoring |
+| 评分 | Go 客观题即时判分 + Python worker 主观题异步评分 |
 | 前端 | 不重构 |
 | 默认同步评分 | 关闭 |
 | Redis | 不用（一期） |
