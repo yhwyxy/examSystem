@@ -11,6 +11,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/papers"
 	"github.com/yhwyxy/examSystem/internal/review"
+	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 
@@ -40,7 +41,10 @@ type Dependencies struct {
 	Runs   *runs.Repository // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
 
 	// Task 10 admin submissions/review 路径.
-	Review *review.Service // Apply / Regrade 跨表事务, nil 时对应路由返 503
+	Review *review.Service // Apply / Regrade 跨事务, nil 时对应路由返 503
+
+	// Task 12a student /api/exam/* 8 端点 (公开 + token 鉴权), nil 时路由返 503.
+	Sessions *sessions.Service // GetPaper / StartOrResume / SaveDraft / Status
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。
@@ -86,6 +90,9 @@ func NewRouter(deps Dependencies) http.Handler {
 		// Task 9 admin 路由组 (/api/admin/*): papers/open/close/batch/reorder/preview/
 		// exams/exam-link/reset-rounds/login/reload-config. RequireAdmin middleware.
 		MountAdmin(api, deps)
+
+		// Task 12a student /api/exam/* 4 端点.
+		mountStudentExam(api, deps)
 
 		// /api/* 未知 -> JSON 404
 		MountAPI404(api)

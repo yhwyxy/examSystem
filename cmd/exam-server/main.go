@@ -17,7 +17,11 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 	"flag"
 	"fmt"
 	"net/http"
@@ -180,6 +184,13 @@ func cmdServe(args []string) error {
 	jobsRepo := jobs.NewRepository()
 	reviewSvc := review.NewService(pool, jobsRepo)
 
+	// Task 12a: sessions.Service (student /api/exam/* 公开 + 鉴权端点
+	//   依赖 sessions.RunsLookup 接口). 用 adapter 包装 runs.Repository,
+	//   适配 hash_token 形态 (FindByPublicTokenHash) + RunLite 字段裁剪.
+	runsLookup := &runsLookupAdapter{repo: runsRepo, pool: pool}
+	sessionsSvc := sessions.NewService(sessionsRepo, runsLookup,
+		sessions.WithGracePeriod(time.Duration(cfg.Exam.GracePeriodSeconds)*time.Second))
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,
 		StaticRoot:         static,
@@ -190,6 +201,7 @@ func cmdServe(args []string) error {
 		Papers:             papersStore,
 		Runs:               runsRepo,
 		Review:             reviewSvc,
+		Sessions:           sessionsSvc,
 	})
 
 	srv := &http.Server{
@@ -384,4 +396,52 @@ func indexByte(s string, b byte) int {
 		}
 	}
 	return -1
+}
+
+// runsLookupAdapter 桥 runs.Repository (生产 PG) 与 sessions.RunsLookup interface.
+// 注: runs.Repository 的 FindBy* 第 2 参 tx 必填, adapter 持 pgxpool.Pool 引入有事务
+// 路径 (此处只用 pool 即可, 无需开事务).
+type runsLookupAdapter struct {
+	repo *runs.Repository
+	pool *pgxpool.Pool
+}
+
+// FindByToken 把 run_token (raw) hash 后调 runs.FindByPublicTokenHash 并裁剪成 RunLite.
+// 用 Begin-Tx 桥 (runs.Repository.FindBy* 强接 pgx.Tx), defer Rollback 释放.
+func (a *runsLookupAdapter) FindByToken(ctx context.Context, runToken string) (*sessions.RunLite, error) {
+	h := sha256.Sum256([]byte(runToken))
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("runsLookupAdapter.FindByToken: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	run, err := a.repo.FindByPublicTokenHash(ctx, tx, hex.EncodeToString(h[:]))
+	return runToLite(run, err)
+}
+
+// FindByID 通过 run_id 调 runs.FindByID 并裁剪成 RunLite.
+func (a *runsLookupAdapter) FindByID(ctx context.Context, runID string) (*sessions.RunLite, error) {
+	tx, err := a.pool.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("runsLookupAdapter.FindByID: begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	run, err := a.repo.FindByID(ctx, tx, runID)
+	return runToLite(run, err)
+}
+
+// runToLite 错误处理 + runs.Run -> sessions.RunLite 字段裁剪.
+func runToLite(run *runs.Run, err error) (*sessions.RunLite, error) {
+	if err != nil {
+		return nil, err
+	}
+	if run == nil {
+		return nil, nil
+	}
+	return &sessions.RunLite{
+		ID: run.ID, PaperID: run.PaperID, RoundNo: run.RoundNo,
+		Status: string(run.Status), Duration: time.Duration(run.DurationMinutes) * time.Minute,
+		SnapshotPath: run.SnapshotPath, SnapshotHash: run.SnapshotHash,
+		FinalizeAt: run.FinalizeAt,
+	}, nil
 }
