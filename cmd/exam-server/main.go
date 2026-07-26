@@ -34,6 +34,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/jobs"
 	"github.com/yhwyxy/examSystem/internal/objective"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/submissions"
@@ -175,6 +176,10 @@ func cmdServe(args []string) error {
 		return fmt.Errorf("open papers store: %w", err)
 	}
 
+	// Task 10: review 服务 (Apply / Regrade 跨表事务 + 借 jobs.EnqueueTx 异步接班).
+	jobsRepo := jobs.NewRepository()
+	reviewSvc := review.NewService(pool, jobsRepo)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,
 		StaticRoot:         static,
@@ -184,6 +189,7 @@ func cmdServe(args []string) error {
 		Auth:               authStore,
 		Papers:             papersStore,
 		Runs:               runsRepo,
+		Review:             reviewSvc,
 	})
 
 	srv := &http.Server{

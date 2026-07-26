@@ -10,6 +10,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 
@@ -34,10 +35,12 @@ type Dependencies struct {
 	SubmissionsService *submissions.Service
 
 	// Task 9 admin 路径.
-	Auth       *auth.Store  // nil 时所有 admin 路由放行 (与 Python enable_auth=false parity)
-	Papers     *papers.Store // 试卷文件写入入口 (per-slug mutex + atomic write)
-	Runs       *runs.Repository // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
-	AdminToken string           // 缺省 token (enable_auth=false 时供 admin_headers 用)
+	Auth   *auth.Store      // nil 时所有 admin 路由放行 (与 Python enable_auth=false parity)
+	Papers *papers.Store    // 试卷文件写入入口 (per-slug mutex + atomic write)
+	Runs   *runs.Repository // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
+
+	// Task 10 admin submissions/review 路径.
+	Review *review.Service // Apply / Regrade 跨表事务, nil 时对应路由返 503
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。
