@@ -10,6 +10,7 @@ package httpapi
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +22,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/skip2/go-qrcode"
 	"github.com/yhwyxy/examSystem/internal/export"
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
@@ -61,6 +63,9 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		// UI 用 GET, Python 旧栈也用 GET (main.py 行 520); 兼容旧 POST 保留
 		admin.Get("/exam-link", examLinkHandlerGET(deps))
 		admin.Post("/exam-link", examLinkHandler(deps))
+		// UI papers.js:1027 真 调用 POST /exams/reset-rounds
+		admin.Post("/exams/reset-rounds", resetRoundsHandler(deps))
+		// 保留向后兼容旧路径 (exam-link/{run}/reset-rounds), 实际指向同 handler
 		admin.Post("/exam-link/{run}/reset-rounds", resetRoundsHandler(deps))
 		// Task 10 (path C 修正): stats / regrade 是顶层 admin 路径 (与 Python 基线
 		// test_admin_api.py 契约一致), 不挂在 /submissions 子树下.
@@ -432,16 +437,18 @@ func examLinkHandlerGET(deps Dependencies) http.HandlerFunc {
 			"ok":         true,
 			"paper_slug": slug, "run_id": run.ID,
 			"url":       buildExamURL(r, slug, token),
-			"qr_base64": "", // QR 留空, Go 当前未引 QR 库 (见 Task 14 文档)
+			"qr_base64": makeQRDataURL(buildExamURL(r, slug, token)),
 		})
 	}
 }
 
-// listExamsHandler GET /api/admin/exams -> 索引状态列表 (paper slug + 当前 open run).
+// listExamsHandler GET /api/admin/exams -> 直接返 Array[ExamOverview].
+// UI papers.js:738 loadExams 期望 Array (非 {exams:...} 包装), 每项含状态 + counter.
 func listExamsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if deps.Papers == nil {
-			writeAdminError(w, http.StatusServiceUnavailable, "PAPERS_NOT_CONFIGURED", "papers store missing")
+		if deps.Papers == nil || deps.RunService == nil || deps.Pool == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "DEPS_NOT_CONFIGURED",
+				"papers/run-service/pool missing")
 			return
 		}
 		slugs, err := deps.Papers.List()
@@ -449,7 +456,30 @@ func listExamsHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusInternalServerError, "PAPERS_LIST_FAILED", err.Error())
 			return
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"exams": slugs})
+		ctx := r.Context()
+		var overviews []runs.ExamOverview
+		err = withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
+			var ierr error
+			overviews, ierr = deps.RunService.ListExamsOverview(ctx, tx, slugs)
+			return ierr
+		})
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "LIST_EXAMS_FAILED", err.Error())
+			return
+		}
+		// UI 期望裸数组; 无 run 的 paper -> 返 "unpublished" 状态条目, 保证每 paper 都在列表里.
+		seen := make(map[string]bool, len(overviews))
+		for _, o := range overviews {
+			seen[o.PaperID] = true
+		}
+		for _, slug := range slugs {
+			if !seen[slug] {
+				overviews = append(overviews, runs.ExamOverview{
+					PaperID: slug, Name: slug, Status: "unpublished",
+				})
+			}
+		}
+		WriteJSON(w, http.StatusOK, overviews)
 	}
 }
 
@@ -491,18 +521,114 @@ func examLinkHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// resetRoundsHandler POST /api/admin/exam-link/{run}/reset-rounds -> 删 run + 关联.
-// 约束: ACTIVE_RUN_EXISTS / RUN_HAS_SUBMISSIONS / GRADING_IN_PROGRESS 任一为 true -> 409.
+// resetRoundsHandler POST /api/admin/exams/reset-rounds {slugs, all?} -> 软重置.
+// UI papers.js:1017 真 用, 期望:
+//   - slugs=[] 表示所有 paper (UI 默认传 [])
+//   - 删: 各专业轮次记录 (exam_runsid token sidecar + papers JSON) + 未交卷会话 (active)
+//   - 跳过: 考试中/收卷中 (open/closing) 的 run (防误删)
+//   - 保留: 已提交的历史成绩 (submissions 已 submitted, RUN_NOT_DELETABLE 因 FK RESTRICT)
+//
+// 真实实现作"软重置":
+//   - exam_sessions WHERE status='active' 的会话全删 (SUBMIT 可走 finalize 时已做了, 这里只清遗留)
+//   - 关闭的 run 行不删 (FK RESTRICT + 历史保留), 但删 token 侧车文件 (失效旧入场链接)
+//   - 不删 papers JSON (admin 仍可重用配置), 仅清 token 侧车
+//   - 任一 active run -> 整批拒 (409 ACTIVE_RUN_EXISTS, UI 提示先关考)
 func resetRoundsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		runID := chi.URLParam(r, "run")
-		if runID == "" {
-			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "run id missing")
+		if deps.RunService == nil || deps.Pool == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "DEPS_NOT_CONFIGURED",
+				"run-service/pool missing")
 			return
 		}
-		// stub 保留: UI 不调, 真实现需 finalize/grader 桥接; 文档记遗留.
-		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "run_id": runID,
-			"note": "reset rounds stub (UI 未启用, 文档已记遗留)"})
+		var body struct {
+			Slugs []string `json:"slugs"`
+			All   bool     `json:"all,omitempty"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+			return
+		}
+		slugs := body.Slugs
+		if len(slugs) == 0 && !body.All {
+			// UI 默认传 slugs=[] 语义 = 全部 paper; 兼容此项, 转为 all=true 继续处理
+			body.All = true
+		}
+		if len(slugs) == 0 && !body.All {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST",
+				"slugs required (or all=true)")
+			return
+		}
+		ctx := r.Context()
+		// 找待处理 paper slug 列表
+		if len(slugs) == 0 && body.All {
+			if deps.Papers == nil {
+				writeAdminError(w, http.StatusServiceUnavailable, "PAPERS_NOT_CONFIGURED",
+					"papers store missing")
+				return
+			}
+			var err error
+			slugs, err = deps.Papers.List()
+			if err != nil {
+				writeAdminError(w, http.StatusInternalServerError, "PAPERS_LIST_FAILED", err.Error())
+				return
+			}
+		}
+		deleted := make([]string, 0)
+		skipped := make([]map[string]any, 0) // {slug, reason}
+		cleaningErr := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
+			for _, slug := range slugs {
+				// 取该 paper 最近一条 run (--closed/--open)
+				run, err := deps.RunService.FindOpenBySlug(ctx, tx, slug)
+				if err != nil {
+					return err
+				}
+				if run != nil {
+					// open 状态存在 -> 拒 (UI 文案说"考试中/收卷中跳过", 但我们更严:
+					// 让 admin 先关考再重置, 防 active session 数据丢)
+					skipped = append(skipped, map[string]any{
+						"slug": slug, "reason": "ACTIVE_RUN_EXISTS"})
+					continue
+				}
+				// 删该 paper 所有 active session + 关联 token 侧车 + closed run 的 token 侧车
+				_, err = tx.Exec(ctx, `
+					DELETE FROM exam_sessions
+					WHERE run_id IN (
+						SELECT id FROM exam_runs WHERE paper_id = $1 AND status IN ('open','closing','closed')
+					) AND status = 'active'`, slug)
+				if err != nil {
+					return fmt.Errorf("resetRounds delete active sessions: %w", err)
+				}
+				// 删该 paper 所有 closed run 的 token 侧车文件
+				rows, err := tx.Query(ctx,
+					`SELECT id FROM exam_runs WHERE paper_id = $1 AND status = 'closed'`, slug)
+				if err != nil {
+					return fmt.Errorf("resetRounds query closed runs: %w", err)
+				}
+				for rows.Next() {
+					var runID string
+					if err := rows.Scan(&runID); err != nil {
+						rows.Close()
+						return err
+					}
+					_ = deps.RunService.RemovePublicToken(runID)
+				}
+				if err := rows.Err(); err != nil {
+					return err
+				}
+				deleted = append(deleted, slug)
+			}
+			return nil
+		})
+		if cleaningErr != nil {
+			writeAdminError(w, http.StatusInternalServerError, "RESET_ROUNDS_FAILED",
+				cleaningErr.Error())
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":      true,
+			"deleted": deleted, "skipped": skipped,
+			"note": "软重置 (历史 submissions 保留; token 侧车失效; 仍需重新关考后 open 新轮次)",
+		})
 	}
 }
 
@@ -543,6 +669,20 @@ func buildExamURL(r *http.Request, slug, token string) string {
 		scheme = "https"
 	}
 	return fmt.Sprintf("%s://%s/?run_token=%s&paper_slug=%s", scheme, host, token, slug)
+}
+
+// makeQRDataURL 把 url 编码成 PNG 二维码 -> base64 data URI.
+// 给 admin UI <img src="..."> 直接渲染 (admin.js:329 期望 qr_base64 字段).
+// 失败 (空 url / 编码失败) 返 "" (UI fallback 不渲染 <img>).
+func makeQRDataURL(url string) string {
+	if url == "" {
+		return ""
+	}
+	png, err := qrcode.Encode(url, qrcode.Medium, 256)
+	if err != nil {
+		return ""
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png)
 }
 
 // errRunNotOpen 表示 paper 无 open run (admin close 调幂等用).

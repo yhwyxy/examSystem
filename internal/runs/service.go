@@ -290,3 +290,9 @@ var _ = uuid.New
 func (s *Service) FindOpenBySlug(ctx context.Context, tx pgx.Tx, slug string) (*Run, error) {
 	return s.repo.FindOpenByPaper(ctx, tx, slug)
 }
+
+// ListExamsOverview 转发到 Repository. slugs 来自 Papers.List().
+func (s *Service) ListExamsOverview(ctx context.Context, tx pgx.Tx,
+	paperIDs []string) ([]ExamOverview, error) {
+	return s.repo.ListExamsOverview(ctx, tx, paperIDs)
+}

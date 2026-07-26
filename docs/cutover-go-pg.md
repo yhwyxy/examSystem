@@ -57,42 +57,77 @@ ls /tmp/exam-server-loadtest-tokens/  ->  run-e68c....token
 
 go vet ./... exit 0; runs / papers package 单元测试通过.
 
-## 已知遗留 (真上生产前需补)
+## 已知遗留 (2026-07-26 fix/admin-tail-blocking 分支勘误版 + 修正先前判断错)
 
-### 1. Runs API 设计: token 侧车 + exam_run_dir 单实例约束
+**重要勘误**: 原 Task 14 文档 (合并 commit cce54c2) 把多项状态判断错了, 本节按真实代码
+证据 + UI 调用证据 (frontend/js/papers.js, admin.js grep 核查) 重写. 现状已不戳同.
 
-- **`RunTokenDir` 本机为绝对路径**, 生产部署需配 `D:\exam-tokens\` 等持久目录, 且**进程外不能
-  多机共享** (单实例文件写不跨节点). 真上多机生产时需改 redesign:
-  - 方案 A: 用 PG 加密表列 (PG row + aes-gcm 加密 token, key 在 secrets)
-  - 方案 B: 用 Redis / Vault 存加密 token
-  - 方案 C: 重回 Python 设计 (单实例 + exam_run_dir)
-  **决断未做, 待真上多机生产时拍**.
-- **进程重启**: token 侧车文件仍在, 但 admin 内存 inflight 状态丢失, 处理中 run 可能需人工状态对账.
+### 1. ~多机 token 持久化改造~ (本部署架构不适用, 不补)
 
-### 2. QR endpoint 字段空驶
+原决断: 单机文件侧车仅单进程, 多机生产需 redesign.
+**修正**: 本仓库真实部署架构 (用户 2026-07-26 拍板) = **主控机单台 + 被控机 N 台**
+(被控机仅浏览器客户端, 不跑 Go 进程). Go serve 单进程 + 单 PG 连接 + 文件侧车 = 完全适用.
+不补, 无需 redesign. 仅真未来上多机集群才需考虑.
 
-- `qr_base64` 字段当前永远返 "", Go 当前未引 QR 库. UI 收到空字段需 fallback 自行生成 QR
-  (UI admin.js 已有 base64 qr 处理逻辑). 后续如需后端生成 QR 加 `go-qrcode`/`skip2/go-qrcode` 库.
+### 2. QR 库已引入 (已补 ✅)
 
-### 3. resetRoundsHandler 仍是 stub
+原判断: qr_base64 字段永远空, Go 当前未引 QR 库, UI fallback 不渲染.
+**修正**: 用户新架构 "主控机显示 QR -> 被控机扫码入场" 是核心入场流程, 必补.
+- 引入 `github.com/skip2/go-qrcode` v0.0.0-20200617195104 (go.mod direct dep)
+- internal/httpapi/admin.go `makeQRDataURL(url)`: PNG 256 + base64 data URI
+- examLinkHandlerGET: `qr_base64` 真返 `data:image/png;base64,iVBORw0K...` (curl 实测 ~1034 字节)
 
-- plan 行 1879 要求 resetRounds 真实现 (删 run + finalize 桥接). UI 不调, **暂不补**, 真到需求
-  再补.
+### 3. resetRoundsHandler 真实现 + 路由修 (已补 ✅)
 
-### 4. listExamsHandler 仅返 papers slug, 不返 run 状态
+原判断: UI 不调, 暂不补, 真到需求再补.
+**修正**: UI 真 调用 `POST /api/admin/exams/reset-rounds` (papers.js:1027), 但后端原
+注册 `POST /api/admin/exam-link/{run}/reset-rounds` -> 完全 404 mismatch. 这条不是 "可后补",
+是真功能坏.
+- 改路由: 新挂 `POST /exams/reset-rounds` 配 UI. 旧路径 ExamLink/{run}/reset-rounds 保留
+  向后兼容, 指向同 handler.
+- handler 真软重置: active run -> 409 skip (防误删); closed run -> 删 active session +
+  删 token 侧车 + 保留 exam_runs 行+submissions 历史 (软重置语义,FK RESTRICT 防硬删)
+- 返回 `{ok, deleted, skipped, note}`, UI papers.js 真消费
 
-- UI 需要每个 paper 的当前 open run 状态. 当前只返 slug. 真上可补 `RunService.FindOpenBySlug`
-  循环联查 (但 N+1 性能考量, 应写 `findOpenByManySlugs` 批量查).
+### 4. listExamsHandler 真 schema 对齐 (已补 ✅)
 
-### 5. Admin stub 测试覆盖
+原判断: UI 不调 + "暂未用".
+**修正**: UI 真 调用 `loadExams` (papers.js:738), 而且轮询 (设 15s/1s poll). 之前 handler
+返 `{"exams":[slug1, slug2, string-only]}` -> UI 期望裸数组 + 每项含完整 ExamOverview 对象
+(paper_id/name/status/opened_at/duration_minutes/started_count/active_count/...).
+**两处双 mismatch**: 包装形态错 + 元素错.
+- internal/runs/repository.go: 新 `ListExamsOverview(slugs)` (单 SQL: LATERAL +
+  DISTINCT ON + LEFT JOIN exam_sessions 三 counter, 避免 N+1)
+- internal/httpapi/admin.go listExamsHandler: 真返裸数组 + 每 paper 状态 (含 "unpublished"
+  fallback for paper 无 run 的)
+- curl 实测: `[{paper_id, name, status:'open', started_count:0, active_count:0, opened_at:'...',
+  ...}]` 与 UI renderExamCard 真对齐
 
-- 新真 handler 暂用 curl 真实跑通验证, 未补 Go 单元测试. **真上生产前需补**
-  `admin_test.go` batchOpen / batchClose / examLinkGET 三场景.
+### 5. admin_runs_test.go 单元测试已加 (已补 ✅)
 
-### 6. 单元测试 / 调试日记: 旧 fail 历史路径
+原判断: "curl 已验证, 真上生产前需补".
+**修正**: 新加 `internal/httpapi/admin_runs_test.go` (6 case):
+- TestRoutes_NewBatchAndExamLinkRegistered: 新加 5 路由真挂载 (防 Task 14 后改坏)
+- TestBatchOpen_NoDeps_503 / TestBatchOpen_InvalidJSON_503 (deps nil fail-fast)
+- TestExamLinkGET_NoDeps_503 / TestResetRounds_NoDeps_503 / TestListExams_NoDeps_503
+注: 真 PG fixture 路径 (open/close 真事务) 主控机单机靠 curl 验证; 真上 CI 时可补真 PG
+fixture 扩展 (本文档不阻塞).
 
-- 本仓库 Python 旧栈 27-30 黑盒 fail / fixture portability / go_enhancements 字段已按
-  `project-abandon-python-contract-tests` 决断 (2026-07-26) 抛弃, 不修.
+### 6. ~迁移脚本未建~ (不是遗留, 已废弃)
+
+原判断: 三个 SQLite<->PG 迁移脚本本次未建.
+**修正**: 核查发现 Task 2/3 (commit ce9b0a4/34ea12a) 早就建了:
+  scripts/sqlite_to_postgres.py ✅ (17KB, 服务 SQLite→PG)
+  scripts/postgres_to_sqlite.py ✅ (反向 PG→SQLite 回滚用过)
+  scripts/verify_migration.py ✅ (双向数据计数对账)
+  tests/test_sqlite_to_pg_to_sqlite_roundtrip.py ✅ (roundtrip 全程跑通)
+**这条不是遗留**, 是 Task 14 文档判断错, 废弃.
+
+### 7. 单元测试 / 调试日记: 旧 fail 历史路径 (本节不变)
+
+本仓库 Python 旧栈 27-30 黑盒 fail / fixture portability / go_enhancements 字段已按
+`project-abandon-python-contract-tests` 决断 (2026-07-26) 抛弃, 不修.
+
 
 ## 不适用 (本仓库无生产切换)
 
@@ -131,3 +166,31 @@ plan 行 799/1552/1638/1861 反复要求三个 Python 迁移脚本:
 - ✅ 部署文档 (Task 12 Step 6) + 回滚文档完整
 
 真上生产 + 真实流量前需补: ①/②/③/④/⑤ 五项已知遗留, **不需要补** Task 14 七步演练.
+
+## fix/admin-tail-blocking 分支补完 (2026-07-26, 新增在勘误版后)
+
+用户拍板 P1 范围扩展 (1+2+3+4), fix/admin-tail-blocking 分支按真实主控机+被控机单机架构
+补完前述 4 项 + 1 项(隐含 5):
+
+- ✅ **listExams 真返裸数组 + ExamOverview 聚合** (Task 14 admin 主入口 bug 全修)
+  - Repository 新加 `ListExamsOverview` 单 SQL (LATERAL + DISTINCT ON + 三 counter LEFT JOIN)
+  - handler 返 `[{paper_id, name, status, opened_at, started_count, active_count, ...}]`
+- ✅ **QR 库 引入 + qr_base64 真生成** 配主控机显示二维码给被控机扫码入场
+  - `github.com/skip2/go-qrcode` direct dep
+  - admin.go `makeQRDataURL` helper + examLinkHandlerGET 真用
+- ✅ **resetRoundsHandler 真软重置 + 路由修** UI 真 调用路径
+  - POST /exams/reset-rounds 路由真挂 (UI papers.js:1027 真匹配)
+  - handler 真软重置: active run skip 409 (防误删未交卷) + closed run 删 active session + 删 token 侧车
+- ✅ **admin_runs_test.go 单元测试** 6 case 防回归
+  - Task 14 新加 5 路由真挂载 + deps nil 优先 503 + InvalidJSON fail-fast 全覆盖
+- ✅ **本文档勘误** 修正先前的多项状态判断错 (1 项架构不适用 / 2-4 项真尾巴 vs 旧判断 "暂未用" / 6 项不是遗留)
+- ✅ 关闭 + resetRounds 联 e2e curl 实测 (loadtest schema):
+  - open: 状态返 open + counter=0; 关闭后 resetRounds deleted; disabled 多机 token 任务废弃
+
+**真实主控机+被控机架构核查**:
+- 单机 Go 进程: ✅ 文件 sidecar token 持久化适用 (本部署形态下设计原 status 适用)
+- 单虚拟 PG 连接: ✅ 不涉多机 token 互访
+- 被控机浏览器扫码入场: ✅ QR 真生成 + run_token url 真透传
+- 单机回滚演练: scripts/postgres_to_sqlite.py 已建 (roundtrip 测试覆盖), 真上生产前需做一次演练
+- 真上生产前需补: 一次完整 staging 切换演练 (PG→SQLite→PG, scripts/* 真跑) + admin_test.go 真 PG
+  fixture 扩展 (主控机单机 curl 已真跑通, CI 流水线可补 fixture)
