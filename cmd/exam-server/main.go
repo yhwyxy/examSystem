@@ -29,6 +29,10 @@ import (
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/db"
 	"github.com/yhwyxy/examSystem/internal/httpapi"
+	"github.com/yhwyxy/examSystem/internal/jobs"
+	"github.com/yhwyxy/examSystem/internal/objective"
+	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/submissions"
 )
 
 func main() {
@@ -125,10 +129,35 @@ func cmdServe(args []string) error {
 		return true, "config reloaded; CORS change requires restart"
 	}
 
+	// Task 6: 打开 pool 以供 submit / status 路径使用; 失败直接终止进程.
+	ctxOpen, cancelOpen := context.WithTimeout(context.Background(), 15*time.Second)
+	pool, err := db.Open(ctxOpen, cfg)
+	cancelOpen()
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	defer pool.Close()
+
+	// 构造 student 路径所需 services: submissions + jobs; 注 objective.Grade + papers.LoadSnapshot.
+	subRepo := submissions.NewRepository()
+	jobsSvc := jobs.NewService(nil)
+	// GracePeriodSeconds < 0 表示不校验 deadline + grace; cfg.Exam.GracePeriodSeconds 默认 30s.
+	// auto_submit (AutoSubmitReason 非空) 路径会跳过 deadline 校验 (见 Service.Submit).
+	grace := -1
+	if cfg.Exam.AutoSubmit {
+		grace = cfg.Exam.GracePeriodSeconds
+	}
+	subSvc := submissions.NewService(pool, subRepo, papers.LoadSnapshot,
+		func(q map[string]any, ans any, partial bool) (map[string]any, error) {
+			return objective.Grade(q, ans, partial)
+		}, jobsSvc, grace)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
-		Config:     cfg,
-		StaticRoot: static,
-		ReloadConfig: reloadFn,
+		Config:             cfg,
+		StaticRoot:         static,
+		ReloadConfig:       reloadFn,
+		Pool:               pool,
+		SubmissionsService: subSvc,
 	})
 
 	srv := &http.Server{

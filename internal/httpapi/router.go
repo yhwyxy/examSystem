@@ -8,9 +8,11 @@ import (
 	"time"
 
 	"github.com/yhwyxy/examSystem/internal/config"
+	"github.com/yhwyxy/examSystem/internal/submissions"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Dependencies 是 NewRouter 的依赖注入容器。
@@ -21,6 +23,12 @@ type Dependencies struct {
 	// ReloadConfig 是 reload-config 路由的刷新回调;
 	// 返回 (success, message)。message 会原样回给 client。
 	ReloadConfig func() (ok bool, message string)
+
+	// Pool 供 student 路径 (Task 6) 使用: submissions.Service 等底层需 *pgxpool.Pool.
+	Pool *pgxpool.Pool
+	// SubmissionsService 是 POST /api/session/submit / GET /api/submission/{id}/status
+	// 的核心依赖. 任一缺失时对应路由返 503 (plan Files 参考 Task 6 Step 5).
+	SubmissionsService *submissions.Service
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。
@@ -55,6 +63,14 @@ func NewRouter(deps Dependencies) http.Handler {
 	r.Route("/api", func(api chi.Router) {
 		api.Get("/health", healthHandler())
 		api.Post("/reload-config", reloadConfigHandler(deps))
+
+		// Task 6 student 提交 + 状态查询.提交路由 (POST /api/session/submit)
+		// 接收 raw JSON, 调 submissions.Service.Submit 主路径编排.
+		if deps.SubmissionsService != nil {
+			api.Post("/session/submit", submitHandler(deps))
+			api.Get("/submission/{id}/status", submissionStatusHandler(deps))
+		}
+
 		// /api/* 未知 -> JSON 404
 		MountAPI404(api)
 	})

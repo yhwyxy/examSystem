@@ -42,3 +42,6 @@ data/exam_runs/
 # Local model caches / vendored wheels
 models/
 packages/
+
+# task6: 临时构建产物 (go build ./cmd/exam-server -> 当前 binary)
+/exam-server

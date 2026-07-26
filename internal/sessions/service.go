@@ -15,6 +15,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/jackc/pgx/v5"
 )
 
 // Service 编排会话生命周期. 依赖:
@@ -48,43 +50,56 @@ type RunsLookup interface {
 
 // RunLite 是 runs.Run 的裁剪视图, 仅含 sessions 关心的字段. 由 HTTP 层/adaptor 装箱.
 type RunLite struct {
-	ID         string
-	PaperID    string
-	Status     string // "open"/"closing"/"closed"
-	Duration   time.Duration
-	FinalizeAt *time.Time
-	RoundNo    int
+	ID           string
+	PaperID      string
+	PaperName    string // 等同 PaperID (exam_runs 无独立 paper_name 列); 备纸用
+	Status       string // "open"/"closing"/"closed"
+	Duration     time.Duration
+	FinalizeAt   *time.Time
+	RoundNo      int
+	SnapshotPath string // 评分快照文件绝对路径 (Task 6 客观题即时判分所需)
+	SnapshotHash string // 评分快照 sha256 hex (Task 6 校验用)
 }
 
 // SubmissionStore 是 submissions 包暴露的最小接口 (由 Task 6 实现).
-// CreateFromSessionTx 在调用方 tx 内插一条 pending submission, 返回 submission id;
-// DuplicateExists 在调用方 tx 内查 (run_id, employee_id) 是否已提交.
+// CreateFromSessionTx 在调用方 tx 内插一条 pending submission (含客观题即时判分
+// 写入 grading_detail_json / objective_score / objective_max_score), 返回 submission id;
+// DuplicateExists 在调用方 tx 内查 (run_id, employee_id) 是否已提交;
+// FindIDForRunEmployee 在调用方 tx 内幂等取回 submission_id.
+//
+// Task 6 将接口签名扩展为显式传 pgx.Tx: 保证 submission INSERT / grading_jobs INSERT /
+// session MarkSubmitted 三步在同一原子单元内完成 (plan Step 2 "短事务" 要求).
 type SubmissionStore interface {
-	CreateFromSessionTx(ctx context.Context, in SubmissionInput) (string, error)
-	DuplicateExists(ctx context.Context, runID, employeeID string) (bool, error)
-	FindIDForRunEmployee(ctx context.Context, runID, employeeID string) (string, error)
+	CreateFromSessionTx(ctx context.Context, tx pgx.Tx, in SubmissionInput) (string, error)
+	DuplicateExists(ctx context.Context, tx pgx.Tx, runID, employeeID string) (bool, error)
+	FindIDForRunEmployee(ctx context.Context, tx pgx.Tx, runID, employeeID string) (string, error)
 }
 
 // SubmissionInput 是 sessions 给 submissions 的入参 (跨包 transport).
 type SubmissionInput struct {
-	Name            string
-	EmployeeID      string
-	PaperID         string
-	RunID           string
-	PaperName       string
-	Department      *string
-	Answers         []byte          // raw canonical answers json
-	AnswersMap      map[string]any  // for objective grading input
-	StartedAt       time.Time
-	SubmittedAt     time.Time
-	ClientIP        *string
-	UserAgent       *string
+	Name             string
+	EmployeeID       string
+	PaperID          string
+	RunID            string
+	PaperName        string
+	Department       *string
+	Answers          []byte          // raw canonical answers json
+	AnswersMap       map[string]any  // for objective grading input
+	StartedAt        time.Time
+	SubmittedAt      time.Time
+	ClientIP         *string
+	UserAgent        *string
 	AutoSubmitReason *string
+
+	// 客观题即时判分输入 (Task 6). 由 SubmitManual 从 run.PaperName + run.Snapshot*
+	// 填充; submissions.CreateFromSessionTx 在事务内 papers.LoadSnapshot + grade.
+	SnapshotPath string
+	SnapshotHash string
 }
 
 // JobEnqueuer 是 jobs 包最小接口 (由 Task 6 实现). EnqueueTx 在调用方 tx 内.
 type JobEnqueuer interface {
-	EnqueueTx(ctx context.Context, submissionID string, payload []byte) error
+	EnqueueTx(ctx context.Context, tx pgx.Tx, submissionID string, payload []byte) error
 }
 
 // NewService 构造. runsLookup 必须非空; submission/jobEnqueue 在 Task 6 接入前
@@ -472,6 +487,13 @@ func (s *Service) SubmitManual(ctx context.Context, q pgxExec, req SubmitManualR
 	if s.submission == nil || s.jobEnqueue == nil {
 		return nil, ErrSubmitDisabled
 	}
+	// Plan Step 2: 全部只读 + 写入必须落在同一 pgx.Tx 内 (HTTP 层 Begin/Commit/Rollback).
+	// pgx.Tx 实现 pgxExec; *pgxpool.Pool 也实现 pgxExec 但不是 pgx.Tx - 拒绝以防止
+	// auto-tx 让 INSERT submission / INSERT job / MarkSubmitted 三步失去原子性.
+	tx, ok := q.(pgx.Tx)
+	if !ok {
+		return nil, fmt.Errorf("sessions.SubmitManual: %w", ErrSubmitRequiresTx)
+	}
 	if req.SessionToken == "" {
 		return nil, ErrInvalidSessionToken
 	}
@@ -492,7 +514,7 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	}
 	if sess.Status == StatusSubmitted {
 		// 幂等: 已提交, 取回 submission_id 当 New=false
-		subID, err := s.submission.FindIDForRunEmployee(ctx, sess.RunID, sess.EmployeeID)
+		subID, err := s.submission.FindIDForRunEmployee(ctx, tx, sess.RunID, sess.EmployeeID)
 		if err != nil {
 			return nil, fmt.Errorf("sessions.SubmitManual idempotent lookup: %w", err)
 		}
@@ -518,12 +540,12 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	}
 
 	// 3. duplicate submission check (submissions.DuplicateExists on run+employee)
-	dup, err := s.submission.DuplicateExists(ctx, sess.RunID, sess.EmployeeID)
+	dup, err := s.submission.DuplicateExists(ctx, tx, sess.RunID, sess.EmployeeID)
 	if err != nil {
 		return nil, fmt.Errorf("sessions.SubmitManual dup-check: %w", err)
 	}
 	if dup {
-		subID, err2 := s.submission.FindIDForRunEmployee(ctx, sess.RunID, sess.EmployeeID)
+		subID, err2 := s.submission.FindIDForRunEmployee(ctx, tx, sess.RunID, sess.EmployeeID)
 		if err2 != nil {
 			return nil, fmt.Errorf("sessions.SubmitManual dup-id lookup: %w", err2)
 		}
@@ -537,11 +559,14 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	// 由于 CreateFromSessionTx 内部会在同一 Exec/QueryRow 上写 submissions / review_logs / jobs,
 	// HTTP 层负责 Begin/Commit/Rollback, Service 不感知 tx 类型.)
 
-	subID, err := s.submission.CreateFromSessionTx(ctx, SubmissionInput{
+	subID, err := s.submission.CreateFromSessionTx(ctx, tx, SubmissionInput{
 		Name:             sess.Name,
 		EmployeeID:       sess.EmployeeID,
 		PaperID:          run.PaperID,
 		RunID:            run.ID,
+		PaperName:        run.PaperName,
+		SnapshotPath:     run.SnapshotPath,
+		SnapshotHash:     run.SnapshotHash,
 		Department:       sess.Department,
 		Answers:          req.Answers,
 		AnswersMap:       req.AnswersMap,
@@ -554,7 +579,10 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	if err != nil {
 		return nil, fmt.Errorf("sessions.SubmitManual create submission: %w", err)
 	}
-	if err := s.jobEnqueue.EnqueueTx(ctx, subID, req.Answers); err != nil {
+	// 构造 grading job spec payload: paper_id / run_id / generation=1.
+	// jobs.Service.EnqueueTx 解析 JSON 字段; 缺失字段容错用默认 generation=1.
+	jobPayload := mustJobSpecJSON(run.PaperID, sess.RunID, 1)
+	if err := s.jobEnqueue.EnqueueTx(ctx, tx, subID, jobPayload); err != nil {
 		return nil, fmt.Errorf("sessions.SubmitManual enqueue: %w", err)
 	}
 	if _, err := s.repo.MarkSubmitted(ctx, q, sess.ID); err != nil {
@@ -568,6 +596,23 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	}, nil
 }
 
+// mustJobSpecJSON 构造 jobs.Service.EnqueueTx 期望的 payload JSON.
+// Marshal 出错时返回空 []byte{} (容错: EnqueueTx 见空 payload 仍按默认
+// generation=1 入队, 但 paper_id/run_id 会缺失 -> 仅作兜底).
+func mustJobSpecJSON(paperID, runID string, generation int) []byte {
+	b, _ := json.Marshal(map[string]any{
+		"paper_id":   paperID,
+		"run_id":     runID,
+		"generation": generation,
+	})
+	return b
+}
+
+
 // ErrSubmitDisabled 是 submission/job 依赖未注入时的合约错误 (HTTP 映射 503).
 var ErrSubmitDisabled = errors.New("sessions: SUBMIT_DISABLED")
+
+// ErrSubmitRequiresTx 表示 SubmitManual 收到的 q 不是 pgx.Tx (调用方传入 *pgxpool.Pool
+// auto-tx 时无法整体回滚, 拒绝). HTTP 映射 500.
+var ErrSubmitRequiresTx = errors.New("sessions: SUBMIT_REQUIRES_TX")
 

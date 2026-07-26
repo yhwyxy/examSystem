@@ -104,10 +104,13 @@ func (r *runsSvcLookup) FindByID(ctx context.Context, id string) (*sessions.RunL
 // runToRunLite 把 runs.Run 裁剪成 sessions.RunLite.
 func runToRunLite(r *runs.Run) *sessions.RunLite {
 	rl := &sessions.RunLite{
-		ID:       r.ID,
-		PaperID:  r.PaperID,
-		Status:   string(r.Status),
-		RoundNo:  r.RoundNo,
+		ID:           r.ID,
+		PaperID:      r.PaperID,
+		PaperName:    r.PaperID,
+		Status:       string(r.Status),
+		RoundNo:      r.RoundNo,
+		SnapshotPath: r.SnapshotPath,
+		SnapshotHash: r.SnapshotHash,
 	}
 	if r.DurationMinutes > 0 {
 		rl.Duration = time.Duration(r.DurationMinutes) * time.Minute
