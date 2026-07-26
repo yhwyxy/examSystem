@@ -29,16 +29,33 @@ type Service struct {
 	// 仅服务端 admin 重建 exam-link 用, 不入库. 文件名 <runID>.token, 0600.
 	// 空字符串 -> token 持久化禁用 (admin exam-link GET 无法重建 url).
 	tokenDir string
+	// examAutoSubmit 是 Settings.Exam.AutoSubmit 的运行时副本.
+	// 注入靠 WithExamAutoSubmit, 调用方应在 main.go 装配段从 cfg.Exam.AutoSubmit 读.
+	// 缺省 true (与 Python 旧行为 + config.go 行 170 default 一致).
+	examAutoSubmit bool
 }
 
 // NewService 创建 Service. pubRoot 必填; tokenDir 可空 (admin exam-link 重建 URL 需).
 func NewService(repo *Repository, papersStore *papers.Store, pubRoot string) *Service {
-	return &Service{repo: repo, papers: papersStore, pubRoot: pubRoot}
+	return &Service{
+		repo:           repo,
+		papers:         papersStore,
+		pubRoot:        pubRoot,
+		examAutoSubmit: true, // 缺省与 Python 旧行为 + config.go default 一致
+	}
 }
 
 // WithTokenDir 注入 token 侧车文件落盘目录. 调 NewService 后链式设.
 func (s *Service) WithTokenDir(dir string) *Service {
 	s.tokenDir = dir
+	return s
+}
+
+// WithExamAutoSubmit 注入 settings.exam.auto_submit (从 cfg.Exam.AutoSubmit 读).
+// 调 NewService 后链式设. 影响 GetPublicExam 返回 AutoSubmit 字段, frontend exam.js
+// 行 473 用 它决定 "时间到自动交卷" 与否.
+func (s *Service) WithExamAutoSubmit(enabled bool) *Service {
+	s.examAutoSubmit = enabled
 	return s
 }
 
@@ -223,7 +240,7 @@ func (s *Service) GetPublicExam(ctx context.Context, tx pgx.Tx, run *Run) (*Publ
 		DurationMinutes: run.DurationMinutes,
 		FinalizeAt:      run.FinalizeAt,
 		ServerTime:      time.Now().UTC(),
-		AutoSubmit:      true, // TODO: 取自 settings.exam.auto_submit
+		AutoSubmit:      s.examAutoSubmit, // 2026-07-26: 从 settings.exam.auto_submit 读, 非 硬编码
 		Closed:          closed,
 		ExamInfo:        examInfo,
 		Questions:       papers.SanitizeForStudent(questionsDocs),

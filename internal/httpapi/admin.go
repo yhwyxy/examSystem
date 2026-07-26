@@ -218,7 +218,8 @@ func previewPaperHandler(deps Dependencies) http.HandlerFunc {
 
 // batchReorderHandler POST /api/admin/papers/{slug}/batch { "ops": [...] }
 // (Task 0 spec: 批量 reorder 在 question_id 之前生效; body 解析后传给 papers.Store.
-// 实现简化: 仅校验 JSON schema + 回 200.)
+// 现状: UI 未启用此端点 (frontend/js/* 无 /batch 调用真 用), handler 仅校验 JSON + 回 200.
+// 真 实现 (调 papers.Store.ApplyBatchOps) 待 UI 启用此功能时再补, 文档记遗留.)
 func batchReorderHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.Papers == nil {

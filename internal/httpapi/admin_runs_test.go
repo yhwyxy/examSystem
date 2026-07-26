@@ -41,6 +41,9 @@ func TestRoutes_NewBatchAndExamLinkRegistered(t *testing.T) {
 		{http.MethodPost, "/api/admin/exam-link"},
 		{http.MethodPost, "/api/admin/exams/reset-rounds"},
 		{http.MethodGet, "/api/admin/exams"},
+		// 2026-07-26 修正: UI exam.js:746 真 调 /api/submit (前仅 /api/session/submit -> 404)
+		{http.MethodPost, "/api/submit"},
+		{http.MethodPost, "/api/session/submit"}, // 向后兼容保留
 	}
 	for _, tc := range cases {
 		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader("{}"))

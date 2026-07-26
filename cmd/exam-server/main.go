@@ -209,6 +209,7 @@ func cmdServe(args []string) error {
 		runService = runService.WithTokenDir(cfg.Logging.RunTokenDir)
 		_ = os.MkdirAll(cfg.Logging.RunTokenDir, 0o700)
 	}
+	runService = runService.WithExamAutoSubmit(cfg.Exam.AutoSubmit) // 2026-07-26 不硬编码
 
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,

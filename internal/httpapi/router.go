@@ -85,10 +85,15 @@ func NewRouter(deps Dependencies) http.Handler {
 
 		// Task 6 student 提交 + 状态查询.提交路由 (POST /api/session/submit)
 		// 接收 raw JSON, 调 submissions.Service.Submit 主路径编排.
-		if deps.SubmissionsService != nil {
-			api.Post("/session/submit", submitHandler(deps))
-			api.Get("/submission/{id}/status", submissionStatusHandler(deps))
-		}
+		// 注: 不用 if nil gate (与 admin.RunService nil gate 一致, 路由always mount, handler 内返503).
+		// 这样无 SubmissionsService 注入时 UI/CI 路由仍可达, handler 友好返 503 而非 404
+		// (避免 UI 误判 "不支持此功能" 而非 "服务暂不可用")
+		api.Post("/session/submit", submitHandler(deps))
+		// UI exam.js:746 实际调 POST /api/submit (非 /api/session/submit);
+		// 路径 mismatch bug 2026-07-26 核查发现, 加 /api/submit 等价 handler 适配 UI,
+		// 旧 /api/session/submit 保留向后兼容.
+		api.Post("/submit", submitHandler(deps))
+		api.Get("/submission/{id}/status", submissionStatusHandler(deps))
 
 		// Task 9 admin 路由组 (/api/admin/*): papers/open/close/batch/reorder/preview/
 		// exams/exam-link/reset-rounds/login/reload-config. RequireAdmin middleware.
