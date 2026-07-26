@@ -205,8 +205,16 @@ class _GoHTTPClient:
 
     def _do(self, method: str, path: str, json_body: Any | None, **kw: Any) -> Any:
         import httpx
+        # 兼容 kw 与显式 json_body 同时存在 (旧 fixture bug: 同时 json=json_body + **kw
+        # 在测试用 json=... kwargs 时撞名 "multiple values for keyword argument 'json'").
+        # 优先级: 显式 json_body 覆盖 kw.json; 同时清洗 kw 内 json.
+        body = json_body
+        if body is None and "json" in kw:
+            body = kw.pop("json")
+        elif "json" in kw:
+            kw.pop("json")
         with httpx.Client(base_url=self._base, timeout=10.0) as cli:
-            r = cli.request(method, path, json=json_body, **kw)
+            r = cli.request(method, path, json=body, **kw)
         return _GoResponse(r)
 
     def get(self, path: str, **kw: Any) -> Any:
