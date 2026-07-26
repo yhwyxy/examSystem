@@ -62,6 +62,10 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		admin.Get("/exams", listExamsHandler(deps))
 		// UI 用 GET, Python 旧栈也用 GET (main.py 行 520); 兼容旧 POST 保留
 		admin.Get("/exam-link", examLinkHandlerGET(deps))
+		// UI papers.js:546 / 779 实际调 GET /papers/{slug}/exam-link (路径形态).
+		// handler 内自动识别 chi.URLParam(slug) 优先, 回退 query paper_slug (旧式),
+		// 复用 examLinkHandlerGET, 两种形态同 handler.
+		admin.Get("/papers/{slug}/exam-link", examLinkHandlerGET(deps))
 		admin.Post("/exam-link", examLinkHandler(deps))
 		// UI papers.js:1027 真 调用 POST /exams/reset-rounds
 		admin.Post("/exams/reset-rounds", resetRoundsHandler(deps))
@@ -396,17 +400,23 @@ func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // examLinkHandlerGET GET /api/admin/exam-link?paper_slug=<slug>
+//   兼容 GET /api/admin/papers/{slug}/exam-link (UI papers.js:546/779 真 用路径形态)
 // 重建当前最近一条 open run 的公开 URL. 从 snapshot 文件读 hash + token 侧车重建.
-// 不返回 QR (Go 当前未引 QR 库; UI 可自行实现, 见 Task 14 文档).
+// qr_base64 由 makeQRDataURL 真生成 (Task 14 fix 分支已补 QR 库).
 func examLinkHandlerGET(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.RunService == nil || deps.Pool == nil {
 			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service or pool missing")
 			return
 		}
-		slug := r.URL.Query().Get("paper_slug")
+		// slug 源: 优先 chi path param {slug} (UI papers/{slug}/exam-link 形态),
+		// 回退 query string paper_slug (兼容旧 ?paper_slug= 形态)
+		slug := chi.URLParam(r, "slug")
 		if slug == "" {
-			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "paper_slug query required")
+			slug = r.URL.Query().Get("paper_slug")
+		}
+		if slug == "" {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "paper_slug (path or query) required")
 			return
 		}
 		ctx := r.Context()

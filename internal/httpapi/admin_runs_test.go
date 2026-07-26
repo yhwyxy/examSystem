@@ -38,6 +38,8 @@ func TestRoutes_NewBatchAndExamLinkRegistered(t *testing.T) {
 		{http.MethodPost, "/api/admin/papers/batch/open"},
 		{http.MethodPost, "/api/admin/papers/batch/close"},
 		{http.MethodGet, "/api/admin/exam-link"},
+		// UI papers.js:546/779 真 调 /papers/{slug}/exam-link 路径形态 (非 query string)
+		{http.MethodGet, "/api/admin/papers/t1/exam-link"},
 		{http.MethodPost, "/api/admin/exam-link"},
 		{http.MethodPost, "/api/admin/exams/reset-rounds"},
 		{http.MethodGet, "/api/admin/exams"},
