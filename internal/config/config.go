@@ -110,7 +110,10 @@ type WorkerConfig struct {
 }
 
 type LoggingConfig struct {
-	Directory string `yaml:"directory"`
+	Directory  string `yaml:"directory"`
+	MaxSizeMB  int    `yaml:"max_size_mb"`  // Task 12: 日志轮转单文件大小上限 MB; 0 -> 默认 20
+	MaxBackups int    `yaml:"max_backups"` // Task 12: 日志保留份数; 0 -> 默认 10
+	MaxAgeDays int    `yaml:"max_age_days"` // Task 12: 日志保留天数; 0 -> 不删除 (按份数 MaxBackups)
 }
 
 // Load 从 yaml 路径加载配置; 应用环境变量覆盖; 不做强制校验,
@@ -177,6 +180,13 @@ func applyDefaults(cfg *Config) {
 	cfg.Worker.HeartbeatSeconds = 60
 	cfg.Worker.MaxAttempts = 5
 	cfg.Logging.Directory = "logs"
+	if cfg.Logging.MaxSizeMB == 0 {
+		cfg.Logging.MaxSizeMB = 20 // Task 12 plan: 单文件 20MB
+	}
+	if cfg.Logging.MaxBackups == 0 {
+		cfg.Logging.MaxBackups = 10 // Task 12 plan: 保留 10 份
+	}
+	// MaxAgeDays=0 保留默认 (按份数); 显式配了则按天数清理
 }
 
 // ValidateRequired 校验子命令 (serve/preflight/migrate) 启动前的必填项.

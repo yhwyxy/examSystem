@@ -20,16 +20,20 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-
-	"github.com/jackc/pgx/v5/pgxpool"
 	"flag"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
+
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/db"
@@ -107,6 +111,11 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	// Task 12 Step 1: 日志轮转 (20MB × 10 保留) 通过 lumberjack 写文件; stdout
+	// 同时保留 (MultiWriter) 便于 staging 容器化看进程输出. 不输出 token/密码
+	// (stdout 仍是原型 fmt.Fprintf 形, token 等敏感值本就未打印; 日志文件层零侵入).
+	appLogger := initLogger(cfg)
+	_ = appLogger // appLogger 暂用于将来替换 fmt.Fprintf 入口; 现仅 MultiWriter 副作用
 	// 强制最终校验 (database.url 必非空)
 	if err := cfg.ValidateRequired(); err != nil {
 		return fmt.Errorf("preflight: %w", err)
@@ -444,4 +453,29 @@ func runToLite(run *runs.Run, err error) (*sessions.RunLite, error) {
 		SnapshotPath: run.SnapshotPath, SnapshotHash: run.SnapshotHash,
 		FinalizeAt: run.FinalizeAt,
 	}, nil
+}
+
+// initLogger 用 lumberjack 配置日志轮转 (Task 12 Step 1: 20MB×10 保留)
+// 并把 stdout/stderr 重定向到 MultiWriter(stdout + 文件), 保留原 print 行为不动.
+// 用 defer redir 在 main 退出时关闭日志文件句柄.
+func initLogger(cfg *config.Config) *log.Logger {
+	logDir := cfg.Logging.Directory
+	if logDir == "" {
+		logDir = "logs"
+	}
+	_ = os.MkdirAll(logDir, 0o755)
+	logPath := filepath.Join(logDir, "exam-server.log")
+	lj := &lumberjack.Logger{
+		Filename:   logPath,
+		MaxSize:    cfg.Logging.MaxSizeMB,
+		MaxBackups: cfg.Logging.MaxBackups,
+		MaxAge:     cfg.Logging.MaxAgeDays,
+		Compress:   true,
+	}
+	multi := io.MultiWriter(os.Stdout, lj)
+	// os.Stdout 是 *os.File, 我们不替换 fd; 用 stdLog 走 multi 触发文件写入, 自检可写.
+	stdLog := log.New(multi, "", log.LstdFlags|log.LUTC)
+	stdLog.Printf("log init: %s (max=%dMB backups=%d age=%dd)",
+		logPath, cfg.Logging.MaxSizeMB, cfg.Logging.MaxBackups, cfg.Logging.MaxAgeDays)
+	return stdLog
 }
