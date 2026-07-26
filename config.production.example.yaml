@@ -1,0 +1,35 @@
+# ExamSystem Go-PG production config template (Task 12 Step 2).
+# 全部密钥均为空脱敏; 部署时填入真实值. 不从工作区 config.yaml 复制值.
+server:
+  host: "0.0.0.0"
+  port: 8000
+  allow_origins: ["*"]
+exam:
+  title: "企业内部考试"
+  duration_minutes: 60
+  auto_submit: true
+  grace_period_seconds: 30
+  allow_duplicate_submit: false
+  duplicate_key: "employee_id"
+  enable_global_time_window: false
+  start_time: null
+  end_time: null
+scoring:
+  multiple_choice_partial: true
+  wrong_choice_penalty: false
+  score_precision: 1
+review:
+  high_confidence_threshold: 0.75
+  need_review_threshold: 0.5
+  low_confidence_threshold: 0.35
+grading:
+  sync_grading: false
+model:
+  reranker: "models/reranker"
+admin:
+  enable_auth: true
+  password: ""
+export:
+  format: "xlsx"
+database:
+  url: ""
