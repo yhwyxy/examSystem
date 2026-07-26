@@ -7,7 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
+	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +32,12 @@ type Dependencies struct {
 	// SubmissionsService 是 POST /api/session/submit / GET /api/submission/{id}/status
 	// 的核心依赖. 任一缺失时对应路由返 503 (plan Files 参考 Task 6 Step 5).
 	SubmissionsService *submissions.Service
+
+	// Task 9 admin 路径.
+	Auth       *auth.Store  // nil 时所有 admin 路由放行 (与 Python enable_auth=false parity)
+	Papers     *papers.Store // 试卷文件写入入口 (per-slug mutex + atomic write)
+	Runs       *runs.Repository // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
+	AdminToken string           // 缺省 token (enable_auth=false 时供 admin_headers 用)
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。
@@ -70,6 +79,10 @@ func NewRouter(deps Dependencies) http.Handler {
 			api.Post("/session/submit", submitHandler(deps))
 			api.Get("/submission/{id}/status", submissionStatusHandler(deps))
 		}
+
+		// Task 9 admin 路由组 (/api/admin/*): papers/open/close/batch/reorder/preview/
+		// exams/exam-link/reset-rounds/login/reload-config. RequireAdmin middleware.
+		MountAdmin(api, deps)
 
 		// /api/* 未知 -> JSON 404
 		MountAPI404(api)

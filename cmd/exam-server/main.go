@@ -26,6 +26,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/db"
 	"github.com/yhwyxy/examSystem/internal/finalize"
@@ -161,12 +162,28 @@ func cmdServe(args []string) error {
 	finalizeSvc := finalize.NewService(pool, runsRepo, sessionsRepo, subRepo,
 		cfg.Exam.GracePeriodSeconds)
 
+	// Task 9: auth + papers + 注入 admin 路由. enable_auth=false -> RequireAdmin 放行.
+	authStore := auth.NewStore(cfg.Admin.EnableAuth,
+		func() (string, error) {
+			if cfg.Admin.Password == nil {
+				return "", auth.ErrInvalidCredentials
+			}
+			return *cfg.Admin.Password, nil
+		})
+	papersStore, err := papers.NewStore(static)
+	if err != nil {
+		return fmt.Errorf("open papers store: %w", err)
+	}
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,
 		StaticRoot:         static,
 		ReloadConfig:       reloadFn,
 		Pool:               pool,
 		SubmissionsService: subSvc,
+		Auth:               authStore,
+		Papers:             papersStore,
+		Runs:               runsRepo,
 	})
 
 	srv := &http.Server{
