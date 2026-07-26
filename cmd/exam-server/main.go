@@ -28,10 +28,13 @@ import (
 
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/db"
+	"github.com/yhwyxy/examSystem/internal/finalize"
 	"github.com/yhwyxy/examSystem/internal/httpapi"
 	"github.com/yhwyxy/examSystem/internal/jobs"
 	"github.com/yhwyxy/examSystem/internal/objective"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/runs"
+	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 )
 
@@ -152,6 +155,12 @@ func cmdServe(args []string) error {
 			return objective.Grade(q, ans, partial)
 		}, jobsSvc, grace)
 
+	// Task 8: finalize 服务 - 收卷轮询 (ScanDue 每 1s) + FinalizeRun 原子事务.
+	runsRepo := runs.NewRepository()
+	sessionsRepo := sessions.NewRepository()
+	finalizeSvc := finalize.NewService(pool, runsRepo, sessionsRepo, subRepo,
+		cfg.Exam.GracePeriodSeconds)
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,
 		StaticRoot:         static,
@@ -173,6 +182,29 @@ func cmdServe(args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
+	// Task 8: finalize ticker. 每 1s 调 ScanDue; graceful shutdown 等
+	// 当前 ScanDue 结束 (最长 7s 与 srv.Shutdown 并行).
+	doneFinalize := make(chan struct{})
+	go func() {
+		defer close(doneFinalize)
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				nR, nS, ferr := finalizeSvc.ScanDue(ctx)
+				if ferr != nil && !errors.Is(ferr, context.Canceled) {
+					fmt.Fprintf(os.Stderr, "finalize.ScanDue err: %v\n", ferr)
+				}
+				if nR > 0 || nS > 0 {
+					fmt.Fprintf(os.Stdout, "finalize: closed %d runs, auto-submitted %d sessions\n", nR, nS)
+				}
+			}
+		}
+	}()
+
 	go func() {
 		fmt.Fprintf(os.Stdout, "exam-server serve listening on %s (config=%s static=%s)\n", listen, *cfgPath, static)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -187,6 +219,12 @@ func cmdServe(args []string) error {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
+	}
+	// 等 finalize ticker 退出 (ctx.Done 触发 return; 现同窗口最长 7s).
+	select {
+	case <-doneFinalize:
+	case <-time.After(7 * time.Second):
+		fmt.Fprintln(os.Stderr, "finalize ticker did not stop within 7s")
 	}
 	fmt.Fprintln(os.Stdout, "exam-server stopped.")
 	return nil

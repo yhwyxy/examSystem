@@ -193,6 +193,33 @@ func (r *Repository) FindByID(ctx context.Context, tx pgx.Tx, id string) (*Run, 
 	return run, nil
 }
 
+// FindDueClosingTx 列出所有 "closing" 状态且已到 FinalizeAt 的 run id (FOR UPDATE SKIP LOCKED).
+// 调用方在事务内完成 finalize 后 commit/rollback. 锁仅 lock 这一 SELECT row.
+func (r *Repository) FindDueClosingTx(ctx context.Context, tx pgx.Tx) ([]string, error) {
+	rows, err := tx.Query(ctx, `
+SELECT id FROM exam_runs
+WHERE status = $1 AND finalize_at IS NOT NULL AND finalize_at <= now()
+ORDER BY finalize_at, id
+FOR UPDATE SKIP LOCKED
+LIMIT 32`, string(StatusClosing))
+	if err != nil {
+		return nil, fmt.Errorf("runs.FindDueClosingTx query: %w", err)
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if cerr := rows.Scan(&id); cerr != nil {
+			return nil, fmt.Errorf("runs.FindDueClosingTx scan: %w", cerr)
+		}
+		out = append(out, id)
+	}
+	if cerr := rows.Err(); cerr != nil {
+		return nil, fmt.Errorf("runs.FindDueClosingTx rows.Err: %w", cerr)
+	}
+	return out, nil
+}
+
 // isNoRows 检 pgx.ErrNoRows.
 func isNoRows(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
