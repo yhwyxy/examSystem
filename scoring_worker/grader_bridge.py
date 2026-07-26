@@ -135,18 +135,37 @@ def parse_scoring_rubric(
     return points
 
 
+def _to_scoring_points(points: list[tuple[str, float]] | None) -> list[Any]:
+    """解析出的 (desc, score) tuple 列表 -> subjective_scoring.ScoringPoint 列表.
+
+    ScoringPoint 字段 (0.1.7): id/description/max_score.
+    """
+    if not points:
+        return []
+    from subjective_scoring import ScoringPoint  # type: ignore
+    out = []
+    for idx, (desc, sc) in enumerate(points):
+        out.append(ScoringPoint(
+            id=f"p{idx + 1}",
+            text=str(desc),
+            score=float(sc),
+        ))
+    return out
+
+
 def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
     """question --> ScoringRequest (subjective_scoring 0.1.7 API).
 
-    scoring_mode 映射:
-        text -> text 普通短答
-        code -> code/sql (code_completion/sql_completion 复用 code mode)
-    scoring_points 由 parse_scoring_rubric 给出 (None -> 空列表走 judge 自由打分).
+    字段对齐 ScoringRequest 真实 schema (preflight 2026-07-26 校验):
+        question (非 question_text) / question_type / code_language /
+        scoring_points: list[ScoringPoint] (非 tuple) / scoring_config.
+    scoring_mode 映射: text->TEXT, code/sql/code_completion->CODE.
     """
     from subjective_scoring import ScoringMode  # type: ignore
-    qtype = str(question.get("type", ""))
+    qtype = str(question.get("type", "") or "")
     mode_raw = str(question.get("scoring_mode") or "").strip().lower()
-    has_lang = bool(question.get("allowed_languages") or question.get("code_language"))
+    has_lang = bool(question.get("allowed_languages")
+                    or question.get("code_language"))
     if mode_raw == "code" or (mode_raw == "" and has_lang):
         mode = ScoringMode.CODE
     else:
@@ -155,18 +174,25 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         question.get("scoring_rubric"),
         question.get("score"),
     )
+    sp_list = _to_scoring_points(scoring_points)
+    code_lang = (question.get("code_language")
+                 or (question.get("allowed_languages") or [None])[0]
+                 if isinstance(question.get("allowed_languages"), list)
+                    and question.get("allowed_languages")
+                 else question.get("code_language"))
     request_kwargs: dict[str, Any] = {
         "question_id": str(question.get("id", "?")),
-        "question_text": str(question.get("question", "")),
+        "question_type": qtype or "subjective",
+        "question": str(question.get("question", "")),
         "reference_answer": str(question.get("answer", "")),
         "student_answer": student_answer,
-        "answer_language": "sql" if qtype in ("sql", "sql_completion", "code_completion") else None,
-        "answer_code_language": (question.get("code_language") or
-                                 (str(question.get("allowed_languages") or [None])[0] if isinstance(question.get("allowed_languages"), list) and question.get("allowed_languages") else None)),
+        "code_language": code_lang if qtype in
+                          ("sql", "sql_completion",
+                           "code_completion", "code") else None,
+        "course_type": question.get("course_type"),
         "max_score": float(question.get("score", 0) or 0),
         "scoring_mode": mode,
-        "scoring_points": scoring_points or [],
-        "banned_languages_raw": question.get("banned_languages"),
+        "scoring_points": sp_list,
     }
     return _build_scoring_request_kwargs(request_kwargs)
 
@@ -178,11 +204,12 @@ def _build_scoring_request_kwargs(kwargs: dict[str, Any]) -> Any:
     keyword-only 严格区分, 转发到 ScoringRequest(**kwargs), 跳过 None 字段.
     """
     from subjective_scoring import ScoringRequest  # type: ignore
-    valid_keys = {"question_id", "question_text", "reference_answer",
-                  "student_answer", "answer_language", "answer_code_language",
-                  "max_score", "scoring_mode", "scoring_points",
-                  "banned_languages_raw"}
-    cleaned = {k: v for k, v in kwargs.items() if k in valid_keys and v is not None}
+    valid_keys = {"question_id", "question_type", "question",
+                  "reference_answer", "student_answer", "code_language",
+                  "course_type", "max_score", "scoring_mode",
+                  "scoring_points", "scoring_config"}
+    cleaned = {k: v for k, v in kwargs.items()
+               if k in valid_keys and v is not None}
     return ScoringRequest(**cleaned)
 
 
