@@ -1,6 +1,6 @@
 const AUTO_SUBMIT_AFTER_BLURS = 3;
 const AWAY_TIMEOUT_MS = 30_000;
-const DRAFT_LOOP_MS = 2000;
+const DRAFT_LOOP_MS = 5000;
 
 const urlParams = new URLSearchParams(window.location.search);
 const isPreview = urlParams.get('preview') === 'true';
@@ -562,8 +562,10 @@ function startTimerFromDeadline() {
   state.timerId = setInterval(tick, 1000);
 }
 
-async function saveDraftNow({ beacon = false } = {}) {
-  if (!state.sessionId || !state.sessionToken || state.locked) return false;
+async function saveDraftNow({ beacon = false, allowLocked = false } = {}) {
+  // locked 时仅由 handleClosingStatus 主动触发 (allowLocked:true) 才允许写; 否则直接早返.
+  if (!state.sessionId || !state.sessionToken) return false;
+  if (state.locked && !allowLocked) return false;
   if (!state.dirty && !beacon) return true;
   const answers = collectAnswers();
   const revision = state.draftRevision + 1;
@@ -572,38 +574,50 @@ async function saveDraftNow({ beacon = false } = {}) {
     revision,
     answers,
   };
+  const body = JSON.stringify(payload);
+  // 关闭/卸载 page 这种 beacon 场景, sendBeacon 不传递自定义 headers 且与 Python 老
+  // 后端的 JSON 解析偶有兼容性问题; plan Step 3 统一改 fetch PUT + keepalive:true.
+  // 60000 字节上限同 plan: 序列化超过此上限直接保留 dirty, 不发, 报"草稿过大".
+  if (body.length > 60000) {
+    state.dirty = true;
+    setDraftStatus('草稿过大, 等下次自动保存或手动存');
+    return false;
+  }
   state.saving = true;
   setDraftStatus('保存中');
   try {
-    if (beacon && navigator.sendBeacon) {
-      const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-      const ok = navigator.sendBeacon(`/api/exam/sessions/${encodeURIComponent(state.sessionId)}/draft`, blob);
-      if (ok) {
-        state.draftRevision = revision;
-        state.dirty = false;
-        setDraftStatus(`已保存 ${new Date().toLocaleTimeString()}`);
-      } else {
-        setDraftStatus('未保存');
-      }
-      return ok;
-    }
     const res = await fetch(`/api/exam/sessions/${encodeURIComponent(state.sessionId)}/draft`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body,
+      keepalive: true,
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       if (data.detail?.code === 'STALE_DRAFT_REVISION') {
-        state.dirty = false;
-        setDraftStatus('已保存（服务器版本）');
-        return true;
+        // 旧 bug: state.dirty = false / "已保存（服务器版本）". 修复: 读 detail.current_revision
+        // 同步本地 draftRevision; 保持 dirty=true 让下轮重发完整 answers 直到正常 ok.
+        if (typeof data.detail?.current_revision === 'number') {
+          state.draftRevision = data.detail.current_revision;
+        }
+        state.dirty = true;
+        setDraftStatus('已与服务器同步, 等下轮重发');
+        return false;
       }
       if (data.detail?.code === 'RUN_CLOSING' || data.detail?.code === 'RUN_CLOSED') {
         await handleClosingStatus(data.detail?.code === 'RUN_CLOSED' ? 'closed' : 'closing', data.detail?.message);
         return false;
       }
       throw new Error(data.detail?.message || '草稿保存失败');
+    }
+    if (data.saved === false) {
+      // 后端 ACK 但未真存 (例如 unexpected_write 保护), 保持 dirty=true 让下次重发.
+      state.dirty = true;
+      if (typeof data.draft_revision === 'number') {
+        state.draftRevision = data.draft_revision;
+      }
+      setDraftStatus('未保存, 等下轮自动保存');
+      return false;
     }
     state.draftRevision = data.draft_revision ?? revision;
     state.dirty = false;
@@ -616,6 +630,7 @@ async function saveDraftNow({ beacon = false } = {}) {
     }
     return true;
   } catch (e) {
+    state.dirty = true;
     setDraftStatus('未保存');
     return false;
   } finally {
@@ -653,7 +668,7 @@ async function handleClosingStatus(status, message) {
   stopAntiSwitch();
   if (state.timerId) clearInterval(state.timerId);
   state.dirty = true;
-  await saveDraftNow();
+  await saveDraftNow({ allowLocked: true });
   setDraftStatus('考试已结束，正在自动收卷');
   // keep polling for submission
   if (!state.draftLoopId) {

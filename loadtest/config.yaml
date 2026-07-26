@@ -1,0 +1,42 @@
+# Task 13 k6 容量测试 loadtest 专用 config.
+# 关 admin auth (prepare.py 不调 login); DSN search_path=loadtest 隔离 schema.
+# 不含任何密钥 - 仅本机/staging loadtest 用, 不可用于生产.
+server:
+  host: "127.0.0.1"
+  port: 18080
+  allow_origins: ["*"]
+exam:
+  title: "loadtest"
+  duration_minutes: 60
+  auto_submit: true
+  grace_period_seconds: 30
+  allow_duplicate_submit: true
+  duplicate_key: "employee_id"
+  enable_global_time_window: false
+  start_time: null
+  end_time: null
+scoring:
+  multiple_choice_partial: true
+  wrong_choice_penalty: false
+  score_precision: 1
+review:
+  high_confidence_threshold: 0.75
+  need_review_threshold: 0.5
+  low_confidence_threshold: 0.35
+grading:
+  sync_grading: false
+model:
+  reranker: ""
+admin:
+  enable_auth: false
+  password: ""
+export:
+  format: "xlsx"
+database:
+  # loadtest schema 隔离: search_path 强制走 loadtest schema (完全看不到 public)
+  # migrate 已用 exam_migrator 跑过, serve 本身用 exam_app (DML only, 真实生产权限模型)
+  url: "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable&options=-c%20search_path%3Dloadtest"
+logging:
+  level: "info"
+  dir: "/tmp/exam-server-loadtest-logs"
+  run_token_dir: "/tmp/exam-server-loadtest-tokens"   # Task 14: admin exam-link sidecar

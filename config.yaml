@@ -38,3 +38,29 @@ admin:
 
 export:
   format: "xlsx"
+
+# --- Go 服务新增段 (Task 1) ---
+# 数据库连接：生产通过 EXAM_DATABASE_URL 注入；本地为空时 serve/preflight 必失败
+database:
+  url: ""
+  max_conns: 32
+  min_conns: 4
+  connect_timeout_seconds: 5
+  statement_timeout_seconds: 10
+
+# 草稿节流：客户端写草稿最小间隔，避免高频冲刷
+draft:
+  min_server_interval_ms: 2000
+  max_json_bytes: 512000
+
+# 后台 Worker：扫表-锁租约-评分-心跳
+worker:
+  poll_interval_ms: 200
+  concurrency: 2
+  lease_seconds: 300
+  heartbeat_seconds: 60
+  max_attempts: 5
+
+# 日志目录（相对项目根或绝对路径）
+logging:
+  directory: "logs"

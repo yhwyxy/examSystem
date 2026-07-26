@@ -1,5 +1,19 @@
 # 企业在线考试兼批改系统
 
+> **双栈并存说明** 本仓库现为双栈: 新 **Go + PostgreSQL** 栈 (主力, 支撑更高并发)
+> 与旧 **Python + SQLite** 栈 (保留作回滚备份, 不再新增功能).
+> - Go+PG 部署: [DEPLOY.md](DEPLOY.md) → [docs/deployment-go-pg.md](docs/deployment-go-pg.md)
+> - 回滚流程: [docs/rollback-go-pg.md](docs/rollback-go-pg.md)
+> - 迁移收尾 + 已知遗留: [docs/cutover-go-pg.md](docs/cutover-go-pg.md)
+> - 部署后自检: `scoring_worker --preflight` + `Invoke-RestMethod /api/health`
+
+## Go + PostgreSQL 新栈 (主力)
+
+`cmd/exam-server/` (Go API, 仿 FastAPI 路由) + `scoring_worker/` (Python 评分 worker) +
+PostgreSQL 18. 替代 SQLite 旧栈, 支撑更高并发. 部署见 [DEPLOY.md](DEPLOY.md).
+
+## Python + SQLite 旧栈 (回滚备份)
+
 基于 FastAPI + SQLite 的企业内部在线考试 MVP，支持员工扫码答题、客观题自动判分、主观题多引擎评分（独立库 [subjective-scoring](https://github.com/yhwyxy/subjective-scoring)：文本评分点 / SQL AST / 代码混合）、管理员人工复核与 Excel 导出。
 
 ## 环境安装

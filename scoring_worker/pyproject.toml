@@ -1,0 +1,27 @@
+[project]
+name = "exam-system-scoring-worker"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "psycopg[binary]>=3.2,<4",
+    "pyyaml>=6.0,<7",
+    "python-dotenv>=1.0,<2",
+    "subjective-scoring[text,sql,code,remote]",
+]
+
+[project.optional-dependencies]
+local = [
+    "sentence-transformers>=3.0,<4",
+    "torch>=2.2,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8,<9",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.7" }

@@ -1,0 +1,36 @@
+# docker-compose.postgres.yml
+#
+# Task 2 提供本地开发用的 PostgreSQL 18 实例, 与项目 schema 隔离.
+#
+# 使用:
+#   docker compose -f docker-compose.postgres.yml up -d
+#   psql -h 127.0.0.1 -p 5433 -U exam_app -d exam_system   # 应用账号
+#   psql -h 127.0.0.1 -p 5433 -U exam_migrator -d exam_system  # 迁移账号
+#
+# 凭据仅 dev; 生产请改 env 注入强密码 + sslmode=require.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: examsystem-pg-dev
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5433:5432"   # 主机 5433 避免与本机已装 EDB 5432 冲突
+    environment:
+      POSTGRES_USER: exam_super
+      POSTGRES_PASSWORD: exam_super_dev
+      POSTGRES_DB: exam_system
+      # 额外角色: exam_app / exam_migrator 通过 init.sql 创建(可选)
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./scripts/pg-bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U exam_super -d exam_system"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    shm_size: 256mb
+
+volumes:
+  pg_data:
+    # 默认 local driver; 容器删后数据随卷保留(--volumes-prune 才会清)
