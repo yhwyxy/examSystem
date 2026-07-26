@@ -53,7 +53,16 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		admin.Get("/exams", listExamsHandler(deps))
 		admin.Post("/exam-link", examLinkHandler(deps))
 		admin.Post("/exam-link/{run}/reset-rounds", resetRoundsHandler(deps))
-		// Task 10 admin submissions 子树 (list/detail/stats/export/review/regrade/delete).
+		// Task 10 (path C 修正): stats / regrade 是顶层 admin 路径 (与 Python 基线
+		// test_admin_api.py 契约一致), 不挂在 /submissions 子树下.
+		if deps.Pool == nil {
+			admin.Get("/stats", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+			admin.Post("/regrade/{id}", serviceNotReady("REVIEW_NOT_CONFIGURED"))
+		} else {
+			admin.Get("/stats", statsSubmissionsHandler(deps))
+			admin.Post("/regrade/{id}", regradeSubmissionHandler(deps))
+		}
+		// Task 10 admin submissions 子树 (list/detail/export/review/delete).
 		MountAdminSubmissions(admin, deps)
 	})
 }
@@ -319,32 +328,26 @@ WHERE r.paper_id = $1
 // MountAdminSubmissions 挂载 Task 10 的 /api/admin/submissions 子树.
 // 走 MountAdmin 调用, 同样受 RequireAdmin middleware 保护.
 //
-// 路由清单 (6 条):
+// 路由清单 (5 条; stats/regrade 在 path C 修正后已顶层挂, 不在本子树):
 //   GET    /api/admin/submissions            list (query: run_id, employee_id, status, order_by, limit)
 //   GET    /api/admin/submissions/{id}       detail (含 review_logs 列表)
-//   GET    /api/admin/submissions/stats      统计 counters (按 review_status 分组)
 //   GET    /api/admin/submissions/export     xlsx 导出 (export.XLSXWriter, 上限 DefaultRowsLimit)
 //   POST   /api/admin/submissions/{id}/review   apply 改分 (Body: question_id / sub_qid / new_score / note)
-//   POST   /api/admin/submissions/{id}/regrade  触发代次切换 (无 Body, 立即异步返)
 //   DELETE /api/admin/submissions            批量删 (Body: ids=[1,2,3])
 func MountAdminSubmissions(admin chi.Router, deps Dependencies) {
 	if deps.Pool == nil {
 		admin.Get("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-		admin.Get("/submissions/stats", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
 		admin.Get("/submissions/export", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
 		admin.Delete("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
 		admin.Get("/submissions/{id}", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
 		admin.Post("/submissions/{id}/review", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-		admin.Post("/submissions/{id}/regrade", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
 		return
 	}
 	admin.Get("/submissions", listSubmissionsHandler(deps))
-	admin.Get("/submissions/stats", statsSubmissionsHandler(deps))
 	admin.Get("/submissions/export", exportSubmissionsHandler(deps))
 	admin.Delete("/submissions", deleteSubmissionsHandler(deps))
 	admin.Get("/submissions/{id}", detailSubmissionHandler(deps))
 	admin.Post("/submissions/{id}/review", reviewSubmissionHandler(deps))
-	admin.Post("/submissions/{id}/regrade", regradeSubmissionHandler(deps))
 }
 
 

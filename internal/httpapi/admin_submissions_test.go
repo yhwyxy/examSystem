@@ -56,12 +56,23 @@ func testSubmPool(t *testing.T) *pgxpool.Pool {
 	return submPoolInst
 }
 
-// newSubmRouter 用真 pool 构造 admin 路由子树 (仅测 submissions 子树).
+// newSubmRouter 用真 pool 构造 admin 路由子树, 兼容顶层 /stats /regrade (path C 修正).
 func newSubmRouter(t *testing.T, pool *pgxpool.Pool, reviewSvc *review.Service) http.Handler {
 	t.Helper()
 	r := chi.NewRouter()
 	deps := Dependencies{Pool: pool, Review: reviewSvc}
-	MountAdminSubmissions(r, deps)
+	// Mount admin 子树 (顶层 stats/regrade + MountAdminSubmissions list/detail/export/review/delete)
+	r.Route("/admin", func(adm chi.Router) {
+		if pool == nil {
+			adm.Get("/stats", serviceNotReady("POOL_NIL"))
+			adm.Post("/regrade/{id}", serviceNotReady("REVIEW_NIL"))
+		} else {
+			adm.Get("/stats", statsSubmissionsHandler(deps))
+			adm.Post("/regrade/{id}", regradeSubmissionHandler(deps))
+		}
+		MountAdminSubmissions(adm, deps)
+	})
+	r.Route("/api", func(api chi.Router) {})
 	return r
 }
 
@@ -121,7 +132,7 @@ func TestAdminSubm_List(t *testing.T) {
 	subID := setupSubmData(t, pool)
 	defer setupSubmData(t, pool) // 复用清表做 teardown
 
-	req := httptest.NewRequest(http.MethodGet, "/submissions", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -149,7 +160,7 @@ func TestAdminSubm_Stats(t *testing.T) {
 	setupSubmData(t, pool)
 	defer setupSubmData(t, pool)
 
-	req := httptest.NewRequest(http.MethodGet, "/submissions/stats", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/stats", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -170,14 +181,14 @@ func TestAdminSubm_Stats(t *testing.T) {
 	}
 }
 
-// TestAdminSubm_Detail: GET /submissions/{id} 返 submission + review_logs 空数组.
+// TestAdminSubm_Detail: GET /admin/submissions/{id} 返 submission + review_logs 空数组.
 func TestAdminSubm_Detail(t *testing.T) {
 	pool := testSubmPool(t)
 	r := newSubmRouter(t, pool, nil)
 	subID := setupSubmData(t, pool)
 	defer setupSubmData(t, pool)
 
-	req := httptest.NewRequest(http.MethodGet, "/submissions/"+fmtID(subID), nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions/"+fmtID(subID), nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {
@@ -208,7 +219,7 @@ func TestAdminSubm_Delete(t *testing.T) {
 	subID := setupSubmData(t, pool)
 	defer setupSubmData(t, pool)
 
-	req := httptest.NewRequest(http.MethodDelete, "/submissions",
+	req := httptest.NewRequest(http.MethodDelete, "/admin/submissions",
 		strings.NewReader(`{"ids":[`+fmtID(subID)+`]}`))
 	req.Header.Set("Content-Type", "application/json")
 	rr := httptest.NewRecorder()
@@ -233,14 +244,14 @@ func fmtID(id int64) string {
 	return fmt.Sprintf("%d", id)
 }
 
-// TestAdminSubm_Export: GET /submissions/export 返 xlsx (Content-Type 与首字节 ZIP magic).
+// TestAdminSubm_Export: GET /admin/submissions/export 返 xlsx (Content-Type 与首字节 ZIP magic).
 func TestAdminSubm_Export(t *testing.T) {
 	pool := testSubmPool(t)
 	r := newSubmRouter(t, pool, nil)
 	setupSubmData(t, pool)
 	defer setupSubmData(t, pool)
 
-	req := httptest.NewRequest(http.MethodGet, "/submissions/export", nil)
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions/export", nil)
 	rr := httptest.NewRecorder()
 	r.ServeHTTP(rr, req)
 	if rr.Code != http.StatusOK {

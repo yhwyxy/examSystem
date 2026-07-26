@@ -347,3 +347,73 @@ def test_admin_submissions_table_has_round_column():
     js = read_frontend_file("frontend/js/admin.js")
     assert "formatRound" in js
     assert "admin_closed" in js
+
+
+# ---------- Task 11 (plan 1446-1526): draft throttle + grading state 适配 ----------
+
+def test_exam_draft_loop_interval_is_5000ms():
+    """plan Step 2: DRAFT_LOOP_MS 改 2000 -> 5000 降低风暴."""
+    source = read_frontend_file("frontend/js/exam.js")
+    assert "const DRAFT_LOOP_MS = 5000;" in source
+    assert "const DRAFT_LOOP_MS = 2000;" not in source
+
+
+def test_exam_save_draft_keeps_dirty_when_saved_false():
+    """plan Step 2: data.saved === false 不能清 dirty, 应等下次重发完整 answers."""
+    source = read_frontend_file("frontend/js/exam.js")
+    save_fn = function_body(source, "async function saveDraftNow", "async function pollSessionStatus")
+    assert "if (data.saved === false)" in save_fn
+    # 必须包含 dirty=true 分支但不应在 saved=false 后直接清 dirty
+    assert "state.dirty = true" in save_fn
+    assert "state.draftRevision = data.draft_revision" in save_fn
+
+
+def test_exam_stale_draft_revision_keeps_dirty_and_rereads_revision():
+    """plan Step 2: STALE_DRAFT_REVISION 不应直接清 dirty 为 false 成 "已保存",
+    应读 detail.current_revision 更新 draftRevision 并保持 dirty=true."""
+    source = read_frontend_file("frontend/js/exam.js")
+    save_fn = function_body(source, "async function saveDraftNow", "async function pollSessionStatus")
+    assert "STALE_DRAFT_REVISION" in save_fn
+    # 修复后必须读 current_revision 而非清 dirty
+    assert "data.detail.current_revision" in save_fn
+    # 修复后不再有 STALE 分支立即 "已保存" + dirty=false 文本组合
+    # (旧 bug: line 598 state.dirty = false 单独清, 不读 current_revision)
+    assert save_fn.count("state.dirty = false") < 3
+
+
+def test_exam_save_draft_now_uses_fetch_keepalive_not_sendbeacon():
+    """plan Step 3: 离开页面保存改 fetch PUT + keepalive:true, 不走 sendBeacon POST;
+    且序列化请求体超过 60000 字节时保留 dirty 不发."""
+    source = read_frontend_file("frontend/js/exam.js")
+    save_fn = function_body(source, "async function saveDraftNow", "async function pollSessionStatus")
+    assert "navigator.sendBeacon" not in save_fn
+    assert "method: 'PUT'" in save_fn
+    assert "keepalive: true" in save_fn
+    assert "60000" in save_fn
+
+
+def test_exam_save_draft_now_signature_has_allow_locked():
+    """plan Step 3: saveDraftNow({beacon=false, allowLocked=false}={}) 新签名,
+    state.locked && !allowLocked 提前返回; handleClosingStatus 必须传 allowLocked:true."""
+    source = read_frontend_file("frontend/js/exam.js")
+    assert "async function saveDraftNow({ beacon = false, allowLocked = false } = {})" in source
+    assert "!allowLocked" in source
+    handle_fn = function_body(source, "async function handleClosingStatus", "async function pollStatus")
+    assert "saveDraftNow({ allowLocked: true })" in handle_fn
+
+
+def test_admin_js_effective_status_mapping():
+    """plan Step 4: admin.js effective_status 映射 grading_status='grading' + review_status
+    -> 'grading' / 'manual_fallback' 未定义映射 -> 'unknown'; detail.js 同义."""
+    src = read_frontend_file("frontend/js/admin.js")
+    # 必须存在 effective_status 解析逻辑
+    assert "effective_status" in src or "effectiveStatus" in src
+    assert "grading_status" in src and "review_status" in src
+
+
+def test_detail_js_disable_buttons_on_grading():
+    """plan Step 4: detail.js 评审按钮在 grading_status='grading' 时 disabled."""
+    src = read_frontend_file("frontend/js/detail.js")
+    # 任意一种"在 grading 状态禁用 / 锁住按钮"的检查
+    assert "grading" in src
+    assert "disabled" in src

@@ -16,6 +16,19 @@ const STATUS_META = {
   grading: { className: 'badge-grading', label: '评分中' },
 };
 
+// effectiveStatus 把 grading_status + review_status 合一成有效展示状态.
+// plan Task 11 Step 4: admin 视图需要区分 "grading 中" 与 "已评完毕待复核" 等组合态.
+//  - grading_status='grading' 永远先映射 'grading' (此前 task 包 err 后请撤回)
+//  - 否则按 review_status: reviewed/pending/low_confidence/auto_scored 等原样回.
+//  - 异常: review_status=manual_fallback 未定义时回 'unknown'.
+function effectiveStatus(sub) {
+  if (sub?.grading_status === 'grading') return 'grading';
+  const rs = sub?.review_status;
+  if (rs == null) return 'unknown';
+  if (rs in STATUS_META) return rs;
+  return 'unknown';
+}
+
 function $(id) { return document.getElementById(id); }
 
 function esc(s) {
@@ -248,7 +261,7 @@ function renderRows(rows) {
     <td>${esc(r.subjective_score_final)}</td>
     <td><b>${esc(r.total_score)}</b></td>
     <td>${formatAutoSubmitReason(r.auto_submit_reason) ? `<span class="badge-auto-submit">${formatAutoSubmitReason(r.auto_submit_reason)}</span>` : ''}</td>
-    <td>${badge(r.review_status)}</td>
+    <td>${badge(effectiveStatus(r))}</td>
     <td>${fmtTime(r.submitted_at)}</td>
     <td class="toolbar">
       <a class="btn secondary" href="/detail?id=${encodeURIComponent(r.id)}">复核</a>
