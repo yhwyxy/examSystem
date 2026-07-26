@@ -30,7 +30,8 @@ def run_one_job(conn, worker_id: str, lease_seconds: int,
         answers = json.loads(answers)
     try:
         from .grading import grade_submission
-        result = grade_submission(doc, answers, ssvc)
+        preserve = _load_preserve_index(conn, job.submission_id)
+        result = grade_submission(doc, answers, ssvc, preserve=preserve)
     except Exception as e:
         logger.warning("job=%s grading error: %s", job.id, e)
         out = repo.fail_job(conn, job, error_msg=str(e))
@@ -43,9 +44,42 @@ def run_one_job(conn, worker_id: str, lease_seconds: int,
         subjective_score_machine=float(result["subjective_score_machine"]),
         subjective_score_final=float(result["subjective_score_final"]),
         grading_detail_json=detail_json,
-        review_status="graded",
+        review_status=result.get("overall_review_status", "graded"),
     )
     conn.commit()
     logger.info("job=%s complete=%s obj=%s subj_%s",
                 job.id, out, result["objective_score"], result["subjective_score_final"])
     return True
+
+
+_LOAD_PRESERVE_SQL = """
+SELECT grading_detail_json FROM submissions
+WHERE id = %(submission_id)s
+LIMIT 1;
+"""
+
+def _load_preserve_index(conn, submission_id: int) -> dict | None:
+    """读旧 grading_detail_json -> {qid -> entry} 仅含 manually_reviewed=True 条目 (preserve manual)."""
+    from psycopg.rows import dict_row
+    cur = conn.cursor(row_factory=dict_row)
+    cur.execute(_LOAD_PRESERVE_SQL, {"submission_id": submission_id})
+    row = cur.fetchone()
+    if not row or not row.get("grading_detail_json"):
+        return None
+    try:
+        details = json.loads(row["grading_detail_json"]) if isinstance(row["grading_detail_json"], str) else row["grading_detail_json"]
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(details, list):
+        return None
+    out = {}
+    for e in details:
+        if not isinstance(e, dict):
+            continue
+        if e.get("manually_reviewed") is not True:
+            # keep only manual preserved entries
+            if e.get("review_status") in {"approved_manual", "rejected_manual"}:
+                out[str(e.get("question_id"))] = e
+            continue
+        out[str(e.get("question_id"))] = e
+    return out or None

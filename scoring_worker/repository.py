@@ -6,11 +6,12 @@ SKIP LOCKED 保证多 worker 并发安全; fenced complete 校验 lease_owner / 
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Optional
 
 from psycopg.rows import dict_row
-from psycopg.sql import SQL, Identifier, Placeholder
+from psycopg.types.json import Jsonb
 
 
 @dataclass
@@ -131,11 +132,9 @@ SET grading_detail_json = %(grading_detail_json)s,
     subjective_score_machine = %(subjective_score_machine)s,
     subjective_score_final = %(subjective_score_final)s,
     total_score = %(objective_score)s + %(subjective_score_final)s,
-    total_score_machine = %(objective_score)s + %(subjective_score_machine)s,
     review_status = %(review_status)s,
     grading_status = 'done',
-    graded_at = now(),
-    updated_at = now()
+    graded_at = now()
 WHERE id = %(submission_id)s AND grading_generation = %(generation)s
 RETURNING id;
 """
@@ -166,12 +165,19 @@ RETURNING id;
 
 def complete_job(conn, job: Job, objective_score: int,
                  subjective_score_machine: float, subjective_score_final: float,
-                 grading_detail_json: bytes, review_status: str = "graded") -> str:
+                 grading_detail_json, review_status: str = "graded") -> str:
     """Fenced 完成: verify lease -> update submission -> job done.
 
     返回 'done' (正常) 或 'lost' (租约已失效 / 被回收). Submission 写入位置仅当
     grading_generation 匹配 (防 higher generation 抢占 -> return 'lost').
+    ``grading_detail_json`` accepts JSON-compatible objects plus serialized JSON
+    bytes/strings, because the runtime serializes the detail before writing it.
     """
+    if isinstance(grading_detail_json, bytes):
+        grading_detail_json = grading_detail_json.decode("utf-8")
+    if isinstance(grading_detail_json, str):
+        grading_detail_json = json.loads(grading_detail_json)
+
     # 1) 校验租约仍在 (lease_owner / lease_token / lease_until > now)
     if conn.execute(_COMPLETE_VERIFY_SQL, {
         "job_id": job.id, "worker_id": job.lease_owner,
@@ -181,7 +187,7 @@ def complete_job(conn, job: Job, objective_score: int,
     # 2) 写 submission; grading_generation 校验防跨代写入.
     if conn.execute(_COMPLETE_SUBMISSION_SQL, {
         "submission_id": job.submission_id,
-        "grading_detail_json": grading_detail_json,
+        "grading_detail_json": Jsonb(grading_detail_json),
         "subjective_score_machine": subjective_score_machine,
         "subjective_score_final": subjective_score_final,
         "objective_score": objective_score,

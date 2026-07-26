@@ -46,68 +46,54 @@ def _grade_objective(question: dict, student_answer: Any) -> dict:
 
 
 def _grade_subjective(question: dict, student_answer: Any, ssvc: Any) -> dict:
-    """单主观题评分: 调 subjective-scoring 包打分; max_score 取 question[score].
+    """单主观题评分: 调 subjective-scoring 0.1.7 通过 grader_bridge 完整打分.
 
-    返回结构对齐 Python 旧版 grader 与 SQL submissions.grading_detail_json 列.
-    ssvc: subjective_scoring.ScoreService 实例 (注入)
+    ssvc 参数保持位置兼容 (grade_submission 调用方仍传), 但实际桥接 +
+    lazy load 由 grader_bridge 内部完成; preserve=None (worker 'blue-sky').
     """
-    score = float(question.get("score", 0) or 0)
-    if student_answer is None or student_answer == "":
-        return {
-            "id": question.get("id"), "type": question.get("type"),
-            "prompt": question.get("prompt", ""),
-            "reference_answer": question.get("answer", ""),
-            "student_answer": "", "max_score": score,
-            "machine_score": 0.0, "final_score": 0.0,
-            "is_correct": False, "confidence": 0.0,
-            "grading_method": "subjective",
-            "review_status": "unanswered",
-            "manually_reviewed": False,
-            "detail": {"reason": "unanswered"},
-        }
-    ref = question.get("answer", "")
-    result = ssvc.score(student_answer, reference=ref_or_list(ref), prompt=question.get("prompt", ""))
-    m = float(result.get("score", 0) or 0)  # 0..1 normalized
-    machine = round(m * score, 6)
+    from .grader_bridge import grade_subjective as _grade
+    preserve = None  # Worker grading 时 preserve=None; regrade preserve 由调用方传
+    final, machine, review_status, entry = _grade(question, student_answer,
+                                                  preserve=preserve)
     return {
         "id": question.get("id"), "type": question.get("type"),
-        "prompt": question.get("prompt", ""),
-        "reference_answer": ref,
+        "question": question.get("question", ""),
         "student_answer": student_answer,
-        "max_score": score,
+        "reference_answer": question.get("answer", ""),
+        "max_score": float(question.get("score", 0) or 0),
         "machine_score": machine,
-        "final_score": machine,
-        "is_correct": machine >= 0.6 * score,
-        "confidence": float(result.get("confidence", 0) or 0),
-        "grading_method": "subjective",
-        "review_status": "graded",
-        "manually_reviewed": False,
-        "detail": result,
+        "final_score": final,
+        "confidence": float(entry.get("confidence", 0.0) or 0.0),
+        "grading_method": entry.get("grading_method", "subjective"),
+        "review_status": review_status,
+        "manually_reviewed": bool(entry.get("manually_reviewed", False)),
+        "lowest_confidence_flagged": bool(entry.get("low_confidence", False)),
+        "detail": entry,
     }
 
 
-def ref_or_list(ref: Any) -> Any:
-    """histol参考答案 unwrap: 单字符串保持; list 取首."""
-    if isinstance(ref, list):
-        return ref[0] if ref else ""
-    return ref
-
-
-def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any) -> dict:
+def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any,
+                       preserve: dict | None = None) -> dict:
     """整卷打分: 按快照 questions 顺序重建完整数组.
+
+    preserve: qid -> dict 已手工 reviewed 条目 (final_score 设 manual 分;
+    regrade 不允许覆盖). Worker 默认 None.
 
     返回: {
         detail: List[dict],       # 按 snapshot 顺序 (含客观+主观完整 detail)
         objective_score: float,
         subjective_score_machine: float,
         subjective_score_final: float,
+        overall_review_status: str,  # 整卷级别 review_status
     }
     """
+    from .grader_bridge import aggregate_review_status
     questions = snapshot_doc.get("questions", []) or []
     detail: List[dict] = []
     obj_score = 0.0
     subj_machine = 0.0
     subj_final = 0.0
+    subjective_entries: List[dict] = []
     for q in questions:
         qid = q.get("id")
         student_answer = answers_map.get(qid)
@@ -122,9 +108,11 @@ def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any) -> dict:
             subj_machine += r["machine_score"]
             subj_final += r["final_score"]
             detail.append(r)
+            subjective_entries.append(r)
     return {
         "detail": detail,
         "objective_score": round(obj_score, 6),
         "subjective_score_machine": round(subj_machine, 6),
         "subjective_score_final": round(subj_final, 6),
+        "overall_review_status": aggregate_review_status(subjective_entries),
     }
