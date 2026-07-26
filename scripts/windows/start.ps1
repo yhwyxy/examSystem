@@ -11,10 +11,10 @@ param(
     [string]$ApiHost = "127.0.0.1"
 )
 $ErrorActionPreference = 'Stop'
-# 1) 启动 API 任务 (ScheduledTask 已 install.ps1 之外提前创建 + 保证存在)
+# 1) 启动 API 任务 (ScheduledTask 需提前一次性创建, 命令见 docs/deployment-go-pg.md)
 $apiTask = Get-ScheduledTask -TaskName $ApiTaskName -ErrorAction SilentlyContinue
 if (-not $apiTask) {
-    Write-Error "API ScheduledTask '$ApiTaskName' 不存在; 应先创建 (见 plan Step 3 install.ps1 替代方案)"
+    Write-Error "API ScheduledTask '$ApiTaskName' 不存在; 用 New-ScheduledTask 一次性创建 (见 docs/deployment-go-pg.md)"
     exit 1
 }
 Start-ScheduledTask -TaskName $ApiTaskName
@@ -42,7 +42,7 @@ if (-not $healthy) {
 # 3) API 健康后再启 Worker (避免 Worker 启动早于 API 时调 wrong endpoint)
 $workerTask = Get-ScheduledTask -TaskName $WorkerTaskName -ErrorAction SilentlyContinue
 if (-not $workerTask) {
-    Write-Warning "Worker ScheduledTask '$WorkerTaskName' 不存在; API 已启动但 Worker 未启动; 检查 install 流程"
+    Write-Warning "Worker ScheduledTask '$WorkerTaskName' 不存在; API 已启动但 Worker 未启动; 用 New-ScheduledTask 一次性创建 (见 docs/deployment-go-pg.md)"
     exit 0
 }
 Start-ScheduledTask -TaskName $WorkerTaskName

@@ -40,7 +40,7 @@ if (Test-Path $swSrc) {
 } else {
     Write-Warning "scoring_worker 不存在"
 }
-# scripts/windows (install/uninstall/start/stop package)
+# scripts/windows (start/stop + package 本身; install/uninstall 已按用户决断删除)
 $scriptsDest = Join-Path $OutDir "scripts/windows"
 New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
 Get-ChildItem -Path (Join-Path $SourceRoot "scripts/windows") -Filter *.ps1 | ForEach-Object {
@@ -66,7 +66,7 @@ Get-ChildItem -Path $OutDir -Recurse -Include *.db,*.pyc -ErrorAction SilentlyCo
     exit 1
 }
 Write-Host "==> 白名单复制 + 防混入 OK"
-# 4) manifest.sha256: dist 内所有文件 sha256 hex 清单, install.ps1 / 部署点用于核对完整性
+# 4) manifest.sha256: dist 内所有文件 sha256 hex 清单, 部署点用于完整性核对 (无 install.ps1, 手动核对)
 $manifestPath = Join-Path $OutDir "manifest.sha256"
 $sb = [System.Text.StringBuilder]::new()
 Get-ChildItem -Path $OutDir -Recurse -File | Sort-Object FullName | ForEach-Object {
