@@ -14,6 +14,7 @@ package runs
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -279,4 +280,84 @@ func (r *Repository) FindOpenByPaper(ctx context.Context, tx pgx.Tx, paperID str
 		return nil, fmt.Errorf("runs.FindOpenByPaper: %w", err)
 	}
 	return run, nil
+}
+
+// ExamOverview 是 listExamsHandler 给 UI 渲染考试卡片需要的聚合视图.
+// 每 paper 一行 + 最近一条 run 状态 + session 三 counter (started/submitted/active).
+type ExamOverview struct {
+	PaperID          string     `json:"paper_id"`
+	Name             string     `json:"paper_name"`
+	Status           string     `json:"status"` // open/closing/closed/unpublished
+	RoundNo          *int       `json:"round_no,omitempty"`
+	DurationMinutes  *int       `json:"duration_minutes,omitempty"`
+	OpenedAt         *time.Time `json:"opened_at,omitempty"`
+	ClosingStartedAt *time.Time `json:"closing_started_at,omitempty"`
+	FinalizeAt       *time.Time `json:"finalize_at,omitempty"`
+	ClosedAt         *time.Time `json:"closed_at,omitempty"`
+	HasPublicLink    bool       `json:"has_public_link"`
+	StartedCount     int        `json:"started_count"`
+	SubmittedCount   int        `json:"submitted_count"`
+	ActiveCount      int        `json:"active_count"`
+}
+
+// ListExamsOverview 给定 papers slug 列表, 一次性聚合每 paper 最近一条 run + 三 counter.
+// 单 SQL: LATERAL 子查询 + LEFT JOIN exam_sessions 聚合, 避免 N+1.
+//
+//	papers NULL/空 -> 返空切片 (调用方应先用 Papers.List() 拿 slugs)
+func (r *Repository) ListExamsOverview(ctx context.Context, tx pgx.Tx,
+	paperIDs []string) ([]ExamOverview, error) {
+	if len(paperIDs) == 0 {
+		return []ExamOverview{}, nil
+	}
+	// 每 paper 取最近 run (按 created_at DESC, LIMIT 1) + 聚合 session 计数 (group by run).
+	// 注: 已 merged 状态的 run 也需返, UI 区分 open/closing/closed/unpublished.
+	query := `
+		WITH latest_run AS (
+			SELECT DISTINCT ON (paper_id) id, paper_id, round_no, status, duration_minutes,
+			       opened_at, closing_started_at, finalize_at, closed_at, created_at
+			FROM exam_runs
+			WHERE paper_id = ANY($1)
+			ORDER BY paper_id, created_at DESC
+		),
+		counts AS (
+			SELECT r.paper_id,
+			       COUNT(DISTINCT s.id) AS started_count,
+			       COUNT(DISTINCT s.id) FILTER (WHERE s.status='submitted') AS submitted_count,
+			       COUNT(DISTINCT s.id) FILTER (WHERE s.status='active') AS active_count
+			FROM latest_run r
+			LEFT JOIN exam_sessions s ON s.run_id = r.id
+			GROUP BY r.paper_id
+		)
+		SELECT r.paper_id, COALESCE(r.paper_id, r.paper_id) AS name,
+		       r.status, r.round_no, r.duration_minutes,
+		       r.opened_at, r.closing_started_at, r.finalize_at, r.closed_at,
+		       COALESCE(c.started_count, 0), COALESCE(c.submitted_count, 0), COALESCE(c.active_count, 0)
+		FROM latest_run r
+		LEFT JOIN counts c ON c.paper_id = r.paper_id
+		ORDER BY r.paper_id`
+	rows, err := tx.Query(ctx, query, paperIDs)
+	if err != nil {
+		return nil, fmt.Errorf("runs.ListExamsOverview: query: %w", err)
+	}
+	defer rows.Close()
+	out := make([]ExamOverview, 0, len(paperIDs))
+	for rows.Next() {
+		var o ExamOverview
+		var status sql.NullString
+		if err := rows.Scan(&o.PaperID, &o.Name, &status, &o.RoundNo,
+			&o.DurationMinutes, &o.OpenedAt, &o.ClosingStartedAt,
+			&o.FinalizeAt, &o.ClosedAt, &o.StartedCount,
+			&o.SubmittedCount, &o.ActiveCount); err != nil {
+			return nil, fmt.Errorf("runs.ListExamsOverview: scan: %w", err)
+		}
+		if status.Valid {
+			o.Status = status.String
+			o.HasPublicLink = status.String == "open" || status.String == "closing"
+		} else {
+			o.Status = "unpublished"
+		}
+		o.Name = o.PaperID // papers.Store 不存 name 别名, 用 paper_id 作显示名 (UI 可后续改进显示)
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
