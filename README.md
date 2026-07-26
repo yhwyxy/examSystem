@@ -4,6 +4,7 @@
 > 与旧 **Python + SQLite** 栈 (保留作回滚备份, 不再新增功能).
 > - Go+PG 部署: [DEPLOY.md](DEPLOY.md) → [docs/deployment-go-pg.md](docs/deployment-go-pg.md)
 > - 回滚流程: [docs/rollback-go-pg.md](docs/rollback-go-pg.md)
+> - 迁移收尾 + 已知遗留: [docs/cutover-go-pg.md](docs/cutover-go-pg.md)
 > - 部署后自检: `scoring_worker --preflight` + `Invoke-RestMethod /api/health`
 
 ## Go + PostgreSQL 新栈 (主力)

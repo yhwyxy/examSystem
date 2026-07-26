@@ -6,6 +6,7 @@
 
 - 完整部署流程: [docs/deployment-go-pg.md](docs/deployment-go-pg.md)
 - 回滚流程: [docs/rollback-go-pg.md](docs/rollback-go-pg.md)
+- 迁移收尾 + 已知遗留清单: [docs/cutover-go-pg.md](docs/cutover-go-pg.md)
 - 部署后健康自检: `scoring_worker --preflight` + `Invoke-RestMethod /api/health`
 
 ## Python + SQLite 旧栈 (回滚备份)

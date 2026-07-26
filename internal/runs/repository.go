@@ -4,7 +4,7 @@
 // 设计要点 (Task 5):
 //   - repository.go: 纯 PG 层 CRUD with advisory locks (per-slug)
 //   - service.go: 业务流 -- Open/BeginClose/GetPublicExam, 调 papers.Store +
-//                  SHA256 token hash + crypto/rand 32-byte URL-safe token
+//     SHA256 token hash + crypto/rand 32-byte URL-safe token
 //   - service_test.go: TDD test 覆盖状态机/竞态 (Step 1 11 类 case)
 //
 // 安全: token 用 crypto/rand 32 字节 + base64url 编码, SHA256 存储;
@@ -33,20 +33,20 @@ const (
 
 // Run 是 exam_runs 一行的领域模型 (与 schema 字段名对齐).
 type Run struct {
-	ID                string
-	PaperID           string
-	RoundNo           int
-	PublicTokenHash   string
-	Status            RunStatus
-	DurationMinutes   int
-	SnapshotPath      string
-	SnapshotHash      string
-	IsLegacy          bool
-	OpenedAt          time.Time
-	ClosingStartedAt  *time.Time
-	FinalizeAt        *time.Time
-	ClosedAt          *time.Time
-	CreatedAt         time.Time
+	ID               string
+	PaperID          string
+	RoundNo          int
+	PublicTokenHash  string
+	Status           RunStatus
+	DurationMinutes  int
+	SnapshotPath     string
+	SnapshotHash     string
+	IsLegacy         bool
+	OpenedAt         time.Time
+	ClosingStartedAt *time.Time
+	FinalizeAt       *time.Time
+	ClosedAt         *time.Time
+	CreatedAt        time.Time
 }
 
 // Repository 是 exam_runs 的持久层. 通过 pgx.Tx 暴露操作, 由调用方包事务.
@@ -260,3 +260,23 @@ func (r *Repository) BeginClose(ctx context.Context, tx pgx.Tx,
 	return run, nil
 }
 
+// FindOpenByPaper 按 paper_id 查最近一条 open 状态 run (UI exam-link 用).
+// 设计前提: 每 paper 同时最多 1 个 open run (uq_exam_runs_active 保证), 故 LIMIT 1.
+// 无 open run -> 返 (nil, nil).
+func (r *Repository) FindOpenByPaper(ctx context.Context, tx pgx.Tx, paperID string) (*Run, error) {
+	row := tx.QueryRow(ctx, `
+		SELECT id, paper_id, round_no, public_token_hash, status,
+		       duration_minutes, snapshot_path, snapshot_hash, is_legacy,
+		       opened_at, closing_started_at, finalize_at, closed_at, created_at
+		FROM exam_runs
+		WHERE paper_id = $1 AND status = 'open'
+		LIMIT 1`, paperID)
+	run, err := scanRun(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("runs.FindOpenByPaper: %w", err)
+	}
+	return run, nil
+}

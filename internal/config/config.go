@@ -46,21 +46,21 @@ type ServerConfig struct {
 }
 
 type ExamConfig struct {
-	Title                   string `yaml:"title"`
-	DurationMinutes         int    `yaml:"duration_minutes"`
-	AutoSubmit              bool   `yaml:"auto_submit"`
-	GracePeriodSeconds      int    `yaml:"grace_period_seconds"`
-	AllowDuplicateSubmit    bool   `yaml:"allow_duplicate_submit"`
-	DuplicateKey            string `yaml:"duplicate_key"`
-	EnableGlobalTimeWindow  bool   `yaml:"enable_global_time_window"`
-	StartTime               string `yaml:"start_time"`
-	EndTime                 string `yaml:"end_time"`
+	Title                  string `yaml:"title"`
+	DurationMinutes        int    `yaml:"duration_minutes"`
+	AutoSubmit             bool   `yaml:"auto_submit"`
+	GracePeriodSeconds     int    `yaml:"grace_period_seconds"`
+	AllowDuplicateSubmit   bool   `yaml:"allow_duplicate_submit"`
+	DuplicateKey           string `yaml:"duplicate_key"`
+	EnableGlobalTimeWindow bool   `yaml:"enable_global_time_window"`
+	StartTime              string `yaml:"start_time"`
+	EndTime                string `yaml:"end_time"`
 }
 
 type ScoringConfig struct {
-	MultipleChoicePartial  bool `yaml:"multiple_choice_partial"`
-	WrongChoicePenalty     bool `yaml:"wrong_choice_penalty"`
-	ScorePrecision         int  `yaml:"score_precision"`
+	MultipleChoicePartial bool `yaml:"multiple_choice_partial"`
+	WrongChoicePenalty    bool `yaml:"wrong_choice_penalty"`
+	ScorePrecision        int  `yaml:"score_precision"`
 }
 
 type ReviewConfig struct {
@@ -102,18 +102,23 @@ type DraftConfig struct {
 }
 
 type WorkerConfig struct {
-	PollIntervalMs     int `yaml:"poll_interval_ms"`
-	Concurrency         int `yaml:"concurrency"`
-	LeaseSeconds       int `yaml:"lease_seconds"`
-	HeartbeatSeconds   int `yaml:"heartbeat_seconds"`
-	MaxAttempts        int `yaml:"max_attempts"`
+	PollIntervalMs   int `yaml:"poll_interval_ms"`
+	Concurrency      int `yaml:"concurrency"`
+	LeaseSeconds     int `yaml:"lease_seconds"`
+	HeartbeatSeconds int `yaml:"heartbeat_seconds"`
+	MaxAttempts      int `yaml:"max_attempts"`
 }
 
 type LoggingConfig struct {
 	Directory  string `yaml:"directory"`
 	MaxSizeMB  int    `yaml:"max_size_mb"`  // Task 12: 日志轮转单文件大小上限 MB; 0 -> 默认 20
-	MaxBackups int    `yaml:"max_backups"` // Task 12: 日志保留份数; 0 -> 默认 10
+	MaxBackups int    `yaml:"max_backups"`  // Task 12: 日志保留份数; 0 -> 默认 10
 	MaxAgeDays int    `yaml:"max_age_days"` // Task 12: 日志保留天数; 0 -> 不删除 (按份数 MaxBackups)
+	// RunTokenDir 是 admin 开考时明文 token 侧车文件目录 (0600), 与 Python 旧栈
+	// exam_run_service.save_public_token parity (exam_run_service.py 行 115).
+	// 空: admin exam-link GET 无法重建 URL (run 在 tokenDir 配置前创建).
+	// 注: token 不入 DB (DB 仅存 sha256 hash). admin UI 重建 URL 靠此 sidecar.
+	RunTokenDir string `yaml:"run_token_dir"` // Task 14: admin tail 补
 }
 
 // Load 从 yaml 路径加载配置; 应用环境变量覆盖; 不做强制校验,

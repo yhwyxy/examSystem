@@ -1,12 +1,14 @@
 package runs
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -23,11 +25,21 @@ type Service struct {
 	papers *papers.Store
 	// PaperPubRoot 是 snapshot 文件落盘根目录 (绝对路径). 每个 run 一个文件, 名 run-<id>.json
 	pubRoot string
+	// tokenDir 是明文 token 侧车文件落盘根目录 (绝对路径). 与 Python 旧栈兼容:
+	// 仅服务端 admin 重建 exam-link 用, 不入库. 文件名 <runID>.token, 0600.
+	// 空字符串 -> token 持久化禁用 (admin exam-link GET 无法重建 url).
+	tokenDir string
 }
 
-// NewService 创建 Service.
+// NewService 创建 Service. pubRoot 必填; tokenDir 可空 (admin exam-link 重建 URL 需).
 func NewService(repo *Repository, papersStore *papers.Store, pubRoot string) *Service {
 	return &Service{repo: repo, papers: papersStore, pubRoot: pubRoot}
+}
+
+// WithTokenDir 注入 token 侧车文件落盘目录. 调 NewService 后链式设.
+func (s *Service) WithTokenDir(dir string) *Service {
+	s.tokenDir = dir
+	return s
 }
 
 // OpenResult 是 Open 返回. 带明文 public_token (一次性裸值, 不写库) + run.
@@ -39,12 +51,12 @@ type OpenResult struct {
 // Open 在 paper slug 上创建新 round.
 //
 // 流程 (与 Python open_run 等价):
-//   1. 用 papers.Store.LoadEditable(slug) 读 paper.json (Filesys)
-//   2. 用 papers.ComputeSHA256(doc) 算 snapshot hash
-//   3. 生成 32-byte 裸 token + sha256 hash
-//   4. 写 snapshot 文件: <pubRoot>/paper-<slug>-run-<id>.json
-//   5. 在 PG 事务内 INSERT exam_runs
-//   6. 返回 OpenResult{ Run, PublicToken }
+//  1. 用 papers.Store.LoadEditable(slug) 读 paper.json (Filesys)
+//  2. 用 papers.ComputeSHA256(doc) 算 snapshot hash
+//  3. 生成 32-byte 裸 token + sha256 hash
+//  4. 写 snapshot 文件: <pubRoot>/paper-<slug>-run-<id>.json
+//  5. 在 PG 事务内 INSERT exam_runs
+//  6. 返回 OpenResult{ Run, PublicToken }
 //
 // 事务失败 -> snapshot 文件残留但不影响下次 (id 唯一的 tmp 文件会随 cleanup);
 // 生产可加 compensating 清理逻辑, 但本 Task 不做 (与 Python 行为等价前向兼容).
@@ -97,7 +109,55 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, slug string,
 	if err != nil {
 		return nil, err
 	}
+	// token 侧车文件: 仅当 tokenDir 配置了才存. 失败不阻断 Open (token 仍返回给调用方,
+	// 调用方存哪儿自己决定 — 兼容 Python 旧栈行为).
+	if s.tokenDir != "" {
+		if err := s.savePublicToken(run.ID, token); err != nil {
+			return nil, fmt.Errorf("runs.Open: save token sidecar: %w", err)
+		}
+	}
 	return &OpenResult{Run: run, PublicToken: token}, nil
+}
+
+// savePublicToken 把明文 token 写到 <tokenDir>/<runID>.token 文件, 0600 权限.
+// 仿 Python 旧栈 save_public_token (exam_run_service.py 行 115): sidecar 不入 DB.
+func (s *Service) savePublicToken(runID, token string) error {
+	if s.tokenDir == "" {
+		return nil
+	}
+	if err := os.MkdirAll(s.tokenDir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(s.tokenDir, runID+".token"),
+		[]byte(token), 0o600)
+}
+
+// LoadPublicToken 读明文 token 侧车文件. 无文件 -> ("", nil).
+// 供 admin exam-link GET 重建 URL 用 — 不入库, 不缓存.
+func (s *Service) LoadPublicToken(runID string) (string, error) {
+	if s.tokenDir == "" {
+		return "", errors.New("tokenDir 未配置, 无法重建 exam-link")
+	}
+	b, err := os.ReadFile(filepath.Join(s.tokenDir, runID+".token"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return string(bytes.TrimSpace(b)), nil
+}
+
+// RemovePublicToken 删除 token 侧车 (closeRun 时可选清理).
+func (s *Service) RemovePublicToken(runID string) error {
+	if s.tokenDir == "" {
+		return nil
+	}
+	err := os.Remove(filepath.Join(s.tokenDir, runID+".token"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 // PublicExamResult 是 GetPublicExam 返回, 与 Python /api/exam 端点契约对齐:
@@ -224,3 +284,9 @@ func (s *Service) BeginClose(ctx context.Context, tx pgx.Tx, runID string,
 }
 
 var _ = uuid.New
+
+// FindOpenBySlug 查 paper 最近一条 open 状态 run. 无 -> 返 (nil, nil).
+// 供 admin exam-link GET 用.
+func (s *Service) FindOpenBySlug(ctx context.Context, tx pgx.Tx, slug string) (*Run, error) {
+	return s.repo.FindOpenByPaper(ctx, tx, slug)
+}

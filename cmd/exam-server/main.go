@@ -2,17 +2,17 @@
 //
 // 三个子命令 (claude-style flag dispatch):
 //
-//   exam-server serve       --config config.yaml [--bind :8000] [--static frontend]
-//     启动 HTTP 服务, 加载 config, 跑 NewRouter; 未挂业务路由的全部 404,
-//     /api/health 上线, reload-config 接通配置热刷新回调。
-//     database.url 必填, 实际 DB 连接在 Task 2 之后启用; Task 1 preflight 仅校验非空。
+//	exam-server serve       --config config.yaml [--bind :8000] [--static frontend]
+//	  启动 HTTP 服务, 加载 config, 跑 NewRouter; 未挂业务路由的全部 404,
+//	  /api/health 上线, reload-config 接通配置热刷新回调。
+//	  database.url 必填, 实际 DB 连接在 Task 2 之后启用; Task 1 preflight 仅校验非空。
 //
-//   exam-server migrate     --config config.yaml
-//     对 PostgreSQL 跑 migrations 目录下未应用的迁移; Task 1 仅占位, Task 2 落地。
+//	exam-server migrate     --config config.yaml
+//	  对 PostgreSQL 跑 migrations 目录下未应用的迁移; Task 1 仅占位, Task 2 落地。
 //
-//   exam-server preflight   --config config.yaml
-//     启动前自检: 配置完整 / database.url 非空 / 静态目录可读。
-//     失败立刻非零退出, 便于 docker/k8s readinessProbe 失败 quick-fail。
+//	exam-server preflight   --config config.yaml
+//	  启动前自检: 配置完整 / database.url 非空 / 静态目录可读。
+//	  失败立刻非零退出, 便于 docker/k8s readinessProbe 失败 quick-fail。
 package main
 
 import (
@@ -200,6 +200,16 @@ func cmdServe(args []string) error {
 	sessionsSvc := sessions.NewService(sessionsRepo, runsLookup,
 		sessions.WithGracePeriod(time.Duration(cfg.Exam.GracePeriodSeconds)*time.Second))
 
+	// Task 14: runs.Service (admin 开考/关考/exam-link 真业务依赖). 注入 :=
+	//   RunService 给 admin 4 stub 替换用; token 侧车目录 cfg.Logging.RunTokenDir
+	//   (空 = exam-link GET 无法重建 URL, 文档已记遗留). pubRoot 用 papers 同 static
+	//   (snapshot 与 papers 共用 <static>/<slug>.json 形态, 见 papers.LoadSnapshot).
+	runService := runs.NewService(runsRepo, papersStore, static)
+	if cfg.Logging.RunTokenDir != "" {
+		runService = runService.WithTokenDir(cfg.Logging.RunTokenDir)
+		_ = os.MkdirAll(cfg.Logging.RunTokenDir, 0o700)
+	}
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,
 		StaticRoot:         static,
@@ -209,6 +219,7 @@ func cmdServe(args []string) error {
 		Auth:               authStore,
 		Papers:             papersStore,
 		Runs:               runsRepo,
+		RunService:         runService, // Task 14: 真 admin 开考 / 关考 / exam-link
 		Review:             reviewSvc,
 		Sessions:           sessionsSvc,
 	})

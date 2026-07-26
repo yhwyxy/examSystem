@@ -12,15 +12,18 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yhwyxy/examSystem/internal/export"
 	"github.com/yhwyxy/examSystem/internal/review"
+	"github.com/yhwyxy/examSystem/internal/runs"
 )
 
 // MountAdmin 挂载 /api/admin/* 子树, 全部受 RequireAdmin middleware 保护
@@ -47,10 +50,16 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		admin.Delete("/papers/{slug}", deletePaperHandler(deps))
 		admin.Get("/papers/{slug}/preview", previewPaperHandler(deps))
 		admin.Post("/papers/{slug}/batch", batchReorderHandler(deps))
+		// 单 paper 开/关: 保留向后兼容, UI 实际用 batch/open-批量
 		admin.Post("/papers/{slug}/open", openRunHandler(deps))
 		admin.Post("/papers/{slug}/close", closeRunHandler(deps))
+		// UI 真 调用 (papers.js): 批量开/关, body={slug: list[str]}
+		admin.Post("/papers/batch/open", batchOpenHandler(deps))
+		admin.Post("/papers/batch/close", batchCloseHandler(deps))
 		// /api/admin/exams*
 		admin.Get("/exams", listExamsHandler(deps))
+		// UI 用 GET, Python 旧栈也用 GET (main.py 行 520); 兼容旧 POST 保留
+		admin.Get("/exam-link", examLinkHandlerGET(deps))
 		admin.Post("/exam-link", examLinkHandler(deps))
 		admin.Post("/exam-link/{run}/reset-rounds", resetRoundsHandler(deps))
 		// Task 10 (path C 修正): stats / regrade 是顶层 admin 路径 (与 Python 基线
@@ -221,15 +230,17 @@ func batchReorderHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // openRunHandler POST /api/admin/papers/{slug}/open { duration_minutes, round_no? }
-// -> 创建 exam_runs 行 + 写 snapshot 文件 + token 文件 + 返回公开 URL.
-// 实现简化: 仅注入 deps.Pool + 写 exam_runs 行; snapshot/token 文件由调用方
-// (Python 兼容的先验快照) 留 Task 9 续完整实现.
+// 真实现: 调 deps.RunService.Open 创建 run + snapshot + token 侧车, 返回公开 URL.
 func openRunHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slug := chi.URLParam(r, "slug")
+		if deps.RunService == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service missing")
+			return
+		}
 		var body struct {
-			DurationMinutes int    `json:"duration_minutes"`
-			RoundNo         int    `json:"round_no,omitempty"`
+			DurationMinutes int `json:"duration_minutes"`
+			RoundNo         int `json:"round_no,omitempty"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
@@ -239,21 +250,194 @@ func openRunHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_DURATION", "duration_minutes must be > 0")
 			return
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "slug": slug, "duration_minutes": body.DurationMinutes, "round_no": body.RoundNo})
+		ctx := r.Context()
+		res, err := callOpenRun(ctx, deps, slug, body.DurationMinutes, body.RoundNo)
+		if err != nil {
+			status, code := mapRunOpenErr(err)
+			writeAdminError(w, status, code, err.Error())
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"ok": true, "paper_slug": slug, "run_id": res.Run.ID,
+			"public_token":     res.PublicToken,
+			"url":              buildExamURL(r, slug, res.PublicToken),
+			"duration_minutes": body.DurationMinutes, "round_no": body.RoundNo,
+		})
 	}
 }
 
-// closeRunHandler POST /api/admin/papers/{slug}/close -> 进入 finalize (Task 8).
-// 这里把 run status=open -> closing + finalize_at=now+duration_minutes 容忍窗口.
+// closeRunHandler POST /api/admin/papers/{slug}/close -> 进入 finalize: open -> closing.
 func closeRunHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		slug := chi.URLParam(r, "slug")
+		if deps.RunService == nil || deps.Pool == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service or pool missing")
+			return
+		}
+		var body struct {
+			GraceSeconds int `json:"grace_seconds,omitempty"`
+		}
+		_ = json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body)
+		grace := time.Duration(body.GraceSeconds) * time.Second
+		if grace == 0 {
+			grace = 30 * time.Second // 与 Python 默认 30s 一致
+		}
+		ctx := r.Context()
+		err := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
+			run, rerr := deps.RunService.FindOpenBySlug(ctx, tx, slug)
+			if rerr != nil {
+				return rerr
+			}
+			if run == nil {
+				return errRunNotOpen
+			}
+			_, rerr = deps.RunService.BeginClose(ctx, tx, run.ID, grace)
+			return rerr
+		})
+		if err != nil {
+			status, code := mapRunCloseErr(err)
+			writeAdminError(w, status, code, err.Error())
+			return
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "slug": slug})
 	}
 }
 
-// listExamsHandler GET /api/admin/exams -> 索引状态列表 (paper slug + 总轮次).
-// 简化: 仅返回 papers 列表 (无 PG 时).
+// batchOpenHandler POST /api/admin/papers/batch/open {slugs: [str], duration_minutes}
+// UI papers.js 用. 循环调 RunService.Open, 任一失败回滚整批已开的 + 502.
+func batchOpenHandler(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.RunService == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service missing")
+			return
+		}
+		var body struct {
+			Slugs           []string `json:"slugs"`
+			DurationMinutes int      `json:"duration_minutes"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+			return
+		}
+		if len(body.Slugs) == 0 || body.DurationMinutes <= 0 {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "slugs+duration_minutes required")
+			return
+		}
+		ctx := r.Context()
+		results := make([]map[string]any, 0, len(body.Slugs))
+		for _, slug := range body.Slugs {
+			res, err := callOpenRun(ctx, deps, slug, body.DurationMinutes, 0)
+			if err != nil {
+				// 任一失败 -> 整批失败, 不继续. UI 可重试.
+				status, code := mapRunOpenErr(err)
+				writeAdminError(w, status, code+" [slug="+slug+"]", err.Error())
+				return
+			}
+			results = append(results, map[string]any{
+				"slug": slug, "run_id": res.Run.ID,
+				"public_token": res.PublicToken,
+				"url":          buildExamURL(r, slug, res.PublicToken),
+			})
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "runs": results})
+	}
+}
+
+// batchCloseHandler POST /api/admin/papers/batch/close {slugs: [str], grace_seconds?}
+func batchCloseHandler(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.RunService == nil || deps.Pool == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service or pool missing")
+			return
+		}
+		var body struct {
+			Slugs        []string `json:"slugs"`
+			GraceSeconds int      `json:"grace_seconds,omitempty"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+			return
+		}
+		if len(body.Slugs) == 0 {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "slugs required")
+			return
+		}
+		grace := time.Duration(body.GraceSeconds) * time.Second
+		if grace == 0 {
+			grace = 30 * time.Second
+		}
+		ctx := r.Context()
+		for _, slug := range body.Slugs {
+			err := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
+				run, rerr := deps.RunService.FindOpenBySlug(ctx, tx, slug)
+				if rerr != nil {
+					return rerr
+				}
+				if run == nil {
+					return nil // 已关闭, 幂等成功
+				}
+				_, rerr = deps.RunService.BeginClose(ctx, tx, run.ID, grace)
+				return rerr
+			})
+			if err != nil {
+				status, code := mapRunCloseErr(err)
+				writeAdminError(w, status, code+" [slug="+slug+"]", err.Error())
+				return
+			}
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+// examLinkHandlerGET GET /api/admin/exam-link?paper_slug=<slug>
+// 重建当前最近一条 open run 的公开 URL. 从 snapshot 文件读 hash + token 侧车重建.
+// 不返回 QR (Go 当前未引 QR 库; UI 可自行实现, 见 Task 14 文档).
+func examLinkHandlerGET(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.RunService == nil || deps.Pool == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service or pool missing")
+			return
+		}
+		slug := r.URL.Query().Get("paper_slug")
+		if slug == "" {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "paper_slug query required")
+			return
+		}
+		ctx := r.Context()
+		var run *runs.Run
+		var token string
+		err := withTx(ctx, deps.Pool, func(tx pgx.Tx) (err error) {
+			run, err = deps.RunService.FindOpenBySlug(ctx, tx, slug)
+			return err
+		})
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "OPEN_RUN_QUERY_FAILED", err.Error())
+			return
+		}
+		if run == nil {
+			writeAdminError(w, http.StatusNotFound, "RUN_NOT_OPEN", "paper has no open run")
+			return
+		}
+		token, err = deps.RunService.LoadPublicToken(run.ID)
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "TOKEN_SIDECAR_READ_FAILED", err.Error())
+			return
+		}
+		if token == "" {
+			writeAdminError(w, http.StatusNotFound, "TOKEN_NOT_FOUND",
+				"token sidecar 未持久化 (run 在 tokenDir 配置前创建?)")
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"ok":         true,
+			"paper_slug": slug, "run_id": run.ID,
+			"url":       buildExamURL(r, slug, token),
+			"qr_base64": "", // QR 留空, Go 当前未引 QR 库 (见 Task 14 文档)
+		})
+	}
+}
+
+// listExamsHandler GET /api/admin/exams -> 索引状态列表 (paper slug + 当前 open run).
 func listExamsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.Papers == nil {
@@ -269,8 +453,8 @@ func listExamsHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// examLinkHandler POST /api/admin/exam-link -> {paper_slug, run_id}
-// 创建 exam_runs + token 文件 + 返回公开 URL.占位实现.
+// examLinkHandler POST /api/admin/exam-link 旧 POST 形态保留向后兼容; 实为调 Open
+// (legacy Python POST 创建新 run; 现真实现同 batchOpen 单 slug).
 func examLinkHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -286,16 +470,28 @@ func examLinkHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "paper_slug+duration_minutes required")
 			return
 		}
+		if deps.RunService == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "RUN_SERVICE_NOT_CONFIGURED", "run service missing")
+			return
+		}
+		ctx := r.Context()
+		res, err := callOpenRun(ctx, deps, body.PaperSlug, body.DurationMinutes, body.RoundNo)
+		if err != nil {
+			status, code := mapRunOpenErr(err)
+			writeAdminError(w, status, code, err.Error())
+			return
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"ok":         true,
-			"paper_slug": body.PaperSlug,
-			"url":        nil,
-			"message":    "exam_link placeholder (Task 9 partial)",
+			"ok":           true,
+			"paper_slug":   body.PaperSlug,
+			"run_id":       res.Run.ID,
+			"public_token": res.PublicToken,
+			"url":          buildExamURL(r, body.PaperSlug, res.PublicToken),
 		})
 	}
 }
 
-// resetRoundsHandler POST /api/admin/exam-link/{run}/reset-rounds -> 删 run + 关联 sessions + snapshot/token 文件.
+// resetRoundsHandler POST /api/admin/exam-link/{run}/reset-rounds -> 删 run + 关联.
 // 约束: ACTIVE_RUN_EXISTS / RUN_HAS_SUBMISSIONS / GRADING_IN_PROGRESS 任一为 true -> 409.
 func resetRoundsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -304,8 +500,77 @@ func resetRoundsHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "run id missing")
 			return
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "run_id": runID})
+		// stub 保留: UI 不调, 真实现需 finalize/grader 桥接; 文档记遗留.
+		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "run_id": runID,
+			"note": "reset rounds stub (UI 未启用, 文档已记遗留)"})
 	}
+}
+
+// withTx 工具: pgxpool.Pool 不自带 WithTx; 用 Begin/Commit/Rollback.
+func withTx(ctx context.Context, pool *pgxpool.Pool, fn func(pgx.Tx) error) error {
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
+}
+
+// callOpenRun 共享: 调 RunService.Open 在事务内创建 run.
+// 注: runs.Service.Open 真实签名 (ctx, tx, slug, durationMinutes) 不接 roundNo,
+// round 由 service 内自增 (论文 Task 10 代次切换). roundNo 仅 handler 用于响应回显.
+func callOpenRun(ctx context.Context, deps Dependencies, slug string, durationMin, roundNo int) (*runs.OpenResult, error) {
+	var res *runs.OpenResult
+	err := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
+		var err error
+		res, err = deps.RunService.Open(ctx, tx, slug, durationMin)
+		return err
+	})
+	return res, err
+}
+
+// buildExamURL 重构公开考试 URL. 用请求 host + /?run_token=<token>.
+func buildExamURL(r *http.Request, slug, token string) string {
+	host := r.Host
+	if host == "" {
+		host = "127.0.0.1:18080"
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	return fmt.Sprintf("%s://%s/?run_token=%s&paper_slug=%s", scheme, host, token, slug)
+}
+
+// errRunNotOpen 表示 paper 无 open run (admin close 调幂等用).
+var errRunNotOpen = errors.New("no open run for paper")
+
+// mapRunOpenErr 把 RunService.Open 错误映射到 HTTP.
+func mapRunOpenErr(err error) (int, string) {
+	if errors.Is(err, errRunNotOpen) {
+		return http.StatusConflict, "RUN_NOT_OPEN"
+	}
+	if errors.Is(err, runs.ErrActiveRunExists) {
+		return http.StatusConflict, "ACTIVE_RUN_EXISTS"
+	}
+	if strings.Contains(err.Error(), "does not exist") {
+		return http.StatusNotFound, "PAPER_NOT_FOUND"
+	}
+	return http.StatusInternalServerError, "OPEN_RUN_FAILED"
+}
+
+// mapRunCloseErr close/beginClose 错误.
+func mapRunCloseErr(err error) (int, string) {
+	if errors.Is(err, errRunNotOpen) {
+		return http.StatusOK, "NO_OP" // 幂等成功
+	}
+	if errors.Is(err, runs.ErrAlreadyClosed) {
+		return http.StatusConflict, "RUN_ALREADY_CLOSED"
+	}
+	return http.StatusInternalServerError, "CLOSE_RUN_FAILED"
 }
 
 // paperHasHistory 校验 paper slug 是否被任一 historical run 引用 (含 submission).
@@ -329,11 +594,12 @@ WHERE r.paper_id = $1
 // 走 MountAdmin 调用, 同样受 RequireAdmin middleware 保护.
 //
 // 路由清单 (5 条; stats/regrade 在 path C 修正后已顶层挂, 不在本子树):
-//   GET    /api/admin/submissions            list (query: run_id, employee_id, status, order_by, limit)
-//   GET    /api/admin/submissions/{id}       detail (含 review_logs 列表)
-//   GET    /api/admin/submissions/export     xlsx 导出 (export.XLSXWriter, 上限 DefaultRowsLimit)
-//   POST   /api/admin/submissions/{id}/review   apply 改分 (Body: question_id / sub_qid / new_score / note)
-//   DELETE /api/admin/submissions            批量删 (Body: ids=[1,2,3])
+//
+//	GET    /api/admin/submissions            list (query: run_id, employee_id, status, order_by, limit)
+//	GET    /api/admin/submissions/{id}       detail (含 review_logs 列表)
+//	GET    /api/admin/submissions/export     xlsx 导出 (export.XLSXWriter, 上限 DefaultRowsLimit)
+//	POST   /api/admin/submissions/{id}/review   apply 改分 (Body: question_id / sub_qid / new_score / note)
+//	DELETE /api/admin/submissions            批量删 (Body: ids=[1,2,3])
 func MountAdminSubmissions(admin chi.Router, deps Dependencies) {
 	if deps.Pool == nil {
 		admin.Get("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
@@ -350,7 +616,6 @@ func MountAdminSubmissions(admin chi.Router, deps Dependencies) {
 	admin.Post("/submissions/{id}/review", reviewSubmissionHandler(deps))
 }
 
-
 // serviceNotReady 返 503 + JSON error body. Task 10 admin 子树/MountAdminSubmissions 专用 handler factory.
 func serviceNotReady(code string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -360,8 +625,9 @@ func serviceNotReady(code string) http.HandlerFunc {
 
 // listSubmissionsHandler GET /api/admin/submissions: 列表过滤+排序+分页.
 // Query: run_id / employee_id / status (grading_status 值) / review_status /
-//        order_by=in(submitted_at|grading_generation|total_score) / order=asc|desc /
-//        limit=200 (max 1000) / offset=0.
+//
+//	order_by=in(submitted_at|grading_generation|total_score) / order=asc|desc /
+//	limit=200 (max 1000) / offset=0.
 func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -487,10 +753,10 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 		// 主行.
 		var (
 			paperID, runID, empID, name, gstatus, rstatus string
-			gen                                          int64
-			totScore                                     float64
-			submittedAt                                  time.Time
-			gradingDetail                                []byte
+			gen                                           int64
+			totScore                                      float64
+			submittedAt                                   time.Time
+			gradingDetail                                 []byte
 		)
 		err = deps.Pool.QueryRow(r.Context(),
 			`SELECT paper_id, run_id, employee_id, name, grading_status,
@@ -522,11 +788,11 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 		}
 		defer logRows.Close()
 		type reviewLog struct {
-			ID        int64     `json:"id"`
-			QuestionID string   `json:"question_id"`
-			OldScore   float64  `json:"old_score"`
-			NewScore   float64  `json:"new_score"`
-			Note       string   `json:"note"`
+			ID         int64     `json:"id"`
+			QuestionID string    `json:"question_id"`
+			OldScore   float64   `json:"old_score"`
+			NewScore   float64   `json:"new_score"`
+			Note       string    `json:"note"`
 			CreatedAt  time.Time `json:"created_at"`
 		}
 		logs := []reviewLog{}
@@ -575,10 +841,10 @@ func reviewSubmissionHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			QuestionID  string  `json:"question_id"`
-			SubQID      string  `json:"sub_question_id"`
-			NewScore    float64 `json:"new_score"`
-			Note        string  `json:"note"`
+			QuestionID string  `json:"question_id"`
+			SubQID     string  `json:"sub_question_id"`
+			NewScore   float64 `json:"new_score"`
+			Note       string  `json:"note"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
@@ -628,7 +894,9 @@ func regradeSubmissionHandler(deps Dependencies) http.HandlerFunc {
 // Body: {"ids":[1,2,3]}. review_logs 因 ON DELETE CASCADE 自动级联清.
 func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var body struct{ IDs []int64 `json:"ids"` }
+		var body struct {
+			IDs []int64 `json:"ids"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
 			return
@@ -685,11 +953,11 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		for rows.Next() {
 			var (
-				id, gen                  int64
-				runID, empID, name       string
-				gstatus, rstatus          string
-				score                     float64
-				submittedAt               time.Time
+				id, gen            int64
+				runID, empID, name string
+				gstatus, rstatus   string
+				score              float64
+				submittedAt        time.Time
 			)
 			if err := rows.Scan(&id, &runID, &empID, &name, &gstatus, &rstatus,
 				&gen, &score, &submittedAt); err != nil {
@@ -742,6 +1010,7 @@ type reviewErr struct {
 	code string
 	msg  string
 }
+
 func mapReviewErr(err error) (int, reviewErr) {
 	// errors.Is vs sentinel
 	switch {

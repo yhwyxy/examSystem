@@ -11,8 +11,8 @@ import (
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/papers"
 	"github.com/yhwyxy/examSystem/internal/review"
-	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/runs"
+	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 
 	"github.com/go-chi/chi/v5"
@@ -39,6 +39,9 @@ type Dependencies struct {
 	Auth   *auth.Store      // nil 时所有 admin 路由放行 (与 Python enable_auth=false parity)
 	Papers *papers.Store    // 试卷文件写入入口 (per-slug mutex + atomic write)
 	Runs   *runs.Repository // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
+	// RunService 是 admin "开考/关考/exam-link" 路径的真业务依赖, Open/BeginClose
+	// + token 侧车文件管理. nil 时对应路由返 503.
+	RunService *runs.Service
 
 	// Task 10 admin submissions/review 路径.
 	Review *review.Service // Apply / Regrade 跨事务, nil 时对应路由返 503
@@ -119,8 +122,8 @@ func NewRouter(deps Dependencies) http.Handler {
 func healthHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"ok":     true,
-			"time":   time.Now().UTC().Format(time.RFC3339),
+			"ok":      true,
+			"time":    time.Now().UTC().Format(time.RFC3339),
 			"version": versionInfo(),
 		})
 	}

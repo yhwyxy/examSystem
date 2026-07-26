@@ -36,6 +36,7 @@ database:
   # loadtest schema 隔离: search_path 强制走 loadtest schema (完全看不到 public)
   # migrate 已用 exam_migrator 跑过, serve 本身用 exam_app (DML only, 真实生产权限模型)
   url: "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable&options=-c%20search_path%3Dloadtest"
-log:
+logging:
   level: "info"
   dir: "/tmp/exam-server-loadtest-logs"
+  run_token_dir: "/tmp/exam-server-loadtest-tokens"   # Task 14: admin exam-link sidecar
