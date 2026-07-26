@@ -258,7 +258,8 @@ func mapSessionErrCode(err error) int {
 	if errors.Is(err, sessions.ErrInvalidSessionToken) {
 		return http.StatusUnauthorized
 	}
-	if errors.Is(err, sessions.ErrRunClosed) ||
+	if errors.Is(err, sessions.ErrStaleDraftRevision) ||
+		errors.Is(err, sessions.ErrRunClosed) ||
 		errors.Is(err, sessions.ErrActiveExists) {
 		return http.StatusConflict
 	}

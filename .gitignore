@@ -45,3 +45,13 @@ packages/
 
 # task6: 临时构建产物 (go build ./cmd/exam-server -> 当前 binary)
 /exam-server
+
+# task13: k6 容量测试产物
+# 忽略: 运行时生成的 paper/sessions/原始 k6 JSON (含 token, 不可提交)
+# 保留: scripts/loadtest/ (脚本本身) + loadtest/README.md + loadtest/results/summary.json
+loadtest/frontend/
+loadtest/scenarios/
+loadtest/generated/
+loadtest/results/*
+!loadtest/results/summary.json
+!loadtest/.gitkeep

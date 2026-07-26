@@ -1,0 +1,29 @@
+{
+  "passed": true,
+  "curves": {
+    "start": {
+      "present": true,
+      "p95_ms": 3.5,
+      "fail_rate": 0.0,
+      "p95_max": 500,
+      "fail_max": 0.01,
+      "passed": true
+    },
+    "draft": {
+      "present": true,
+      "p95_ms": 5.4,
+      "fail_rate": 0.0,
+      "p95_max": 750,
+      "fail_max": 0.01,
+      "passed": true
+    },
+    "submit": {
+      "present": true,
+      "p95_ms": 2.6,
+      "fail_rate": 0.0,
+      "p95_max": 750,
+      "fail_max": 0.01,
+      "passed": true
+    }
+  }
+}
