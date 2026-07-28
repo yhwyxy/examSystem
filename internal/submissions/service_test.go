@@ -103,7 +103,7 @@ func TestSubmit_HappyPath(t *testing.T) {
 	ctx := context.Background()
 	// 客观题 answers: 单选 question 来源于 paper.json. 用与 LogMR objective case 一致的 ans.
 	answersMap := map[string]any{
-		"q_single": "A",
+		"q_single":   "A",
 		"q_multiple": []any{"A", "B"},
 	}
 	ansJSON, _ := json.Marshal(answersMap)
@@ -124,11 +124,11 @@ func TestSubmit_HappyPath(t *testing.T) {
 	}
 
 	res, err := svc.Submit(ctx, submissions.SubmitRequest{
-		SessionToken:   token,
-		Answers:        ansJSON,
-		AnswersMap:     answersMap,
-		ClientIP:       &clientIP,
-		UserAgent:      &ua,
+		SessionToken: token,
+		Answers:      ansJSON,
+		AnswersMap:   answersMap,
+		ClientIP:     &clientIP,
+		UserAgent:    &ua,
 	})
 	if err != nil {
 		t.Fatalf("Submit: %v", err)
@@ -156,6 +156,16 @@ func TestSubmit_HappyPath(t *testing.T) {
 	}
 	if gen != 1 {
 		t.Errorf("gen = %d, want 1", gen)
+	}
+	// 校验 submission 与 grading_job 的 generation 一致，worker fenced completion 才能写回.
+	var submissionGen int64
+	err = pool.QueryRow(ctx, `SELECT grading_generation FROM submissions
+		WHERE id = $1::bigint`, res.SubmissionID).Scan(&submissionGen)
+	if err != nil {
+		t.Fatalf("query submission generation: %v", err)
+	}
+	if submissionGen != gen {
+		t.Errorf("submission generation = %d, job generation = %d; want both 1", submissionGen, gen)
 	}
 	// 校验 exam_sessions status='submitted'.
 	var sessionStatus string
@@ -200,8 +210,9 @@ func TestSubmit_PureObjectiveShortCircuit(t *testing.T) {
 		t.Fatalf("Submit: %v", err)
 	}
 	var status, review string
-	err = pool.QueryRow(ctx, `SELECT grading_status, review_status
-		FROM submissions WHERE id = $1::bigint`, res.SubmissionID).Scan(&status, &review)
+	var totalScore float64
+	err = pool.QueryRow(ctx, `SELECT grading_status, review_status, total_score
+		FROM submissions WHERE id = $1::bigint`, res.SubmissionID).Scan(&status, &review, &totalScore)
 	if err != nil {
 		t.Fatalf("query: %v", err)
 	}
@@ -210,6 +221,9 @@ func TestSubmit_PureObjectiveShortCircuit(t *testing.T) {
 	}
 	if review != "auto_scored" {
 		t.Errorf("review_status = %q, want 'auto_scored'", review)
+	}
+	if totalScore != 10 {
+		t.Errorf("total_score = %v, want 10", totalScore)
 	}
 	var jobCount int
 	err = pool.QueryRow(ctx, `SELECT count(*) FROM grading_jobs
@@ -236,12 +250,12 @@ func setupPGObjective(t *testing.T) (*pgxpool.Pool, string, func()) {
 		"paper_version": "obj-test-v1",
 		"questions": []any{
 			map[string]any{
-				"id":       "q-single",
-				"type":     "single_choice",
-				"score":    10,
-				"answer":   "A",
-				"options":  []any{"A", "B", "C", "D"},
-				"prompt":   "which letter is the first word",
+				"id":      "q-single",
+				"type":    "single_choice",
+				"score":   10,
+				"answer":  "A",
+				"options": []any{"A", "B", "C", "D"},
+				"prompt":  "which letter is the first word",
 			},
 		},
 	}

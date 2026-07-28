@@ -305,7 +305,7 @@ def _row_to_job(row) -> Job:
 
 
 _LOAD_JOB_PAYLOAD_SQL = """
-SELECT s.id AS submission_id, s.answers_json, s.starts_at, s.submitted_at,
+SELECT s.id AS submission_id, s.answers_json, s.started_at, s.submitted_at,
        s.objective_score, s.grading_detail_json,
        r.snapshot_path, r.snapshot_hash, r.paper_id,
        j.generation, j.attempts, j.max_attempts

@@ -2,16 +2,18 @@
 //
 // 输入: paper 中的单个 question (Python Question dict) + 学生答案 (normalized).
 // 输出: GradingDetail dict, 13+ 字段与 Python grade_objective 完全等价:
-//   question_id / type / question / student_answer / reference_answer /
-//   score / machine_score / final_score / max_score / is_correct /
-//   grading_method / confidence / reason / review_status /
-//   manually_reviewed / detail
+//
+//	question_id / type / question / student_answer / reference_answer /
+//	score / machine_score / final_score / max_score / is_correct /
+//	grading_method / confidence / reason / review_status /
+//	manually_reviewed / detail
 //
 // 不调主观模型. true_false/single_choice/multiple_choice 全部一比一打分;
 // short_answer/essay/composite 由上层主观 service 评分, 此包不应处理.
 package objective
 
 import (
+	"encoding/json"
 	"fmt"
 	"math"
 	"sort"
@@ -58,22 +60,22 @@ func Grade(question map[string]any, studentAnswer any, partial bool) (Detail, er
 	}
 
 	return Detail{
-		"question_id":        question["id"],
-		"type":               qtype,
-		"question":           question["question"],
-		"student_answer":     studentAnswer,
-		"reference_answer":   reference,
-		"score":              score,
-		"machine_score":      score,
-		"final_score":        score,
-		"max_score":          maxScore,
-		"is_correct":         raw["is_correct"],
-		"grading_method":     "objective_rule",
-		"confidence":         1.0,
-		"reason":             "客观题规则判分",
-		"review_status":      "auto_scored",
-		"manually_reviewed":  false,
-		"detail":             detail,
+		"question_id":       question["id"],
+		"type":              qtype,
+		"question":          question["question"],
+		"student_answer":    studentAnswer,
+		"reference_answer":  reference,
+		"score":             score,
+		"machine_score":     score,
+		"final_score":       score,
+		"max_score":         maxScore,
+		"is_correct":        raw["is_correct"],
+		"grading_method":    "objective_rule",
+		"confidence":        1.0,
+		"reason":            "客观题规则判分",
+		"review_status":     "auto_scored",
+		"manually_reviewed": false,
+		"detail":            detail,
 	}, nil
 }
 
@@ -92,10 +94,11 @@ func gradeSingleChoice(student, reference any, maxScore float64) Detail {
 //
 // student 可能 None / 单值 / list: 全部转 list 然后归一化为集合.
 // reference 为 [] 列表. 算法:
-//   selected 集合 ∩ correct_set 集合; 若 selected 含错项(不在 correct_set) -> 0 分.
-//   partial=True 且无错项: 得分 = max_score * hit / len(correct_set).
-//   partial=False 且无错项: 仅当 selected == correct_set 才给满分.
-//   correct_set 为空 -> 0 (Python 提防 0/0).
+//
+//	selected 集合 ∩ correct_set 集合; 若 selected 含错项(不在 correct_set) -> 0 分.
+//	partial=True 且无错项: 得分 = max_score * hit / len(correct_set).
+//	partial=False 且无错项: 仅当 selected == correct_set 才给满分.
+//	correct_set 为空 -> 0 (Python 提防 0/0).
 func gradeMultipleChoice(student any, reference any, maxScore float64, partial bool) Detail {
 	var studentList []any
 	switch s := student.(type) {
@@ -204,6 +207,11 @@ func anyFloat(v any) float64 {
 		return float64(x)
 	case float64:
 		return x
+	case json.Number:
+		f, err := x.Float64()
+		if err == nil {
+			return f
+		}
 	}
 	return 0
 }

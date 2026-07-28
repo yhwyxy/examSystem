@@ -60,7 +60,6 @@ func isPgNoRows(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
 
-
 // FindSessionByToken 用原始 token (包内 sha256) 在 pool 上查询 exam_sessions.
 // 仅返回 status / id / run_id / employee_id / name / department / started_at/
 // (事务外用, 不加锁).
@@ -180,41 +179,50 @@ func (r *Repository) GetByID(ctx context.Context, q PoolExec, submissionID strin
 // 入参 sessions.SubmissionInput 由 sessions 包定义 (submissions 依赖 sessions 单向).
 // 返回的 submission id 是字符串 (submissions.id bigserial -> ::text).
 func (r *Repository) CreateFromSessionTx(ctx context.Context, tx pgx.Tx,
-	in sessions.SubmissionInput) (string, error) {
+	in sessions.SubmissionInput) (string, bool, error) {
 	// 客观题即时判分 (在事务内; 主 HTTP 路径传 Prepared 已避免此处 IO).
 	var (
 		objScore      int
 		objDetailJSON []byte
+		hasSubjective = true
 	)
 	if in.SnapshotPath != "" && in.AnswersMap != nil {
-		objScore, _, objDetailJSON, _ = gradeObjectiveInTx(ctx, in)
+		objScore, _, objDetailJSON, _, hasSubjective = gradeObjectiveInTx(ctx, in)
 	}
-	// objective_max_score 与 objective_score 写入 submissions 表.
 	if len(objDetailJSON) == 0 {
 		objDetailJSON = []byte("[]")
 	}
+	gradingStatus := "pending"
+	reviewStatus := "grading"
+	generation := 1
+	if !hasSubjective {
+		gradingStatus = "done"
+		reviewStatus = "auto_scored"
+		generation = 0
+	}
 	const sql = `INSERT INTO submissions
 		(name, employee_id, paper_id, paper_name, run_id, department,
-		 answers_json, objective_score, grading_detail_json,
-		 grading_status, grading_generation,
+		 answers_json, objective_score, total_score, grading_detail_json,
+		 grading_status, review_status, grading_generation,
 		 submitted_at, started_at,
 		 client_ip, user_agent, auto_submit_reason)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',0,$10,$11,$12,$13,$14)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 		RETURNING id::text`
 	now := time.Now().UTC()
 	row := tx.QueryRow(ctx, sql,
 		in.Name, in.EmployeeID, in.PaperID, nullableStr(in.PaperName),
 		in.RunID, nullablePtrStr(in.Department),
-		in.Answers, objScore, objDetailJSON,
+		in.Answers, objScore, objScore, objDetailJSON,
+		gradingStatus, reviewStatus, generation,
 		now, nullableTime(in.StartedAt),
 		nullablePtrStr(in.ClientIP), nullablePtrStr(in.UserAgent),
 		nullablePtrStr(in.AutoSubmitReason),
 	)
 	var id string
 	if err := row.Scan(&id); err != nil {
-		return "", fmt.Errorf("submissions.CreateFromSessionTx insert: %w", err)
+		return "", false, fmt.Errorf("submissions.CreateFromSessionTx insert: %w", err)
 	}
-	return id, nil
+	return id, hasSubjective, nil
 }
 
 // gradeObjectiveInTx 在事务内加载快照 + 客观题评分 (兼容 deprecated sessions.SubmitManual 路径).
@@ -229,17 +237,18 @@ func (r *Repository) CreateFromSessionTx(ctx context.Context, tx pgx.Tx,
 // 任一步失败返回零分 (与 Python insert_submission_pending 兼容: 评分完后再异
 // 步处理). 不返回 error 以保证 INSERT 主路径不被卡.
 func gradeObjectiveInTx(ctx context.Context, in sessions.SubmissionInput) (
-	int, int, []byte, int) {
+	int, int, []byte, int, bool) {
 	if in.SnapshotPath == "" || in.AnswersMap == nil {
-		return 0, 0, []byte("[]"), 0
+		return 0, 0, []byte("[]"), 0, true
 	}
 	snap, err := papers.LoadSnapshot(in.SnapshotPath, in.SnapshotHash)
 	if err != nil {
-		return 0, 0, []byte("[]"), 0
+		return 0, 0, []byte("[]"), 0, true
 	}
 	questions, _ := snap.Doc["questions"].([]any)
 	details := make([]map[string]any, 0, len(questions))
 	var objScore, objMax float64
+	var hasSubjective bool
 	for _, qraw := range questions {
 		question, ok := qraw.(map[string]any)
 		if !ok {
@@ -268,14 +277,15 @@ func gradeObjectiveInTx(ctx context.Context, in sessions.SubmissionInput) (
 			}
 		default:
 			// 主观题: 占位 score=0, 由 Worker (Task 7) 异步补完.
+			hasSubjective = true
 			details = append(details, objPlaceholder(question, ans, maxScore, "subjective_pending"))
 		}
 	}
 	objJSON, merr := json.Marshal(details)
 	if merr != nil {
-		return 0, 0, []byte("[]"), 0
+		return 0, 0, []byte("[]"), 0, true
 	}
-	return int(objScore), int(objMax), objJSON, len(questions)
+	return int(objScore), int(objMax), objJSON, len(questions), hasSubjective
 }
 
 // objQID 取 question["id"]; 兼容 int / string 形态, 统一回 string.
@@ -311,6 +321,13 @@ func objMaxScoreOf(q map[string]any) float64 {
 		return v
 	case int:
 		return float64(v)
+	case int64:
+		return float64(v)
+	case json.Number:
+		f, err := v.Float64()
+		if err == nil {
+			return f
+		}
 	}
 	return 0
 }
@@ -318,21 +335,21 @@ func objMaxScoreOf(q map[string]any) float64 {
 // objPlaceholder 是主观题或异常 fallback 的占位项 (score=0).
 func objPlaceholder(q map[string]any, ans any, maxScore float64, reason string) map[string]any {
 	return map[string]any{
-		"question_id":    q["id"],
-		"type":           q["type"],
-		"student_answer": ans,
-		"reference_answer": q["answer"],
-		"score":          0.0,
-		"machine_score":  0.0,
-		"final_score":    0.0,
-		"max_score":      maxScore,
-		"is_correct":     false,
-		"grading_method": "subjective_pending",
-		"confidence":     0.0,
-		"reason":         reason,
-		"review_status":  "unanswered",
+		"question_id":       q["id"],
+		"type":              q["type"],
+		"student_answer":    ans,
+		"reference_answer":  q["answer"],
+		"score":             0.0,
+		"machine_score":     0.0,
+		"final_score":       0.0,
+		"max_score":         maxScore,
+		"is_correct":        false,
+		"grading_method":    "subjective_pending",
+		"confidence":        0.0,
+		"reason":            reason,
+		"review_status":     "unanswered",
 		"manually_reviewed": false,
-		"detail":         map[string]any{},
+		"detail":            map[string]any{},
 	}
 }
 
@@ -351,6 +368,7 @@ func nullablePtrStr(p *string) any {
 	}
 	return *p
 }
+
 // nullableTime 把 zero time 转 nil 落 NULL.
 func nullableTime(t time.Time) any {
 	if t.IsZero() {

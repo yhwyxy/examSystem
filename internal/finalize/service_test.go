@@ -2,7 +2,9 @@ package finalize_test
 
 import (
 	"context"
+	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -32,6 +34,7 @@ func skipIfNoPG(t *testing.T) *pgxpool.Pool {
 // TestFinalizeRun_ClosesRunAndAutoSubmits 集成测试:
 //   - 构造 closing run + 2 active sessions (含 draft_json 含客观题答案)
 //   - 调 FinalizeRun -> 期望 run status=closed, 两 sessions 被自动提交为 submissions (~graded)
+//
 // 注: 这是 plan Step 1 "故障注入 + 收卷完整测试".
 func TestFinalizeRun_ClosesRunAndAutoSubmits(t *testing.T) {
 	pool := skipIfNoPG(t)
@@ -91,6 +94,13 @@ VALUES ('sess-fin-1', 'run-fin', 'emp1', 'tester1', 'dept', 'h-tok-1',
 	if nSub != 2 {
 		t.Errorf("submissions count = %d, want 2", nSub)
 	}
+	var nJobs int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM grading_jobs WHERE run_id=$1 AND generation=1`, "run-fin").Scan(&nJobs); err != nil {
+		t.Fatalf("count grading jobs: %v", err)
+	}
+	if nJobs != 2 {
+		t.Errorf("grading jobs count = %d, want 2", nJobs)
+	}
 	// 校验 auto_submit_reason 字段 = admin_closed
 	var reasons []string
 	rows, err := pool.Query(ctx, `SELECT auto_submit_reason FROM submissions
@@ -111,5 +121,67 @@ VALUES ('sess-fin-1', 'run-fin', 'emp1', 'tester1', 'dept', 'h-tok-1',
 		if r != "admin_closed" {
 			t.Errorf("auto_submit_reason = %q, want 'admin_closed'", r)
 		}
+	}
+}
+
+func TestFinalizeRun_PureObjectiveDoesNotQueueGrading(t *testing.T) {
+	pool := skipIfNoPG(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := map[string]any{
+		"paper_id":  "objective-finalize",
+		"name":      "objective-finalize",
+		"exam_info": map[string]any{"title": "Objective", "description": "Objective", "total_score": 10, "passing_score": 6},
+		"questions": []any{map[string]any{
+			"id": "q1", "type": "single_choice", "question": "Question", "score": 10,
+			"options": []any{map[string]any{"key": "A", "text": "A"}, map[string]any{"key": "B", "text": "B"}},
+			"answer":  "A",
+		}},
+	}
+	path := filepath.Join(t.TempDir(), "objective.json")
+	body, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+
+	if _, err := pool.Exec(ctx, `INSERT INTO exam_runs
+		(id, paper_id, public_token_hash, status, snapshot_path, round_no, duration_minutes,
+		 opened_at, finalize_at, closing_started_at, created_at)
+		VALUES ('run-objective-fin', 'objective-finalize', 'tok', 'closing', $1, 1, 60,
+		 $2, $2, $2, $2)`, path, now); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO exam_sessions
+		(id, run_id, employee_id, name, session_token_hash, started_at, deadline_at,
+		 status, draft_json, draft_revision, created_at, updated_at)
+		VALUES ('sess-objective-fin', 'run-objective-fin', 'emp-objective', 'tester', 'tok',
+		 $1, $2, 'active', '{"q1":"A"}', 1, $1, $1)`, now, now.Add(time.Minute)); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	svc := finalize.NewService(pool, runs.NewRepository(), sessions.NewRepository(), submissions.NewRepository(), 30)
+	if _, closed, err := svc.FinalizeRun(ctx, "run-objective-fin"); err != nil {
+		t.Fatalf("FinalizeRun: %v", err)
+	} else if !closed {
+		t.Fatal("FinalizeRun returned closed=false")
+	}
+	var status, review string
+	var score float64
+	if err := pool.QueryRow(ctx, `SELECT grading_status, review_status, total_score
+		FROM submissions WHERE run_id = 'run-objective-fin'`).Scan(&status, &review, &score); err != nil {
+		t.Fatalf("query submission: %v", err)
+	}
+	if status != "done" || review != "auto_scored" || score != 10 {
+		t.Errorf("submission = (%q, %q, %v), want (done, auto_scored, 10)", status, review, score)
+	}
+	var jobs int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM grading_jobs WHERE run_id = 'run-objective-fin'`).Scan(&jobs); err != nil {
+		t.Fatalf("count grading jobs: %v", err)
+	}
+	if jobs != 0 {
+		t.Errorf("grading jobs = %d, want 0", jobs)
 	}
 }

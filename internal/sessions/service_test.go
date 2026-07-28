@@ -65,9 +65,9 @@ func stableID(n int32) string {
 // runsSvcLookup 是把 runs.Service + runs.Repository (真实 repo 查询) 适配成 sessions.RunsLookup.
 // 通过显式注入 tx 完成所有读取; HTTP 层将来按既定方式与 sessions 协作.
 type runsSvcLookup struct {
-	runsSvc *runs.Service
+	runsSvc  *runs.Service
 	runsRepo *runs.Repository
-	pool    *pgxpool.Pool
+	pool     *pgxpool.Pool
 }
 
 func (r *runsSvcLookup) FindByToken(ctx context.Context, token string) (*sessions.RunLite, error) {
@@ -368,6 +368,7 @@ func TestSubmitManualDisabled(t *testing.T) {
 		t.Errorf("err = %v, want ErrSubmitDisabled", err)
 	}
 }
+
 // ----- StartOrResume 测试 -----
 
 // TestStartOrResumeNew 通过真实 runs svc 开 run -> StartOrResume 新建一条 session.
@@ -447,6 +448,37 @@ func TestStartOrResumeResume(t *testing.T) {
 	}
 }
 
+func TestStartOrResumeResumeWithoutDepartment(t *testing.T) {
+	ctx := context.Background()
+	env, slug := newEnv(t)
+	_, runToken := startRun(t, ctx, env, slug)
+
+	tx1, err := env.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin first start tx: %v", err)
+	}
+	first, err := env.svc.StartOrResume(ctx, tx1, runToken, "emp-no-department", "Alice", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("first StartOrResume: %v", err)
+	}
+	if err := tx1.Commit(ctx); err != nil {
+		t.Fatalf("commit first start: %v", err)
+	}
+
+	tx2, err := env.pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin resume tx: %v", err)
+	}
+	defer tx2.Rollback(ctx)
+	resumed, err := env.svc.StartOrResume(ctx, tx2, runToken, "emp-no-department", "Alice", nil, nil, nil)
+	if err != nil {
+		t.Fatalf("resume StartOrResume: %v", err)
+	}
+	if resumed.NewSession || resumed.SessionID != first.SessionID {
+		t.Errorf("resume result = %+v, want existing session %q", resumed, first.SessionID)
+	}
+}
+
 // TestStartOrResumeBadToken run token 不存在 -> ErrInvalidSessionToken.
 func TestStartOrResumeBadToken(t *testing.T) {
 	ctx := context.Background()
@@ -493,4 +525,3 @@ func TestStartOrResumeRunClosed(t *testing.T) {
 		t.Errorf("err = %v, want ErrRunClosed", err)
 	}
 }
-

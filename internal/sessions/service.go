@@ -29,16 +29,16 @@ import (
 // service 不直接持有 pgxpool — 每个方法以 pgx.Tx / pgxPool 开始一个 (可中断的) 事务;
 // 跨 repo 调用在同一 tx 内, 保证 CAS + insert submission + mark submitted 原子.
 type Service struct {
-	repo           *Repository
-	runsLookup     RunsLookup
-	submission     SubmissionStore
-	jobEnqueue     JobEnqueuer
-	examDuration   time.Duration
-	gracePeriod    time.Duration
-	draftThrottle  time.Duration // 草稿保存最小间隔, plan 138 行 retry_after_ms
-	now            func() time.Time
-	generateID     func() string
-	generateToken  func() (string, error)
+	repo          *Repository
+	runsLookup    RunsLookup
+	submission    SubmissionStore
+	jobEnqueue    JobEnqueuer
+	examDuration  time.Duration
+	gracePeriod   time.Duration
+	draftThrottle time.Duration // 草稿保存最小间隔, plan 138 行 retry_after_ms
+	now           func() time.Time
+	generateID    func() string
+	generateToken func() (string, error)
 }
 
 // RunsLookup 是 runs.Service 暴露的最小接口, 避免循环 import.
@@ -70,7 +70,7 @@ type RunLite struct {
 // Task 6 将接口签名扩展为显式传 pgx.Tx: 保证 submission INSERT / grading_jobs INSERT /
 // session MarkSubmitted 三步在同一原子单元内完成 (plan Step 2 "短事务" 要求).
 type SubmissionStore interface {
-	CreateFromSessionTx(ctx context.Context, tx pgx.Tx, in SubmissionInput) (string, error)
+	CreateFromSessionTx(ctx context.Context, tx pgx.Tx, in SubmissionInput) (submissionID string, needsGrading bool, err error)
 	DuplicateExists(ctx context.Context, tx pgx.Tx, runID, employeeID string) (bool, error)
 	FindIDForRunEmployee(ctx context.Context, tx pgx.Tx, runID, employeeID string) (string, error)
 }
@@ -83,8 +83,8 @@ type SubmissionInput struct {
 	RunID            string
 	PaperName        string
 	Department       *string
-	Answers          []byte          // raw canonical answers json
-	AnswersMap       map[string]any  // for objective grading input
+	Answers          []byte         // raw canonical answers json
+	AnswersMap       map[string]any // for objective grading input
 	StartedAt        time.Time
 	SubmittedAt      time.Time
 	ClientIP         *string
@@ -127,12 +127,20 @@ type Option func(*Service)
 
 // WithExamDuration 覆盖单次会话默认时长 (来自 config.Exam.DurationMinutes).
 func WithExamDuration(d time.Duration) Option {
-	return func(s *Service) { if d > 0 { s.examDuration = d } }
+	return func(s *Service) {
+		if d > 0 {
+			s.examDuration = d
+		}
+	}
 }
 
 // WithGracePeriod 覆盖提交宽限 (config.Exam.GracePeriodSeconds).
 func WithGracePeriod(d time.Duration) Option {
-	return func(s *Service) { if d > 0 { s.gracePeriod = d } }
+	return func(s *Service) {
+		if d > 0 {
+			s.gracePeriod = d
+		}
+	}
 }
 
 // WithDraftThrottle 覆盖草稿最小保存间隔; 0 表示不限流.
@@ -191,16 +199,16 @@ var _ = json.Marshal // placeholder; 后段 SaveDraft 会用 json. 防止 "impor
 
 // StartResult 是 StartOrResume 的返回: 已有则 Resume, 新建则 Start.
 type StartResult struct {
-	SessionID        string
-	SessionToken     string // 明文 token, 仅本次返回, 入库为 hash
-	NewSession       bool   // true=本次新建; false=resume 既有
-	RunID            string
-	RunStatus        string
-	StartedAt        time.Time
-	Deadline         time.Time
-	Draft            json.RawMessage // resume 时已有 draft (空 "{}" 若新建)
-	DraftRevision    int
-	Paper            json.RawMessage // sanitized paper json (供前端展示), 由调用方填回或调 Get
+	SessionID     string
+	SessionToken  string // 明文 token, 仅本次返回, 入库为 hash
+	NewSession    bool   // true=本次新建; false=resume 既有
+	RunID         string
+	RunStatus     string
+	StartedAt     time.Time
+	Deadline      time.Time
+	Draft         json.RawMessage // resume 时已有 draft (空 "{}" 若新建)
+	DraftRevision int
+	Paper         json.RawMessage // sanitized paper json (供前端展示), 由调用方填回或调 Get
 }
 
 // StartOrResume 对齐 Python start_exam: 给定 run_token + employee 信息, 若 (run_id, employee_id,
@@ -278,15 +286,15 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 	}
 	in := SessionCreateInput{
 		SessionID:        sessionID,
-		RunID:           runLite.ID,
-		EmployeeID:      employeeID,
-		Name:            name,
-		Department:      department,
+		RunID:            runLite.ID,
+		EmployeeID:       employeeID,
+		Name:             name,
+		Department:       department,
 		SessionTokenHash: hashToken(token),
-		StartedAt:       now,
-		DeadlineAt:      deadline,
-		ClientIP:        clientIP,
-		UserAgent:       userAgent,
+		StartedAt:        now,
+		DeadlineAt:       deadline,
+		ClientIP:         clientIP,
+		UserAgent:        userAgent,
 	}
 	if err := s.repo.InsertIfAbsent(ctx, q, in); err != nil {
 		if errors.Is(err, ErrActiveExists) {
@@ -325,9 +333,9 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 
 // SaveDraftResult 给 HTTP 层反映 CAS 结果.
 type SaveDraftResult struct {
-	Revision    int
+	Revision     int
 	DraftSavedAt time.Time
-	Throttled   bool          // true 表示距离上次保存太近, 拒写 (rls 0 行无变化)
+	Throttled    bool // true 表示距离上次保存太近, 拒写 (rls 0 行无变化)
 }
 
 // SaveDraft 对齐 Python save_draft: 给定 session_token + 旧 revision + 新 draft,
@@ -384,9 +392,9 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	if s.draftThrottle > 0 && sess.DraftSavedAt != nil {
 		if elapsed := s.now().Sub(*sess.DraftSavedAt); elapsed < s.draftThrottle {
 			return &SaveDraftResult{
-				Revision:    sess.DraftRevision, // 不变
+				Revision:     sess.DraftRevision, // 不变
 				DraftSavedAt: *sess.DraftSavedAt,
-				Throttled:   true,
+				Throttled:    true,
 			}, nil
 		}
 	}
@@ -458,12 +466,12 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 // SubmitManualRequest 是 SubmitManual 的入参. answers / answers_map 由 HTTP 层解析
 // 后传入; answersMap 仅用于注入 objective grader 内部 cache.
 type SubmitManualRequest struct {
-	SessionToken    string
-	ClientIP        *string
-	UserAgent       *string
-	Answers         []byte         // canonical json bytes
-	AnswersMap      map[string]any // for objective grader (optional)
-	AutoSubmitReason *string       // 非 nil 表示系统自动交卷 (deadline / admin close)
+	SessionToken     string
+	ClientIP         *string
+	UserAgent        *string
+	Answers          []byte         // canonical json bytes
+	AnswersMap       map[string]any // for objective grader (optional)
+	AutoSubmitReason *string        // 非 nil 表示系统自动交卷 (deadline / admin close)
 }
 
 // SubmitManualResult 是 SubmitManual 的成功结果.
@@ -563,7 +571,7 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	// 由于 CreateFromSessionTx 内部会在同一 Exec/QueryRow 上写 submissions / review_logs / jobs,
 	// HTTP 层负责 Begin/Commit/Rollback, Service 不感知 tx 类型.)
 
-	subID, err := s.submission.CreateFromSessionTx(ctx, tx, SubmissionInput{
+	subID, needsGrading, err := s.submission.CreateFromSessionTx(ctx, tx, SubmissionInput{
 		Name:             sess.Name,
 		EmployeeID:       sess.EmployeeID,
 		PaperID:          run.PaperID,
@@ -585,9 +593,11 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	}
 	// 构造 grading job spec payload: paper_id / run_id / generation=1.
 	// jobs.Service.EnqueueTx 解析 JSON 字段; 缺失字段容错用默认 generation=1.
-	jobPayload := mustJobSpecJSON(run.PaperID, sess.RunID, 1)
-	if err := s.jobEnqueue.EnqueueTx(ctx, tx, subID, jobPayload); err != nil {
-		return nil, fmt.Errorf("sessions.SubmitManual enqueue: %w", err)
+	if needsGrading {
+		jobPayload := mustJobSpecJSON(run.PaperID, sess.RunID, 1)
+		if err := s.jobEnqueue.EnqueueTx(ctx, tx, subID, jobPayload); err != nil {
+			return nil, fmt.Errorf("sessions.SubmitManual enqueue: %w", err)
+		}
 	}
 	if _, err := s.repo.MarkSubmitted(ctx, q, sess.ID); err != nil {
 		return nil, fmt.Errorf("sessions.SubmitManual mark submitted: %w", err)
@@ -612,11 +622,9 @@ func mustJobSpecJSON(paperID, runID string, generation int) []byte {
 	return b
 }
 
-
 // ErrSubmitDisabled 是 submission/job 依赖未注入时的合约错误 (HTTP 映射 503).
 var ErrSubmitDisabled = errors.New("sessions: SUBMIT_DISABLED")
 
 // ErrSubmitRequiresTx 表示 SubmitManual 收到的 q 不是 pgx.Tx (调用方传入 *pgxpool.Pool
 // auto-tx 时无法整体回滚, 拒绝). HTTP 映射 500.
 var ErrSubmitRequiresTx = errors.New("sessions: SUBMIT_REQUIRES_TX")
-

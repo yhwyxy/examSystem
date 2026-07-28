@@ -14,17 +14,17 @@ import (
 
 // 错误约定: 匹配 plan HTTP 错误 code (大写 snake).
 var (
-	ErrSessionNotFound      = errors.New("sessions: SESSION_NOT_FOUND")
+	ErrSessionNotFound     = errors.New("sessions: SESSION_NOT_FOUND")
 	ErrInvalidSessionToken = errors.New("sessions: INVALID_SESSION_TOKEN")
-	ErrSessionSubmitted     = errors.New("sessions: SESSION_SUBMITTED")
-	ErrStaleDraftRevision   = errors.New("sessions: STALE_DRAFT_REVISION")
-	ErrDraftSaveFailed      = errors.New("sessions: DRAFT_SAVE_FAILED")
-	ErrRunNotFound          = errors.New("sessions: RUN_NOT_FOUND")
-	ErrRunClosed            = errors.New("sessions: RUN_CLOSED")
-	ErrRunClosing           = errors.New("sessions: RUN_CLOSING")
-	ErrDuplicateSubmission  = errors.New("sessions: DUPLICATE_SUBMISSION")
-	ErrActiveExists         = errors.New("sessions: SESSION_ACTIVE_EXISTS") // 并发竞争 (run+employee 已有 active)
-	ErrNoRow                = errors.New("sessions: no row")
+	ErrSessionSubmitted    = errors.New("sessions: SESSION_SUBMITTED")
+	ErrStaleDraftRevision  = errors.New("sessions: STALE_DRAFT_REVISION")
+	ErrDraftSaveFailed     = errors.New("sessions: DRAFT_SAVE_FAILED")
+	ErrRunNotFound         = errors.New("sessions: RUN_NOT_FOUND")
+	ErrRunClosed           = errors.New("sessions: RUN_CLOSED")
+	ErrRunClosing          = errors.New("sessions: RUN_CLOSING")
+	ErrDuplicateSubmission = errors.New("sessions: DUPLICATE_SUBMISSION")
+	ErrActiveExists        = errors.New("sessions: SESSION_ACTIVE_EXISTS") // 并发竞争 (run+employee 已有 active)
+	ErrNoRow               = errors.New("sessions: no row")
 )
 
 // SessionStatus 枚举.
@@ -46,22 +46,22 @@ const (
 
 // Session 映射 exam_sessions 单行, 时间用 *time.Time 表示, nil 即 NULL.
 type Session struct {
-	ID              string
-	RunID           string
-	EmployeeID      string
-	Name            string
-	Department      *string
+	ID               string
+	RunID            string
+	EmployeeID       string
+	Name             string
+	Department       *string
 	SessionTokenHash string
-	StartedAt       time.Time
-	DeadlineAt      time.Time
-	DraftJSON       []byte // raw jsonb bytes; 空对象为 []byte("{}")
-	DraftRevision   int
-	DraftSavedAt    *time.Time
-	Status          SessionStatus
-	ClientIP        *string
-	UserAgent       *string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	StartedAt        time.Time
+	DeadlineAt       time.Time
+	DraftJSON        []byte // raw jsonb bytes; 空对象为 []byte("{}")
+	DraftRevision    int
+	DraftSavedAt     *time.Time
+	Status           SessionStatus
+	ClientIP         *string
+	UserAgent        *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // SessionCreateInput 用于新建一行. tokenHash 为 sha256(token) hex, runID 必须存在.
@@ -95,20 +95,16 @@ func NewRepository() *Repository { return &Repository{} }
 // scanSession 统一扫描一行的 INT8/int8/text/timestamptz/jsonb/integer/text 集合.
 func scanSession(r pgx.Row) (*Session, error) {
 	s := &Session{}
-	var statusStr, deptStr string
+	var statusStr string
 	var draftSavedAt *time.Time
 	var clientIP, userAgent *string
 	if err := r.Scan(
-		&s.ID, &s.RunID, &s.EmployeeID, &s.Name, &deptStr,
+		&s.ID, &s.RunID, &s.EmployeeID, &s.Name, &s.Department,
 		&s.SessionTokenHash, &s.StartedAt, &s.DeadlineAt,
 		&s.DraftJSON, &s.DraftRevision, &draftSavedAt, &statusStr,
 		&clientIP, &userAgent, &s.CreatedAt, &s.UpdatedAt,
 	); err != nil {
 		return nil, err
-	}
-	if deptStr != "" {
-		dep := deptStr
-		s.Department = &dep
 	}
 	s.DraftSavedAt = draftSavedAt
 	s.ClientIP = clientIP

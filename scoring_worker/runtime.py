@@ -23,30 +23,34 @@ def run_one_job(conn, worker_id: str, lease_seconds: int,
     job = repo.claim_job(conn, worker_id, lease_seconds)
     if job is None:
         return False
-    payload = repo.load_job_payload(conn, job.id)
-    doc = snapshot_cache.get(payload["snapshot_path"], payload.get("snapshot_hash"))
-    answers = payload.get("answers_json") or "{}"
-    if isinstance(answers, str):
-        answers = json.loads(answers)
+    conn.commit()
+
     try:
+        payload = repo.load_job_payload(conn, job.id)
+        doc = snapshot_cache.get(payload["snapshot_path"], payload.get("snapshot_hash"))
+        answers = payload.get("answers_json") or "{}"
+        if isinstance(answers, str):
+            answers = json.loads(answers)
         from .grading import grade_submission
         preserve = _load_preserve_index(conn, job.submission_id)
         result = grade_submission(doc, answers, ssvc, preserve=preserve)
+        detail_json = json.dumps(result["detail"]).encode("utf-8")
+        out = repo.complete_job(
+            conn, job,
+            objective_score=int(result["objective_score"]),
+            subjective_score_machine=float(result["subjective_score_machine"]),
+            subjective_score_final=float(result["subjective_score_final"]),
+            grading_detail_json=detail_json,
+            review_status=result.get("overall_review_status", "graded"),
+        )
+        conn.commit()
     except Exception as e:
+        conn.rollback()
         logger.warning("job=%s grading error: %s", job.id, e)
-        out = repo.fail_job(conn, job, error_msg=str(e))
+        repo.fail_job(conn, job, error_msg=str(e))
         conn.commit()
         return True
-    detail_json = json.dumps(result["detail"]).encode("utf-8")
-    out = repo.complete_job(
-        conn, job,
-        objective_score=int(result["objective_score"]),
-        subjective_score_machine=float(result["subjective_score_machine"]),
-        subjective_score_final=float(result["subjective_score_final"]),
-        grading_detail_json=detail_json,
-        review_status=result.get("overall_review_status", "graded"),
-    )
-    conn.commit()
+
     logger.info("job=%s complete=%s obj=%s subj_%s",
                 job.id, out, result["objective_score"], result["subjective_score_final"])
     return True

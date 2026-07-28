@@ -1,16 +1,16 @@
 // Package papers -- validate.go 100% 复刻 Python question_loader.validate_questions.
 //
 // 校验逻辑 (对照 Python):
-//   1. paper_id & name & questions 必填
-//   2. paper_id slug 正则 ^[a-zA-Z0-9_\\-]+$ (与 Python slug 安全正则一致)
-//   3. exam_info: total_score / passing_score / title / description 必填且类型正确
-//   4. 每题: type 在 ALLOWED_QUESTION_TYPES 内
-//      single_choice / multiple_choice / true_false: options 必裸 list, answer 形状合规
-//   5. short_answer / composite: scoring_mode 在 ALLOWED_SCORING_MODES; code 子模
-//      式有 code_language 与可选 allowed_languages 都落在 ALLOWED_CODE_LANGUAGES
-//   6. composite 子题分值之和必等父题 (Python _validate_sub_questions)
-//   7. scoring_points 表 (若存在) 必是 list[{text, score}]
-//   8. score 为非负数, 不为 0/missing 时报错
+//  1. paper_id & name & questions 必填
+//  2. paper_id slug 正则 ^[a-zA-Z0-9_\\-]+$ (与 Python slug 安全正则一致)
+//  3. exam_info: total_score / passing_score / title / description 必填且类型正确
+//  4. 每题: type 在 ALLOWED_QUESTION_TYPES 内
+//     single_choice / multiple_choice / true_false: options 必裸 list, answer 形状合规
+//  5. short_answer / composite: scoring_mode 在 ALLOWED_SCORING_MODES; code 子模
+//     式有 code_language 与可选 allowed_languages 都落在 ALLOWED_CODE_LANGUAGES
+//  6. composite 子题分值之和必等父题 (Python _validate_sub_questions)
+//  7. scoring_points 表 (若存在) 必是 list[{text, score}]
+//  8. score 为非负数, 不为 0/missing 时报错
 //
 // 校验失败返回 *ValidationError; 主要 cause 子表对齐 Python message.
 package papers
@@ -211,8 +211,10 @@ func validateOne(mu *MultiError, q Question, i int) {
 	}
 	// 按分支
 	switch qtype {
-	case "single_choice", "multiple_choice", "true_false":
+	case "single_choice", "multiple_choice":
 		validateOptionList(mu, q, prefix)
+	case "true_false":
+		validateTrueFalse(mu, q, prefix)
 	case "short_answer", "essay":
 		validateSubjectiveModeAndLanguage(mu, q, prefix)
 		validateAnswerTextOrList(mu, q, prefix)
@@ -282,6 +284,20 @@ func validateOptionList(mu *MultiError, q Question, prefix string) {
 				mu.add("answer", fmt.Sprintf("%s.answer[%d]: %v not in options", prefix, j, x))
 			}
 		}
+	}
+}
+
+func validateTrueFalse(mu *MultiError, q Question, prefix string) {
+	ans, exists := q["answer"]
+	if !exists {
+		mu.add("missing", prefix+": answer required")
+		return
+	}
+	if _, ok := ans.(bool); ok {
+		return
+	}
+	if s, ok := ans.(string); !ok || (s != "true" && s != "false" && s != "正确" && s != "错误") {
+		mu.add("type", prefix+": true_false answer must be bool or 正确/错误")
 	}
 }
 

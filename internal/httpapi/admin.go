@@ -537,7 +537,9 @@ func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // examLinkHandlerGET GET /api/admin/exam-link?paper_slug=<slug>
-//   兼容 GET /api/admin/papers/{slug}/exam-link (UI papers.js:546/779 真 用路径形态)
+//
+//	兼容 GET /api/admin/papers/{slug}/exam-link (UI papers.js:546/779 真 用路径形态)
+//
 // 重建当前最近一条 open run 的公开 URL. 从 snapshot 文件读 hash + token 侧车重建.
 // qr_base64 由 makeQRDataURL 真生成 (Task 14 fix 分支已补 QR 库).
 func examLinkHandlerGET(deps Dependencies) http.HandlerFunc {
@@ -1006,32 +1008,67 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// statsSubmissionsHandler GET /api/admin/submissions/stats: 按 review_status 分组聚合.
-// 返 {"counts":{done:N,grading:N,reviewed:N,...},"total":N}.
+// statsSubmissionsHandler GET /api/admin/stats: 返回总览页需要的聚合值，并保留状态分组。
 func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := deps.Pool.Query(r.Context(),
-			`SELECT coalesce(review_status,'') AS rs, count(*) FROM submissions GROUP BY rs`)
+		var (
+			submittedCount     int64
+			avgScore           float64
+			maxScore           float64
+			minScore           float64
+			pendingReview      int64
+			lowConfidenceCount int64
+		)
+		err := deps.Pool.QueryRow(r.Context(), `
+			SELECT COUNT(*),
+				COALESCE(ROUND(AVG(total_score)::numeric, 2)::float8, 0),
+				COALESCE(MAX(total_score), 0),
+				COALESCE(MIN(total_score), 0),
+				COUNT(*) FILTER (WHERE review_status IN ('pending', 'need_review', 'low_confidence')),
+				COUNT(*) FILTER (WHERE review_status = 'low_confidence')
+			FROM submissions`).Scan(
+			&submittedCount, &avgScore, &maxScore, &minScore,
+			&pendingReview, &lowConfidenceCount)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
 				"stats: "+err.Error())
 			return
 		}
+
+		rows, err := deps.Pool.Query(r.Context(),
+			`SELECT coalesce(review_status,'') AS rs, count(*) FROM submissions GROUP BY rs`)
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
+				"stats by status: "+err.Error())
+			return
+		}
 		defer rows.Close()
 		counts := map[string]int64{}
-		var total int64
 		for rows.Next() {
 			var rs string
-			var c int64
-			if err := rows.Scan(&rs, &c); err != nil {
+			var count int64
+			if err := rows.Scan(&rs, &count); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED",
 					"scan stats: "+err.Error())
 				return
 			}
-			counts[rs] = c
-			total += c
+			counts[rs] = count
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"counts": counts, "total": total})
+		if err := rows.Err(); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
+				"iterate stats: "+err.Error())
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"submitted_count":      submittedCount,
+			"avg_score":            avgScore,
+			"max_score":            maxScore,
+			"min_score":            minScore,
+			"pending_review":       pendingReview,
+			"low_confidence_count": lowConfidenceCount,
+			"counts":               counts,
+			"total":                submittedCount,
+		})
 	}
 }
 

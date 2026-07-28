@@ -691,10 +691,22 @@
         "D"
       ],
       "options": [
-        "[object Object]",
-        "[object Object]",
-        "[object Object]",
-        "[object Object]"
+        {
+          "key": "A",
+          "text": "比例"
+        },
+        {
+          "key": "B",
+          "text": "比例积分"
+        },
+        {
+          "key": "C",
+          "text": "比例微分"
+        },
+        {
+          "key": "D",
+          "text": "比例积分微分"
+        }
       ],
       "question": "自动调节系统按调节器具有的调节规律来分,通常有____等调节系统",
       "id": "q35",

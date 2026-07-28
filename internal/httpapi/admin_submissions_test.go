@@ -167,14 +167,26 @@ func TestAdminSubm_Stats(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	var resp struct {
-		Counts map[string]int64 `json:"counts"`
-		Total  int64            `json:"total"`
+		SubmittedCount     int64            `json:"submitted_count"`
+		AvgScore           float64          `json:"avg_score"`
+		MaxScore           float64          `json:"max_score"`
+		MinScore           float64          `json:"min_score"`
+		PendingReview      int64            `json:"pending_review"`
+		LowConfidenceCount int64            `json:"low_confidence_count"`
+		Counts             map[string]int64 `json:"counts"`
+		Total              int64            `json:"total"`
 	}
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.Total != 1 {
-		t.Fatalf("total=%d want 1", resp.Total)
+	if resp.Total != 1 || resp.SubmittedCount != 1 {
+		t.Fatalf("total=%d submitted_count=%d want 1", resp.Total, resp.SubmittedCount)
+	}
+	if resp.AvgScore != 7 || resp.MaxScore != 7 || resp.MinScore != 7 {
+		t.Fatalf("scores avg=%v max=%v min=%v want 7", resp.AvgScore, resp.MaxScore, resp.MinScore)
+	}
+	if resp.PendingReview != 0 || resp.LowConfidenceCount != 0 {
+		t.Fatalf("pending_review=%d low_confidence_count=%d want 0", resp.PendingReview, resp.LowConfidenceCount)
 	}
 	if resp.Counts["reviewed"] != 1 {
 		t.Fatalf("counts.reviewed=%d want 1", resp.Counts["reviewed"])
@@ -228,8 +240,8 @@ func TestAdminSubm_Delete(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	var resp struct {
-		Success bool   `json:"success"`
-		Deleted int64  `json:"deleted"`
+		Success bool  `json:"success"`
+		Deleted int64 `json:"deleted"`
 	}
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)

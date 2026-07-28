@@ -1,13 +1,13 @@
 // Package submissions - service.go
 //
 // Service.Submit 是 plan Task 6 主等待编排:
-//   1. 事务外只读 (pool 自动事务): session token hash lookup, run lookup (含 snapshot
-//      path/hash), duplicate check, idempotent lookup.
-//   2. 事务外 CPU 工作: papers.LoadSnapshot + objective grade -> PreparedSubmission
-//      (含 objective_score / objective_max_score / 单题 detail JSON / question_total).
-//   3. 短事务内 (Begin): FOR UPDATE session + FOR UPDATE run + INSERT pending
-//      submission (含客观分预填, 主观题占位 score=0) + INSERT grading_jobs (generation=1)
-//      + UPDATE session status active -> submitted. 全部写一致, 失败 Rollback.
+//  1. 事务外只读 (pool 自动事务): session token hash lookup, run lookup (含 snapshot
+//     path/hash), duplicate check, idempotent lookup.
+//  2. 事务外 CPU 工作: papers.LoadSnapshot + objective grade -> PreparedSubmission
+//     (含 objective_score / objective_max_score / 单题 detail JSON / question_total).
+//  3. 短事务内 (Begin): FOR UPDATE session + FOR UPDATE run + INSERT pending
+//     submission (含客观分预填, 主观题占位 score=0) + INSERT grading_jobs (generation=1)
+//     + UPDATE session status active -> submitted. 全部写一致, 失败 Rollback.
 //
 // 与 sessions.SubmitManual 的关系: SubmitManual 是 Task 5 遗留 deprecated 编排 (Tx 内
 // 才判分), 仅用于 sessions_test 的 disabled case 路径; HTTP 主路径 (student.go) 走 Submit.
@@ -42,7 +42,7 @@ type SnapshotLoader func(path, shaHex string) (*papers.Snapshot, error)
 type Service struct {
 	pool               *pgxpool.Pool
 	repo               *Repository
-	snapshotLoad      SnapshotLoader
+	snapshotLoad       SnapshotLoader
 	grade              GraderFunc
 	jobs               JobEnqueuer
 	GracePeriodSeconds int // plan Step 2: 超过 deadline + grace 后拒绝提交 (-1 = 不校验)
@@ -99,12 +99,12 @@ func deriveStatus(gs Status, rs ReviewStatus) Status {
 	return "grading"
 }
 
-
 // Submit 是 HTTP 层主入口 (POST /api/session/submit). 编排拆三段:
-//   (a) 事务外只读: token 校验 + run + dup + idempotent lookup.
-//   (b) 事务外 CPU: LoadSnapshot + objective grade -> PreparedSubmission.
-//   (c) 短事务: FOR UPDATE session + FOR UPDATE run + INSERT submission +
-//       INSERT grading_jobs (gen=1) + UPDATE session active -> submitted.
+//
+//	(a) 事务外只读: token 校验 + run + dup + idempotent lookup.
+//	(b) 事务外 CPU: LoadSnapshot + objective grade -> PreparedSubmission.
+//	(c) 短事务: FOR UPDATE session + FOR UPDATE run + INSERT submission +
+//	    INSERT grading_jobs (gen=1) + UPDATE session active -> submitted.
 //
 // 幂等: 同 (run_id, employee_id) 已存在则直接返回既有 submission id, 不重复入队.
 // (与 sessions.SubmitManual 行为对齐; 兼容并发重试.)
@@ -300,7 +300,6 @@ func (s *Service) computeObjective(ctx context.Context, run *RunLite,
 	return int(totalScore), int(totalMax), encoded, qTotal, hasSubjective, nil
 }
 
-
 // jsonMarshalArray 局部封装; 出错时返回 [] (保证 SUBMIT 主路径不卡评分失败).
 func jsonMarshalArray(a []map[string]any) []byte {
 	b, err := json.Marshal(a)
@@ -309,7 +308,6 @@ func jsonMarshalArray(a []map[string]any) []byte {
 	}
 	return b
 }
-
 
 // ----- (c) 阶段 helper stubs (后续小段逐个填充) -----
 
@@ -380,23 +378,25 @@ func (r *Repository) createSubmissionTx(ctx context.Context, tx pgx.Tx,
 	// 混合卷 (含主观): grading_status='pending', review_status='grading', 异步入队 generation=1.
 	gradingStatus := "pending"
 	reviewStatus := "grading"
+	generation := 1
 	if !in.HasSubjective {
 		gradingStatus = "done"
 		reviewStatus = "auto_scored"
+		generation = 0
 	}
 	const sql = `INSERT INTO submissions
 		(name, employee_id, paper_id, paper_name, run_id, department,
-		 answers_json, objective_score, grading_detail_json,
+		 answers_json, objective_score, total_score, grading_detail_json,
 		 grading_status, review_status, grading_generation,
 		 submitted_at, started_at,
 		 client_ip, user_agent, auto_submit_reason)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,0,$12,$13,$14,$15,$16)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
 		RETURNING id::text`
 	row := tx.QueryRow(ctx, sql,
 		in.Name, in.EmployeeID, in.PaperID, nil, // paper_name 列冗余, NULL
 		in.RunID, nullablePtrStr(in.Department),
-		in.Answers, in.ObjectiveScore, in.ObjectiveDetail,
-		gradingStatus, reviewStatus,
+		in.Answers, in.ObjectiveScore, in.ObjectiveScore, in.ObjectiveDetail,
+		gradingStatus, reviewStatus, generation,
 		in.SubmittedAt, nullableTime(in.StartedAt),
 		nullablePtrStr(in.ClientIP), nullablePtrStr(in.UserAgent),
 		nullablePtrStr(in.AutoSubmitReason),

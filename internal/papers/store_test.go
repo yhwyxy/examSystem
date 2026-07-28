@@ -80,15 +80,15 @@ func TestStore_SaveEditable_OKAndList(t *testing.T) {
 		"paper_id": "save-smoke",
 		"name":     "Save Smoke",
 		"exam_info": Document{
-			"title":        "Title",
-			"description":  "Desc",
-			"total_score":  100.0,
+			"title":         "Title",
+			"description":   "Desc",
+			"total_score":   100.0,
 			"passing_score": 60,
 		},
 		"questions": []any{
 			Document{
-				"id":      "q1",
-				"type":    "single_choice",
+				"id":       "q1",
+				"type":     "single_choice",
 				"question": "?",
 				"score":    10.0,
 				"options": []any{
@@ -127,9 +127,48 @@ func TestStore_SaveEditable_OKAndList(t *testing.T) {
 	}
 }
 
-// List 应兼容旧数据结构: root 下除了各 <slug>.json 外还残留 index.json (papers[].slug
-// 清单, 无试卷内容) 以及其它非试卷 json (如迁移报告)时, List() 不能把它们当成试卷 slug 返回。
-// 复现 data/papers/ 真实现场: index.json + composite-migration-report.json 都不是试卷。
+// List 应兼容目录中的非试卷 JSON（如 index.json 和迁移报告），并列出全部可通过编辑器校验的真实试卷。
+func TestStore_ListRepositoryPapers(t *testing.T) {
+	root := filepath.Join("..", "..", "data", "papers")
+	s, err := NewStore(root)
+	if err != nil {
+		t.Fatalf("NewStore(%s): %v", root, err)
+	}
+	slugs, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	want := map[string]bool{
+		"chemical-analysis": true, "chemical-engineering": true, "communications": true,
+		"electrical": true, "energy-power": true, "environmental": true, "finance": true,
+		"instrumentation": true, "legal": true, "logistics": true, "materials": true,
+		"mechanical": true, "metal-materials": true, "metallurgy": true,
+		"mineral-processing": true, "safety-management": true, "software-development": true,
+		"welding": true,
+	}
+	got := make(map[string]bool, len(slugs))
+	for _, slug := range slugs {
+		got[slug] = true
+	}
+	for slug := range want {
+		doc, err := s.LoadEditable(slug)
+		if err != nil {
+			t.Fatalf("LoadEditable(%s): %v", slug, err)
+		}
+		if err := ValidateDocument(doc); err != nil {
+			t.Errorf("ValidateDocument(%s): %v", slug, err)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("List() returned %d papers, want %d: %v", len(got), len(want), slugs)
+	}
+	for slug := range want {
+		if !got[slug] {
+			t.Errorf("List() missing %q: %v", slug, slugs)
+		}
+	}
+}
+
 func TestStore_List_IgnoresIndexAndNonPaperJSON(t *testing.T) {
 	dir := t.TempDir()
 	s, err := NewStore(dir)
@@ -215,11 +254,11 @@ func TestStore_PerSlugMutex_NoRace(t *testing.T) {
 			defer wg.Done()
 			doc := Document{
 				"paper_id": "smoke", "name": "S",
-				"exam_info": Document{"title":"T","description":"D","total_score":1.0,"passing_score":1},
+				"exam_info": Document{"title": "T", "description": "D", "total_score": 1.0, "passing_score": 1},
 				"questions": []any{
-					Document{"id":"q1","type":"single_choice","question":"?","score":1.0,
-						"options":[]any{Document{"key":"A","text":"a"},Document{"key":"B","text":"b"}},
-						"answer":"A"},
+					Document{"id": "q1", "type": "single_choice", "question": "?", "score": 1.0,
+						"options": []any{Document{"key": "A", "text": "a"}, Document{"key": "B", "text": "b"}},
+						"answer":  "A"},
 				},
 			}
 			_ = s.SaveEditable("smoke"+_itoa(idx), doc)
@@ -232,11 +271,11 @@ func TestStore_PerSlugMutex_NoRace(t *testing.T) {
 			defer wg.Done()
 			doc := Document{
 				"paper_id": "smoke-shared", "name": "S",
-				"exam_info": Document{"title":"T","description":"D","total_score":1.0,"passing_score":1},
+				"exam_info": Document{"title": "T", "description": "D", "total_score": 1.0, "passing_score": 1},
 				"questions": []any{
-					Document{"id":"q1","type":"single_choice","question":"?","score":1.0,
-						"options":[]any{Document{"key":"A","text":"a"},Document{"key":"B","text":"b"}},
-						"answer":"A"},
+					Document{"id": "q1", "type": "single_choice", "question": "?", "score": 1.0,
+						"options": []any{Document{"key": "A", "text": "a"}, Document{"key": "B", "text": "b"}},
+						"answer":  "A"},
 				},
 			}
 			_ = s.SaveEditable("smoke-shared", doc)

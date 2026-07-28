@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/yhwyxy/examSystem/internal/jobs"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 )
@@ -36,25 +38,25 @@ type activeRow struct {
 	DraftRevision    int
 	DraftSavedAt     *time.Time
 	// run 维度字段 (JOIN 取).
-	PaperID       string
-	SnapshotPath  string
-	SnapshotHash  string
+	PaperID      string
+	SnapshotPath string
+	SnapshotHash string
 }
 
 // RunnerAlloc 把 finalize 包与 sessions.SubmissionStore 解耦: finalize 调
 // CreateFromSessionTx 时不再直接 import submissions 包, 而用 sessions.SubmissionStore
 // (Task 6 已扩展为传 pgx.Tx) 抽象.
 type RunnerAlloc interface {
-	CreateFromSessionTx(ctx context.Context, tx pgx.Tx, in sessions.SubmissionInput) (string, error)
+	CreateFromSessionTx(ctx context.Context, tx pgx.Tx, in sessions.SubmissionInput) (submissionID string, needsGrading bool, err error)
 }
 
 // Service: 收卷编排 (ScanDue 轮询 + FinalizeRun 原子事务).
 type Service struct {
-	pool              *pgxpool.Pool
-	runsRepo          *runs.Repository
-	sessionsRepo      *sessions.Repository
-	alloc             RunnerAlloc // Task 6 SubmissionStore 实例 (注入)
-	GraceDurationSec  int         // admin_closed 自动提交时给 session 草稿现值不变, 仅为提醒
+	pool             *pgxpool.Pool
+	runsRepo         *runs.Repository
+	sessionsRepo     *sessions.Repository
+	alloc            RunnerAlloc // Task 6 SubmissionStore 实例 (注入)
+	GraceDurationSec int         // admin_closed 自动提交时给 session 草稿现值不变, 仅为提醒
 }
 
 // NewService 构造 finalize Service.
@@ -152,9 +154,26 @@ FOR UPDATE OF s`,
 	// 2) 逐行对每 session 调 Task 6 CreateFromSessionTx (auto_submit_reason=admin_closed).
 	for _, sess := range collected {
 		input := buildAutoSubmitted(sess)
-		if _, cerr := s.alloc.CreateFromSessionTx(ctx, tx, input); cerr != nil {
+		subID, needsGrading, cerr := s.alloc.CreateFromSessionTx(ctx, tx, input)
+		if cerr != nil {
 			err = fmt.Errorf("finalize.FinalizeRun auto-submit session %s: %w", sess.ID, cerr)
 			return 0, false, cerr
+		}
+		if needsGrading {
+			submissionID, parseErr := strconv.ParseInt(subID, 10, 64)
+			if parseErr != nil {
+				err = fmt.Errorf("finalize.FinalizeRun invalid submission id %q: %w", subID, parseErr)
+				return 0, false, err
+			}
+			if cerr := jobs.NewRepository().EnqueueTx(ctx, tx, jobs.JobSpec{
+				SubmissionID: submissionID,
+				PaperID:      sess.PaperID,
+				RunID:        sess.RunID,
+				Generation:   1,
+			}); cerr != nil {
+				err = fmt.Errorf("finalize.FinalizeRun enqueue session %s: %w", sess.ID, cerr)
+				return 0, false, cerr
+			}
 		}
 		nClosed++
 	}
@@ -185,19 +204,19 @@ func buildAutoSubmitted(sess activeRow) sessions.SubmissionInput {
 		rawDraft = []byte("{}")
 	}
 	return sessions.SubmissionInput{
-		Name:              sess.Name,
-		EmployeeID:        sess.EmployeeID,
-		PaperID:           sess.PaperID,
-		PaperName:         sess.PaperID, // paper_name = paper slug (Task 6 注释)
-		RunID:             sess.RunID,
-		Department:        sess.Department,
-		Answers:           rawDraft,
-		AnswersMap:        parseAnswersMapSafe(rawDraft),
-		StartedAt:         sess.StartedAt,
-		SubmittedAt:       time.Now().UTC(),
-		AutoSubmitReason:  &reason,
-		SnapshotPath:      sess.SnapshotPath,
-		SnapshotHash:      sess.SnapshotHash,
+		Name:             sess.Name,
+		EmployeeID:       sess.EmployeeID,
+		PaperID:          sess.PaperID,
+		PaperName:        sess.PaperID, // paper_name = paper slug (Task 6 注释)
+		RunID:            sess.RunID,
+		Department:       sess.Department,
+		Answers:          rawDraft,
+		AnswersMap:       parseAnswersMapSafe(rawDraft),
+		StartedAt:        sess.StartedAt,
+		SubmittedAt:      time.Now().UTC(),
+		AutoSubmitReason: &reason,
+		SnapshotPath:     sess.SnapshotPath,
+		SnapshotHash:     sess.SnapshotHash,
 	}
 }
 

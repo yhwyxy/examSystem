@@ -153,6 +153,18 @@ def test_complete_writes_submission_and_job_status(grading_setup):
     c2.close()
 
 
+def test_load_job_payload_returns_started_at(grading_setup):
+    """任务载荷必须读取 submissions.started_at，而不是不存在的 starts_at。"""
+    from scoring_worker import repository as repo
+    conn, schema, job_id = grading_setup
+
+    payload = repo.load_job_payload(conn, job_id)
+
+    assert payload["submission_id"] > 0
+    assert "started_at" in payload
+
+
+
 def test_complete_lost_when_no_active_lease(grading_setup):
     """lease 过期后 complete -> 'lost' (fenced verify SQL 不匹配)."""
     from scoring_worker import repository as repo

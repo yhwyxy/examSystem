@@ -179,7 +179,20 @@ func TestGrade_FullSingleChoice_Shape(t *testing.T) {
 	}
 }
 
-// 非 objective 类型 -> error
+func TestGrade_UsesJSONNumberScore(t *testing.T) {
+	q := map[string]any{
+		"id": "q1", "type": "single_choice", "question": "?",
+		"score": json.Number("10"), "answer": "A",
+	}
+	d, err := Grade(q, "A", false)
+	if err != nil {
+		t.Fatalf("Grade: %v", err)
+	}
+	if d["score"] != 10.0 || d["max_score"] != 10.0 {
+		t.Errorf("score/max_score = %v/%v, want 10/10", d["score"], d["max_score"])
+	}
+}
+
 func TestGrade_NonObjective_Rejects(t *testing.T) {
 	q := map[string]any{"id": "q1", "type": "short_answer", "score": 10.0, "answer": "x"}
 	if _, err := Grade(q, "x", true); err == nil {

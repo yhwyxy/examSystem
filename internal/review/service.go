@@ -35,13 +35,13 @@ func NewService(pool Pool, jr *jobs.Repository) *Service {
 
 // SubmissionSnap 是 review 视角的 submission 快照 (不引 submissions 包, 见决策 2=B).
 type SubmissionSnap struct {
-	ID                  int64
-	Generation          int64
-	GradingDetail       []byte // jsonb: submissions.grading_detail_json
-	ReviewStatus       string
-	SubjectiveFinal     float64
-	TotalScore          float64
-	GradingStatus       string // pending|grading|done|failed
+	ID              int64
+	Generation      int64
+	GradingDetail   []byte // jsonb: submissions.grading_detail_json
+	ReviewStatus    string
+	SubjectiveFinal float64
+	TotalScore      float64
+	GradingStatus   string // pending|grading|done|failed
 }
 
 // 业务级 sentinel 错误 (与 admin handler 之间约定的错误码前缀).
@@ -138,7 +138,7 @@ func (s *Service) Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error
 	if newTotal < 0 {
 		newTotal = 0
 	}
-GUARDSQL := `
+	GUARDSQL := `
 		UPDATE submissions
 		SET total_score = $1, review_status = 'reviewed',
 		    reviewed_at = NOW(), reviewer_note = NULLIF($2, '')::text`
@@ -178,8 +178,9 @@ GUARDSQL := `
 // SubQID 空时取整题主分, 非空时取子题分 (含 sub_questions 数组). found=false 表示未命中.
 //
 // grading_detail item 字段集 (来自 submissions.objPlaceholder / grading.Placeholder):
-//   question_id, type, score, machine_score, final_score, max_score, is_correct,
-//   review_status, manually_reviewed, sub_questions (optional, composite 题)
+//
+//	question_id, type, score, machine_score, final_score, max_score, is_correct,
+//	review_status, manually_reviewed, sub_questions (optional, composite 题)
 func findScoreInDetail(detail []byte, qid, subQID string) (_ []byte, old, mx float64, qtype string, found bool) {
 	var items []map[string]any
 	if err := json.Unmarshal(detail, &items); err != nil {
@@ -281,7 +282,7 @@ type RegradeInput struct {
 // RegradeResult 返回 {success:true, status:'grading' or 'graded' or 'failed'}.
 type RegradeResult struct {
 	Success bool
-	Status string
+	Status  string
 }
 
 // Regrade 统一代次切换路径 (A/A/A/A 决断 2026-07-26): 不分纯客观/含主观,
@@ -318,7 +319,7 @@ func (s *Service) Regrade(ctx context.Context, in RegradeInput) (*RegradeResult,
 	tag, err := tx.Exec(ctx, `
 		UPDATE grading_jobs SET status = 'superseded'
 		WHERE submission_id = $1 AND generation = $2
-		  AND status IN ('queued','running')`,
+		  AND status IN ('queued','leased')`,
 		in.SubmissionID, curGen)
 	if err != nil {
 		return nil, fmt.Errorf("supersede jobs: %w", err)
