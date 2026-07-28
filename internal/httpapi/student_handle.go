@@ -15,14 +15,14 @@
 package httpapi
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 )
 
@@ -52,15 +52,17 @@ func getPublicExamHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		runToken := q.Get("run")
-		if runToken == "" || deps.Runs == nil || deps.Papers == nil {
+		if runToken == "" || deps.RunService == nil || deps.Pool == nil || deps.Papers == nil {
 			writeAdminError(w, http.StatusBadRequest, "MISSING_QUERY",
 				"both paper slug & run token required")
 			return
 		}
-		// Hash run_token (sha256 hex) 与 internal/sessions/service.go hashToken 一致
-		// -> runs.FindByPublicTokenHash (repo 入口接 hash, 不接明文 token).
-		tokenHash := hashRunToken(runToken)
-		run, err := deps.Runs.FindByPublicTokenHash(r.Context(), nil, tokenHash)
+		// FindByToken 走 Service 层 (内部 sha256 hash + repo 查询), 需真 tx (非 nil).
+		var run *runs.Run
+		err := withTx(r.Context(), deps.Pool, func(tx pgx.Tx) (err error) {
+			run, err = deps.RunService.FindByToken(r.Context(), tx, runToken)
+			return err
+		})
 		if err != nil {
 			writeAdminError(w, http.StatusUnauthorized, "INVALID_RUN_TOKEN",
 				"run_token lookup failed: "+err.Error())
@@ -105,13 +107,6 @@ func getPublicExamHandler(deps Dependencies) http.HandlerFunc {
 			"questions":         sanitized,
 		})
 	}
-}
-
-// hashRunToken 用 sha256 hex (与 internal/sessions/service.go hashToken 一致,
-// internal/runs/repository 传入 sha256(token) hex).
-func hashRunToken(token string) string {
-	h := sha256.Sum256([]byte(token))
-	return hex.EncodeToString(h[:])
 }
 
 
@@ -171,7 +166,7 @@ func startExamHandler(deps Dependencies) http.HandlerFunc {
 		WriteJSON(w, http.StatusOK, map[string]any{
 			"session_id":      res.SessionID,
 			"session_token":   stok,
-			"started_at":       res.Deadline,
+			"started_at":       res.StartedAt,
 			"deadline_at":      res.Deadline,
 			"draft_revision":   res.DraftRevision,
 			"answers":          answersRaw,

@@ -196,6 +196,7 @@ type StartResult struct {
 	NewSession       bool   // true=本次新建; false=resume 既有
 	RunID            string
 	RunStatus        string
+	StartedAt        time.Time
 	Deadline         time.Time
 	Draft            json.RawMessage // resume 时已有 draft (空 "{}" 若新建)
 	DraftRevision    int
@@ -259,6 +260,7 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 			NewSession:    false,
 			RunID:         runLite.ID,
 			RunStatus:     runLite.Status,
+			StartedAt:     existing.StartedAt,
 			Deadline:      existing.DeadlineAt,
 			Draft:         existing.DraftJSON,
 			DraftRevision: existing.DraftRevision,
@@ -299,6 +301,7 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 				NewSession:    false,
 				RunID:         runLite.ID,
 				RunStatus:     runLite.Status,
+				StartedAt:     ex.StartedAt,
 				Deadline:      ex.DeadlineAt,
 				Draft:         ex.DraftJSON,
 				DraftRevision: ex.DraftRevision,
@@ -313,6 +316,7 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 		NewSession:    true,
 		RunID:         runLite.ID,
 		RunStatus:     runLite.Status,
+		StartedAt:     now,
 		Deadline:      deadline,
 		Draft:         []byte("{}"),
 		DraftRevision: 0,

@@ -127,6 +127,65 @@ func TestStore_SaveEditable_OKAndList(t *testing.T) {
 	}
 }
 
+// List 应兼容旧数据结构: root 下除了各 <slug>.json 外还残留 index.json (papers[].slug
+// 清单, 无试卷内容) 以及其它非试卷 json (如迁移报告)时, List() 不能把它们当成试卷 slug 返回。
+// 复现 data/papers/ 真实现场: index.json + composite-migration-report.json 都不是试卷。
+func TestStore_List_IgnoresIndexAndNonPaperJSON(t *testing.T) {
+	dir := t.TempDir()
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatalf("NewStore: %v", err)
+	}
+
+	// 两张真实试卷.
+	for _, slug := range []string{"legal", "chemical-analysis"} {
+		doc := Document{
+			"paper_id": slug, "name": slug,
+			"exam_info": Document{"title": "T", "description": "D", "total_score": 1.0, "passing_score": 1},
+			"questions": []any{
+				Document{"id": "q1", "type": "single_choice", "question": "?", "score": 1.0,
+					"options": []any{Document{"key": "A", "text": "a"}, Document{"key": "B", "text": "b"}},
+					"answer":  "A"},
+			},
+		}
+		if err := s.SaveEditable(slug, doc); err != nil {
+			t.Fatalf("SaveEditable(%s): %v", slug, err)
+		}
+	}
+
+	// 旧结构 index.json: 只有 papers[].slug 清单, 没有试卷内容.
+	indexJSON := `{"papers":[{"slug":"legal","name":"legal"},{"slug":"chemical-analysis","name":"chemical-analysis"}]}`
+	if err := os.WriteFile(filepath.Join(dir, "index.json"), []byte(indexJSON), 0o644); err != nil {
+		t.Fatalf("write index.json: %v", err)
+	}
+	// 非试卷 json: 迁移报告等杂散文件, 未在 index.json 声明.
+	reportJSON := `{"version":1,"migrated":[],"processed":["legal:q1"]}`
+	if err := os.WriteFile(filepath.Join(dir, "composite-migration-report.json"), []byte(reportJSON), 0o644); err != nil {
+		t.Fatalf("write report json: %v", err)
+	}
+
+	slugs, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	got := map[string]bool{}
+	for _, sl := range slugs {
+		got[sl] = true
+	}
+	if got["index"] {
+		t.Error("List() 不应把 index.json 当成试卷 slug")
+	}
+	if got["composite-migration-report"] {
+		t.Error("List() 不应把非试卷 json (迁移报告) 当成试卷 slug")
+	}
+	if !got["legal"] || !got["chemical-analysis"] {
+		t.Errorf("List() 应包含真实试卷 slug, got=%v", slugs)
+	}
+	if len(slugs) != 2 {
+		t.Errorf("List() slug 数量应为 2 (仅真实试卷), got=%d: %v", len(slugs), slugs)
+	}
+}
+
 // Delete
 func TestStore_Delete(t *testing.T) {
 	s, slug := newStoreWithFixture(t)

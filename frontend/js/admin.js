@@ -285,8 +285,10 @@ async function loadRows() {
 
   try {
     const resp = await authFetch(`${API}/submissions?${params.toString()}`);
-    const rows = await resp.json().catch(() => []);
-    if (!resp.ok) throw new Error(apiErrorMessage(rows, '提交记录加载失败'));
+    const payload = await resp.json().catch(() => []);
+    if (!resp.ok) throw new Error(apiErrorMessage(payload, '提交记录加载失败'));
+    // Go 后端返回 {submissions:[...]} envelope；兼容旧版直接返回数组的形态。
+    const rows = Array.isArray(payload) ? payload : payload?.submissions;
     if (!Array.isArray(rows)) throw new Error('提交记录格式异常');
 
     renderRows(rows);

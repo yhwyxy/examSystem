@@ -4,76 +4,81 @@
   "exam_info": {
     "title": "测控技术与仪器",
     "description": "由原 Word 试卷转换生成。",
-    "total_score": 100.0,
-    "passing_score": 0
+    "total_score": 100,
+    "passing_score": 60,
+    "paper_name": "",
+    "major": "",
+    "duration_minutes": 60,
+    "instructions": ""
   },
   "questions": [
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": false,
       "question": "仪表的给定值就是它的测量值。",
-      "id": "q1"
+      "id": "q1",
+      "analysis": ""
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": false,
       "question": "测量值小数点后的位数愈多,测量愈精确。",
       "id": "q2"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": true,
       "question": "并不是计算结果中保留的小数点位数越多,精确度越高。",
       "id": "q3"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": false,
       "question": "仪表的精度级别指的是仪表的误差。",
       "id": "q4"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": true,
       "question": "灵敏度数值越大,则仪表越灵敏。",
       "id": "q5"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": true,
       "question": "准确度是指测量结果和实际值的一致程度,准确度高意味着系统误差和随机误差都很小。",
       "id": "q6"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": true,
       "question": "单位时间内导线流过的电荷数量为电流强度。",
       "id": "q7"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": true,
       "question": "导线的电阻与导线的长度有关。",
       "id": "q8"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": false,
       "question": "相同材料,长度相同,粗细不同的导线其电阻值相同。",
       "id": "q9"
     },
     {
       "type": "true_false",
-      "score": 1.0,
+      "score": 1,
       "answer": true,
       "question": "仪表的量程就是它所能测量的范围。",
       "id": "q10"
@@ -100,7 +105,7 @@
           "text": "显示器"
         }
       ],
-      "question": "将被测量的差压信号转换成电信号的设备是 ___",
+      "question": "将被测量的差压信号转换成电信号的设备是 ____",
       "id": "q11"
     },
     {
@@ -125,7 +130,7 @@
           "text": "100°C"
         }
       ],
-      "question": "水的沸点是多少绝对温度 ___",
+      "question": "水的沸点是多少绝对温度 ____",
       "id": "q12"
     },
     {
@@ -150,7 +155,7 @@
           "text": "二芯电缆"
         }
       ],
-      "question": "热电偶的延长用 ___",
+      "question": "热电偶的延长用 ____",
       "id": "q13"
     },
     {
@@ -175,7 +180,7 @@
           "text": "垂直直线"
         }
       ],
-      "question": "在热电阻温度计中,电阻和温度的关系是 ___",
+      "question": "在热电阻温度计中,电阻和温度的关系是 ____",
       "id": "q14"
     },
     {
@@ -196,7 +201,7 @@
           "text": "要根据具体情况而定"
         }
       ],
-      "question": "常用补偿导线把热电偶电势引入测温仪表,补偿导线的长度对其测量有无影响 ___",
+      "question": "常用补偿导线把热电偶电势引入测温仪表,补偿导线的长度对其测量有无影响？",
       "id": "q15"
     },
     {
@@ -217,7 +222,7 @@
           "text": "是"
         }
       ],
-      "question": "反馈调节系统是闭环系统 ___",
+      "question": "反馈调节系统是闭环系统？",
       "id": "q16"
     },
     {
@@ -238,7 +243,7 @@
           "text": "开关量输出"
         }
       ],
-      "question": "DCS系统中DO表示: ___",
+      "question": "DCS系统中DO表示: ____",
       "id": "q17"
     },
     {
@@ -263,7 +268,7 @@
           "text": "热电效应"
         }
       ],
-      "question": "热电偶测量原理是基于 ___",
+      "question": "热电偶测量原理是基于 ____",
       "id": "q18"
     },
     {
@@ -288,7 +293,7 @@
           "text": "热电极材料的化学成分和物理性能"
         }
       ],
-      "question": "热电偶的热电特性是由___所决定的",
+      "question": "热电偶的热电特性是由____所决定的",
       "id": "q19"
     },
     {
@@ -313,7 +318,7 @@
           "text": "以上三个条件同时出现"
         }
       ],
-      "question": "仪表防爆的措施就是防止 ___",
+      "question": "仪表防爆的措施就是防止 ____",
       "id": "q20"
     },
     {
@@ -338,7 +343,7 @@
           "text": "功率"
         }
       ],
-      "question": "通常说的负载增加,是指负载___增加",
+      "question": "通常说的负载增加,是指负载____增加",
       "id": "q21"
     },
     {
@@ -363,7 +368,7 @@
           "text": "电阻"
         }
       ],
-      "question": "使用热电偶测温,主要测量其 ___",
+      "question": "使用热电偶测温,主要测量其 ____",
       "id": "q22"
     },
     {
@@ -388,7 +393,7 @@
           "text": "360°"
         }
       ],
-      "question": "普通压力表的指针摆动角度为 ___",
+      "question": "普通压力表的指针摆动角度为 ____",
       "id": "q23"
     },
     {
@@ -413,7 +418,7 @@
           "text": "减少引线电阻的影响"
         }
       ],
-      "question": "热电阻测量温度转换电路采用三线制是为了 ___",
+      "question": "热电阻测量温度转换电路采用三线制是为了 ____",
       "id": "q24"
     },
     {
@@ -438,7 +443,7 @@
           "text": "最大误差"
         }
       ],
-      "question": "仪表的精度级别指的是仪表的 ___",
+      "question": "仪表的精度级别指的是仪表的 ____",
       "id": "q25"
     },
     {
@@ -463,7 +468,7 @@
           "text": "t"
         }
       ],
-      "question": "以下哪个不是国际基本单位 ___",
+      "question": "以下哪个不是国际基本单位？",
       "id": "q26"
     },
     {
@@ -488,7 +493,7 @@
           "text": "s/m³"
         }
       ],
-      "question": "加速度单位为___",
+      "question": "加速度单位为____",
       "id": "q27"
     },
     {
@@ -513,7 +518,7 @@
           "text": "T"
         }
       ],
-      "question": "单位时间内流过的体系用符号___表示",
+      "question": "单位时间内流过的体系用符号____表示",
       "id": "q28"
     },
     {
@@ -538,7 +543,7 @@
           "text": "无关"
         }
       ],
-      "question": "气体的流量与压力成 ___",
+      "question": "气体的流量与压力成 ____",
       "id": "q29"
     },
     {
@@ -563,12 +568,12 @@
           "text": "200"
         }
       ],
-      "question": "热电阻在0°C的阻值为 Ω___",
+      "question": "热电阻在0°C的阻值为_____ Ω",
       "id": "q30"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "B",
         "C"
@@ -587,12 +592,12 @@
           "text": "铝线"
         }
       ],
-      "question": "用热偶测量温度时,其连接导线不应该使用___",
+      "question": "用热偶测量温度时,其连接导线不应该使用____",
       "id": "q31"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "A",
         "C"
@@ -615,12 +620,12 @@
           "text": "1Pasi"
         }
       ],
-      "question": "1千克力=___",
+      "question": "1千克力=____",
       "id": "q32"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "A",
         "C"
@@ -643,12 +648,12 @@
           "text": "电感效应"
         }
       ],
-      "question": "PN结的特性是___",
+      "question": "PN结的特性是____",
       "id": "q33"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "A",
         "B",
@@ -673,12 +678,12 @@
           "text": "变送器"
         }
       ],
-      "question": "自动调节系统主要由___",
+      "question": "自动调节系统主要由____",
       "id": "q34"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "A",
         "B",
@@ -686,29 +691,18 @@
         "D"
       ],
       "options": [
-        {
-          "key": "A",
-          "text": "比例"
-        },
-        {
-          "key": "B",
-          "text": "比例积分"
-        },
-        {
-          "key": "C",
-          "text": "比例微分"
-        },
-        {
-          "key": "D",
-          "text": "比例积分微分"
-        }
+        "[object Object]",
+        "[object Object]",
+        "[object Object]",
+        "[object Object]"
       ],
-      "question": "自动调节系统按调节器具有的调节规律来分,通常有等调节系统___",
-      "id": "q35"
+      "question": "自动调节系统按调节器具有的调节规律来分,通常有____等调节系统",
+      "id": "q35",
+      "analysis": ""
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "A",
         "B",
@@ -732,12 +726,12 @@
           "text": "看错刻度造成的误差"
         }
       ],
-      "question": "下列情况中属于疏忽误差___",
+      "question": "下列情况中_____属于疏忽误差",
       "id": "q36"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "B",
         "C",
@@ -761,12 +755,12 @@
           "text": "基本误差和最大允许值"
         }
       ],
-      "question": "仪表的精度级别是指仪表的___",
+      "question": "仪表的精度级别是指仪表的____",
       "id": "q37"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "B",
         "D"
@@ -789,12 +783,12 @@
           "text": "集散控制系统"
         }
       ],
-      "question": "DCS系统又称为___",
+      "question": "DCS系统又称为____",
       "id": "q38"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "B",
         "D"
@@ -817,12 +811,12 @@
           "text": "随机误差"
         }
       ],
-      "question": "按误差出现的规律,误差可分为:___",
+      "question": "按误差出现的规律,误差可分为:____",
       "id": "q39"
     },
     {
       "type": "multiple_choice",
-      "score": 2.0,
+      "score": 2,
       "answer": [
         "A",
         "C"
@@ -841,12 +835,12 @@
           "text": "铂电阻"
         }
       ],
-      "question": "下列不需要冷端补偿的是___",
+      "question": "下列不需要冷端补偿的是____",
       "id": "q40"
     },
     {
       "type": "composite",
-      "score": 10.0,
+      "score": 10,
       "scoring_mode": "text",
       "question": "什么是零位误差?什么是测量范围?",
       "answer": "零位误差就是输入标准信号零时,此时设备显示不为零的值。\n测量范围指仪器所能够测量的最小尺寸与最大尺寸之间的范围",
@@ -856,7 +850,7 @@
           "id": "q41-1",
           "question": "零位误差",
           "answer": "输入标准信号为零时设备显示不为零的值。",
-          "score": 5.0,
+          "score": 5,
           "scoring_mode": "text",
           "scoring_points": [
             {
@@ -877,13 +871,13 @@
           "id": "q41-2",
           "question": "测量范围",
           "answer": "仪器能够测量的最小值与最大值之间的范围。",
-          "score": 5.0,
+          "score": 5,
           "scoring_mode": "text",
           "scoring_points": [
             {
               "id": "q41-2_p1",
               "text": "仪器能够测量的最小尺寸与最大尺寸之间的范围",
-              "score": 5.0,
+              "score": 5,
               "required": true
             }
           ]
@@ -892,7 +886,7 @@
     },
     {
       "type": "composite",
-      "score": 10.0,
+      "score": 10,
       "scoring_mode": "text",
       "question": "什么是引用误差?什么是绝对误差?",
       "answer": "引用误差指测量的绝对误差与仪表的满量程值之比;\n绝对误差指测量值与真实值之差。",
@@ -902,13 +896,13 @@
           "id": "q42-1",
           "question": "引用误差",
           "answer": "绝对误差与仪表满量程值之比。",
-          "score": 5.0,
+          "score": 5,
           "scoring_mode": "text",
           "scoring_points": [
             {
               "id": "q42-1_p1",
               "text": "测量的绝对误差与仪表的满量程值之比",
-              "score": 5.0,
+              "score": 5,
               "required": true
             }
           ]
@@ -917,13 +911,13 @@
           "id": "q42-2",
           "question": "绝对误差",
           "answer": "测量值与真实值之差。",
-          "score": 5.0,
+          "score": 5,
           "scoring_mode": "text",
           "scoring_points": [
             {
               "id": "q42-2_p1",
               "text": "测量值与真实值之差",
-              "score": 5.0,
+              "score": 5,
               "required": true
             }
           ]
@@ -934,13 +928,13 @@
       "id": "q43",
       "type": "composite",
       "question": "压力变送器的测量范围原为0-100kPa，现零位迁移100%。则：\n1）仪表的测量范围变为多少？\n2）仪表量程是多少？\n3）若仪表的模拟输出量为4-20mA，当输入多少压力时，仪表的输出为4mA、12mA、20mA？",
-      "score": 20.0,
+      "score": 20,
       "subquestions": [
         {
           "id": "q43-1",
           "question": "仪表的测量范围变为多少？",
           "answer": "仪表的测量范围变为100-200 kPa。",
-          "score": 7.0,
+          "score": 7,
           "scoring_mode": "calculation",
           "calculation": {
             "final_answers": [
@@ -989,7 +983,7 @@
           "id": "q43-2",
           "question": "仪表量程是多少？",
           "answer": "100 kPa",
-          "score": 6.0,
+          "score": 6,
           "scoring_mode": "calculation",
           "calculation": {
             "final_answers": [
@@ -1006,7 +1000,7 @@
             {
               "id": "q43-2_p1",
               "text": "量程 100 kPa",
-              "score": 6.0,
+              "score": 6,
               "required": true
             }
           ]
@@ -1015,7 +1009,7 @@
           "id": "q43-3",
           "question": "若仪表的模拟输出量为4-20mA，当输入多少压力时，仪表的输出为4mA、12mA、20mA？",
           "answer": "100、150、200 kPa",
-          "score": 7.0,
+          "score": 7,
           "scoring_mode": "calculation",
           "calculation": {
             "final_answers": [

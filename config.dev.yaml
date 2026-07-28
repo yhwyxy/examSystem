@@ -1,0 +1,29 @@
+# config.dev.yaml - 本地开发环境配置
+# 用于 Windows 本地开发测试，与生产配置隔离
+
+database:
+  url: "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable"
+  max_open_conns: 10
+  max_idle_conns: 5
+  conn_max_lifetime_sec: 300
+  dial_timeout_sec: 5
+
+server:
+  host: "127.0.0.1"
+  port: 8000
+  data_root: "data"
+
+admin:
+  enable_auth: true
+  password: "admin123"
+
+paper:
+  storage: "fs"
+  base_dir: "data/papers"
+  snapshot_dir: "data/exam_runs"
+
+scoring:
+  worker_url: "http://127.0.0.1:8001"
+
+logging:
+  level: "debug"

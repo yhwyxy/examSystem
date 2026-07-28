@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -47,7 +48,11 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		admin.Post("/reload-config", reloadConfigHandler(deps))
 		// /api/admin/papers/{slug}  CRUD
 		admin.Get("/papers", listPapersHandler(deps))
+		// UI papers.js createPaper() 真 调 POST /papers (裸路径, 无 slug) 创建新专业.
+		admin.Post("/papers", createPaperHandler(deps))
 		admin.Get("/papers/{slug}", getPaperHandler(deps))
+		// UI papers.js savePaper() 真 用 PUT; 保留 POST 向后兼容.
+		admin.Put("/papers/{slug}", savePaperHandler(deps))
 		admin.Post("/papers/{slug}", savePaperHandler(deps))
 		admin.Delete("/papers/{slug}", deletePaperHandler(deps))
 		admin.Get("/papers/{slug}/preview", previewPaperHandler(deps))
@@ -124,10 +129,56 @@ func listPapersHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		out := make([]map[string]any, 0, len(slugs))
+		items := make(map[string]map[string]any, len(slugs))
+		paperIDs := make([]string, 0, len(slugs))
 		for _, slug := range slugs {
-			out = append(out, map[string]any{"slug": slug, "sha": "", "locked": false})
+			if slug == "index" {
+				continue // 跳过索引文件 (data/papers/index.json 是旧结构清单, 非试卷)
+			}
+			item := map[string]any{
+				"slug":             slug,
+				"name":             slug,
+				"status":           "unpublished",
+				"question_count":   0,
+				"total_score":      0,
+				"submission_count": 0,
+			}
+			// 尝试加载试卷元数据
+			if doc, err := deps.Papers.LoadEditable(slug); err == nil {
+				if name, ok := doc["name"].(string); ok && name != "" {
+					item["name"] = name
+				}
+				if qs, ok := doc["questions"].([]any); ok {
+					item["question_count"] = len(qs)
+				}
+				if ei, ok := doc["exam_info"].(map[string]any); ok {
+					if ts, ok := ei["total_score"].(float64); ok {
+						item["total_score"] = int(ts)
+					}
+				}
+			}
+			items[slug] = item
+			paperIDs = append(paperIDs, slug)
+			out = append(out, item)
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"papers": out})
+		// 查询运行状态: 一次批量查询覆盖所有 slug, 避免 N+1 (runs.Repository 无
+		// 单 slug "Latest" 方法, ListExamsOverview 已聚合 open/closing/closed/unpublished).
+		if deps.Runs != nil && deps.Pool != nil && len(paperIDs) > 0 {
+			var overview []runs.ExamOverview
+			err := withTx(r.Context(), deps.Pool, func(tx pgx.Tx) error {
+				var err error
+				overview, err = deps.Runs.ListExamsOverview(r.Context(), tx, paperIDs)
+				return err
+			})
+			if err == nil {
+				for _, ov := range overview {
+					if item, ok := items[ov.PaperID]; ok {
+						item["status"] = ov.Status
+					}
+				}
+			}
+		}
+		WriteJSON(w, http.StatusOK, out)
 	}
 }
 
@@ -148,17 +199,24 @@ func getPaperHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// writeAdminError 输出 JSON 错误: {"error":{"code":..,"message":..}}.
+// writeAdminError 输出 JSON 错误: {"error":{"code":..,"message":..},"detail":{...}}.
+// "detail" 字段是兼容层: 前端 (papers.js/admin.js/exam.js) 统一读 data?.detail?.message
+// 展示真实失败原因; "error" 字段保留给可能仍读旧形态的调用方.
 func writeAdminError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
+	body := map[string]any{"code": code, "message": message}
 	_ = json.NewEncoder(w).Encode(map[string]any{
-		"error": map[string]any{"code": code, "message": message},
+		"error":  body,
+		"detail": body,
 	})
 }
 
-// savePaperHandler POST /api/admin/papers/{slug} (JSON body) -> atomic write snapshot+index.
+// savePaperHandler PUT/POST /api/admin/papers/{slug} (JSON body) -> atomic write snapshot+index.
 // 若 run 处于 open/closing 状态, 返回 409 PAPER_LOCKED_BY_ACTIVE_RUN (plan Step 4).
+// UI (frontend/js/papers.js savePaper()) payload 只含 {name, exam_info, questions},
+// 不带 paper_id/slug (URL 路径已含 slug); Go validate.go 要求 doc["paper_id"] 必填,
+// 故此处兼容补写 paper_id=slug (若前端已显式传, 保留前端值不覆盖).
 func savePaperHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.Papers == nil {
@@ -171,11 +229,73 @@ func savePaperHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
 			return
 		}
+		if _, ok := doc["paper_id"]; !ok {
+			doc["paper_id"] = slug
+		}
 		if err := deps.Papers.SaveEditable(slug, doc); err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "PAPER_SAVE_FAILED", err.Error())
 			return
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+// createPaperHandler POST /api/admin/papers { "slug": "...", "name": "..." } -> 建空白试卷.
+// UI (frontend/js/papers.js createPaper()) 真调用. 建最小合法 Document (与
+// papers/validate.go 契约一致: exam_info + 至少一道题), 之后 admin 走编辑器补全.
+func createPaperHandler(deps Dependencies) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if deps.Papers == nil {
+			writeAdminError(w, http.StatusServiceUnavailable, "PAPERS_NOT_CONFIGURED", "papers store missing")
+			return
+		}
+		var body struct {
+			Slug string `json:"slug"`
+			Name string `json:"name"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
+			return
+		}
+		if body.Slug == "" || body.Name == "" {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "slug and name required")
+			return
+		}
+		if deps.Papers.Exists(body.Slug) {
+			writeAdminError(w, http.StatusConflict, "PAPER_ALREADY_EXISTS", "slug already exists: "+body.Slug)
+			return
+		}
+		// papers.ValidateDocument (与 Python question_loader 1 对 1) 要求 questions
+		// 非空 + exam_info.description 非空; 建空白试卷用占位单选题, 待 admin 在
+		// 编辑器内补全/替换.
+		doc := map[string]any{
+			"paper_id": body.Slug,
+			"name":     body.Name,
+			"exam_info": map[string]any{
+				"title":         body.Name,
+				"description":   body.Name,
+				"total_score":   1.0,
+				"passing_score": 0,
+			},
+			"questions": []any{
+				map[string]any{
+					"id":       "q1",
+					"type":     "single_choice",
+					"question": "占位题目，请在编辑器中修改",
+					"score":    1.0,
+					"options": []any{
+						map[string]any{"key": "A", "text": "选项 A"},
+						map[string]any{"key": "B", "text": "选项 B"},
+					},
+					"answer": "A",
+				},
+			},
+		}
+		if err := deps.Papers.SaveEditable(body.Slug, doc); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "PAPER_SAVE_FAILED", err.Error())
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "slug": body.Slug})
 	}
 }
 
@@ -240,6 +360,8 @@ func batchReorderHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // openRunHandler POST /api/admin/papers/{slug}/open { duration_minutes, round_no? }
+// UI (frontend/js/papers.js setPaperStatus) 单个开考时不带任何 body (无 Content-Type),
+// 故 body 允许缺省/空, 缺省时取 deps.Config.Exam.DurationMinutes 默认值.
 // 真实现: 调 deps.RunService.Open 创建 run + snapshot + token 侧车, 返回公开 URL.
 func openRunHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -252,13 +374,15 @@ func openRunHandler(deps Dependencies) http.HandlerFunc {
 			DurationMinutes int `json:"duration_minutes"`
 			RoundNo         int `json:"round_no,omitempty"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil && err != io.EOF {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
 			return
 		}
 		if body.DurationMinutes <= 0 {
-			writeAdminError(w, http.StatusBadRequest, "INVALID_DURATION", "duration_minutes must be > 0")
-			return
+			body.DurationMinutes = 90
+			if deps.Config != nil && deps.Config.Exam.DurationMinutes > 0 {
+				body.DurationMinutes = deps.Config.Exam.DurationMinutes
+			}
 		}
 		ctx := r.Context()
 		res, err := callOpenRun(ctx, deps, slug, body.DurationMinutes, body.RoundNo)
@@ -271,7 +395,7 @@ func openRunHandler(deps Dependencies) http.HandlerFunc {
 			"ok": true, "paper_slug": slug, "run_id": res.Run.ID,
 			"public_token":     res.PublicToken,
 			"url":              buildExamURL(r, slug, res.PublicToken),
-			"duration_minutes": body.DurationMinutes, "round_no": body.RoundNo,
+			"duration_minutes": body.DurationMinutes, "round_no": res.Run.RoundNo,
 		})
 	}
 }
@@ -313,8 +437,11 @@ func closeRunHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// batchOpenHandler POST /api/admin/papers/batch/open {slugs: [str], duration_minutes}
-// UI papers.js 用. 循环调 RunService.Open, 任一失败回滚整批已开的 + 502.
+// batchOpenHandler POST /api/admin/papers/batch/open {slugs: [str], duration_minutes?}
+// UI papers.js batchOpen() 真调用, 只传 {slugs} (无 duration_minutes) -> 缺省时取
+// deps.Config.Exam.DurationMinutes. 循环调 RunService.Open, 单个失败不影响其它
+// slug (continue-on-error), 响应 {updated, requested, errors:[{slug,message,code}]}
+// 与 UI 读取形态一致 (batchOpen()/batchClose() 均读 data.updated/requested/errors).
 func batchOpenHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.RunService == nil {
@@ -323,37 +450,42 @@ func batchOpenHandler(deps Dependencies) http.HandlerFunc {
 		}
 		var body struct {
 			Slugs           []string `json:"slugs"`
-			DurationMinutes int      `json:"duration_minutes"`
+			DurationMinutes int      `json:"duration_minutes,omitempty"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil && err != io.EOF {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
 			return
 		}
-		if len(body.Slugs) == 0 || body.DurationMinutes <= 0 {
-			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "slugs+duration_minutes required")
+		if len(body.Slugs) == 0 {
+			writeAdminError(w, http.StatusBadRequest, "INVALID_REQUEST", "slugs required")
 			return
 		}
-		ctx := r.Context()
-		results := make([]map[string]any, 0, len(body.Slugs))
-		for _, slug := range body.Slugs {
-			res, err := callOpenRun(ctx, deps, slug, body.DurationMinutes, 0)
-			if err != nil {
-				// 任一失败 -> 整批失败, 不继续. UI 可重试.
-				status, code := mapRunOpenErr(err)
-				writeAdminError(w, status, code+" [slug="+slug+"]", err.Error())
-				return
+		if body.DurationMinutes <= 0 {
+			body.DurationMinutes = 90
+			if deps.Config != nil && deps.Config.Exam.DurationMinutes > 0 {
+				body.DurationMinutes = deps.Config.Exam.DurationMinutes
 			}
-			results = append(results, map[string]any{
-				"slug": slug, "run_id": res.Run.ID,
-				"public_token": res.PublicToken,
-				"url":          buildExamURL(r, slug, res.PublicToken),
-			})
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "runs": results})
+		ctx := r.Context()
+		updated := 0
+		errs := make([]map[string]any, 0)
+		for _, slug := range body.Slugs {
+			_, err := callOpenRun(ctx, deps, slug, body.DurationMinutes, 0)
+			if err != nil {
+				_, code := mapRunOpenErr(err)
+				errs = append(errs, map[string]any{"slug": slug, "code": code, "message": err.Error()})
+				continue
+			}
+			updated++
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"updated": updated, "requested": len(body.Slugs), "errors": errs,
+		})
 	}
 }
 
 // batchCloseHandler POST /api/admin/papers/batch/close {slugs: [str], grace_seconds?}
+// UI papers.js batchClose() 读 {updated, requested, errors} (同 batchOpen 形态).
 func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if deps.RunService == nil || deps.Pool == nil {
@@ -364,7 +496,7 @@ func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 			Slugs        []string `json:"slugs"`
 			GraceSeconds int      `json:"grace_seconds,omitempty"`
 		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil && err != io.EOF {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
 			return
 		}
@@ -377,6 +509,8 @@ func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 			grace = 30 * time.Second
 		}
 		ctx := r.Context()
+		updated := 0
+		errs := make([]map[string]any, 0)
 		for _, slug := range body.Slugs {
 			err := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
 				run, rerr := deps.RunService.FindOpenBySlug(ctx, tx, slug)
@@ -390,12 +524,15 @@ func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 				return rerr
 			})
 			if err != nil {
-				status, code := mapRunCloseErr(err)
-				writeAdminError(w, status, code+" [slug="+slug+"]", err.Error())
-				return
+				_, code := mapRunCloseErr(err)
+				errs = append(errs, map[string]any{"slug": slug, "code": code, "message": err.Error()})
+				continue
 			}
+			updated++
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"ok": true})
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"updated": updated, "requested": len(body.Slugs), "errors": errs,
+		})
 	}
 }
 
@@ -635,8 +772,14 @@ func resetRoundsHandler(deps Dependencies) http.HandlerFunc {
 				cleaningErr.Error())
 			return
 		}
+		errs := make([]map[string]any, 0, len(skipped))
+		for _, sk := range skipped {
+			errs = append(errs, map[string]any{
+				"slug": sk["slug"], "code": sk["reason"], "message": "考试中/收卷中，已跳过",
+			})
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"ok":      true,
+			"updated": len(deleted), "requested": len(slugs), "errors": errs,
 			"deleted": deleted, "skipped": skipped,
 			"note": "软重置 (历史 submissions 保留; token 侧车失效; 仍需重新关考后 open 新轮次)",
 		})
@@ -669,7 +812,9 @@ func callOpenRun(ctx context.Context, deps Dependencies, slug string, durationMi
 	return res, err
 }
 
-// buildExamURL 重构公开考试 URL. 用请求 host + /?run_token=<token>.
+// buildExamURL 重构公开考试 URL. frontend/js/exam.js 的 getPaperIdFromUrl/
+// getRunTokenFromUrl 分别读 URL query 的 "paper" / "run" 参数 (页面路径 /exam),
+// 而非旧的 "paper_slug" / "run_token" —— 此处必须与其保持一致.
 func buildExamURL(r *http.Request, slug, token string) string {
 	host := r.Host
 	if host == "" {
@@ -679,7 +824,7 @@ func buildExamURL(r *http.Request, slug, token string) string {
 	if r.TLS != nil {
 		scheme = "https"
 	}
-	return fmt.Sprintf("%s://%s/?run_token=%s&paper_slug=%s", scheme, host, token, slug)
+	return fmt.Sprintf("%s://%s/exam?paper=%s&run=%s", scheme, host, slug, token)
 }
 
 // makeQRDataURL 把 url 编码成 PNG 二维码 -> base64 data URI.

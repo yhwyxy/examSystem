@@ -43,6 +43,7 @@ type ServerConfig struct {
 	Host         string   `yaml:"host"`
 	Port         int      `yaml:"port"`
 	AllowOrigins []string `yaml:"allow_origins"`
+	DataRoot     string   `yaml:"data_root"` // 试卷+快照+token 数据根目录, 默认 "data"
 }
 
 type ExamConfig struct {

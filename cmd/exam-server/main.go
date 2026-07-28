@@ -131,6 +131,11 @@ func cmdServe(args []string) error {
 	if static == "" {
 		static = httpapi.StaticRoot // 默认 frontend
 	}
+	// dataRoot: 试卷 / 快照 / token 数据根目录, 默认 "data"
+	dataRoot := cfg.Server.DataRoot
+	if dataRoot == "" {
+		dataRoot = "data"
+	}
 
 	// reload-config 回调: 当前实现 reload YAML 并刷新后续路由要消费的值;
 	// CORS allow_origins 变更只对新连接生效, 旧 worker 不动;
@@ -184,7 +189,7 @@ func cmdServe(args []string) error {
 			}
 			return *cfg.Admin.Password, nil
 		})
-	papersStore, err := papers.NewStore(static)
+	papersStore, err := papers.NewStore(filepath.Join(dataRoot, "papers"))
 	if err != nil {
 		return fmt.Errorf("open papers store: %w", err)
 	}
@@ -202,12 +207,16 @@ func cmdServe(args []string) error {
 
 	// Task 14: runs.Service (admin 开考/关考/exam-link 真业务依赖). 注入 :=
 	//   RunService 给 admin 4 stub 替换用; token 侧车目录 cfg.Logging.RunTokenDir
-	//   (空 = exam-link GET 无法重建 URL, 文档已记遗留). pubRoot 用 papers 同 static
-	//   (snapshot 与 papers 共用 <static>/<slug>.json 形态, 见 papers.LoadSnapshot).
-	runService := runs.NewService(runsRepo, papersStore, static)
+	//   (空 = exam-link GET 无法重建 URL, 文档已记遗留). pubRoot 用 dataRoot/exam_runs.
+	examRunsDir := filepath.Join(dataRoot, "exam_runs")
+	_ = os.MkdirAll(examRunsDir, 0o700)
+	runService := runs.NewService(runsRepo, papersStore, examRunsDir)
 	if cfg.Logging.RunTokenDir != "" {
 		runService = runService.WithTokenDir(cfg.Logging.RunTokenDir)
 		_ = os.MkdirAll(cfg.Logging.RunTokenDir, 0o700)
+	} else {
+		// 默认 token 侧车目录: data/exam_runs (与 Python 旧栈 EXAM_RUNS_DIR 兼容)
+		runService = runService.WithTokenDir(examRunsDir)
 	}
 	runService = runService.WithExamAutoSubmit(cfg.Exam.AutoSubmit) // 2026-07-26 不硬编码
 
