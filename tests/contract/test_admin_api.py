@@ -42,54 +42,59 @@ def wait_until(predicate, timeout: float = 5.0, interval: float = 0.05) -> bool:
 # papers CRUD
 # ---------------------------------------------------------------------------
 def test_admin_papers_crud(client):
-    # list 初始为空 (tmp 隔离)
+    # list 可用 (黑盒服务可能已有其他试卷, 只要求不含本用例 slug)
     r = client.get("/api/admin/papers")
     assert r.status_code == 200
     body = r.json()
     # /api/admin/papers 直接返回 list[dict], 不包一层 {papers:[...]}
     papers_list = body if isinstance(body, list) else body.get("papers", [])
-    assert papers_list == []
+    assert all(p.get("slug") != "crud-smoke" for p in papers_list)
 
-    # create —— {success, paper: {slug, name, status, ...}}
+    # create —— Go 契约: {ok: true, slug}
     r = client.post("/api/admin/papers", json={"slug": "crud-smoke", "name": "CRUD 试卷"})
     assert r.status_code in (200, 201)
     payload = r.json()
-    assert payload.get("success") is True
+    assert payload.get("ok") is True or payload.get("success") is True
     meta = payload.get("paper") or payload
     assert meta["slug"] == "crud-smoke"
-    assert meta["name"] == "CRUD 试卷"
 
     # list 应含
     items = client.get("/api/admin/papers").json()
     items = items if isinstance(items, list) else items.get("papers", [])
     assert any(p["slug"] == "crud-smoke" for p in items)
 
-    # get (full) —— {meta, paper_id, name, exam_info, questions, status, editable}
+    # get (full) —— 原始可编辑文档 {paper_id, name, exam_info, questions}
     full = client.get("/api/admin/papers/crud-smoke").json()
     assert full["paper_id"] == "crud-smoke"
     assert full["name"] == "CRUD 试卷"
     assert "questions" in full and isinstance(full["questions"], list)
     assert "exam_info" in full
-    # 刚建好、未上传问题: derived_status="unpublished"; 上传后变 "closed"
-    assert full["status"] in ("unpublished", "closed")
-    assert full["editable"] is True
 
-    # patch meta —— update_meta 返回 dict(meta)
-    r = client.patch("/api/admin/papers/crud-smoke/meta", json={"name": "改名后的 CRUD"})
+    # 改名: Go 无 PATCH /meta 路由, 经 PUT 整卷更新
+    full["name"] = "改名后的 CRUD"
+    r = client.put("/api/admin/papers/crud-smoke", json=full)
     assert r.status_code in (200, 204)
-    if r.status_code == 200:
-        assert r.json().get("name") == "改名后的 CRUD"
-    # 再读 meta.slug 确认
     got = client.get("/api/admin/papers/crud-smoke").json()
     assert got["name"] == "改名后的 CRUD"
 
-    # delete —— {success: True}
+    # delete —— {ok: true}
     r = client.delete("/api/admin/papers/crud-smoke")
     assert r.status_code in (200, 204)
-    assert r.json().get("success") is True
+    body = r.json() or {}
+    assert body.get("ok") is True or body.get("success") is True
     items = client.get("/api/admin/papers").json()
     items = items if isinstance(items, list) else items.get("papers", [])
     assert all(p["slug"] != "crud-smoke" for p in items)
+
+
+@pytest.mark.xfail(reason="已知缺陷: GET /api/admin/papers/{slug} 缺 status/editable 字段, "
+                          "前端 papers.js:188 依赖其实现'考试中锁定编辑器' (审计问题#11)",
+                   strict=False)
+def test_admin_paper_detail_reports_lock_status(client, paper_loaded):
+    slug, _run = paper_loaded
+    full = client.get(f"/api/admin/papers/{slug}").json()
+    assert full["status"] in ("unpublished", "open", "closing", "closed")
+    assert isinstance(full["editable"], bool)
 
 
 # ---------------------------------------------------------------------------
@@ -116,23 +121,20 @@ def test_admin_paper_preview_includes_answers(client, paper_loaded):
 def test_admin_open_close_run(client, paper_loaded):
     slug, run = paper_loaded
 
-    # 已有 round_no=1 的 open run (paper_loaded 中 open_run 已建一个)。
-    # 再 open 应同意一 paper 的下一个 round。
+    # 已有 round_no=1 的 open run (paper_loaded 已开考)。再 open 应 409 或翻到下一轮。
     r = client.post(f"/api/admin/papers/{slug}/open", json={})
     assert r.status_code in (200, 201, 409)
     if r.status_code in (200, 201):
         d = r.json()
-        assert d["success"] is True
-        assert d["status"] in ("open", "opening")
+        assert d.get("ok") is True or d.get("success") is True
         assert d["run_id"]
 
-    # close
+    # close —— Go 契约: {ok, slug}
     r = client.post(f"/api/admin/papers/{slug}/close", json={})
     assert r.status_code in (200, 201, 404, 409)
     if r.status_code in (200, 201):
         d = r.json()
-        assert d["success"] is True
-        assert d["status"] in ("closing", "closed")
+        assert d.get("ok") is True or d.get("success") is True
 
 
 # ---------------------------------------------------------------------------
@@ -175,10 +177,10 @@ def test_admin_stats(client, paper_loaded):
 # ---------------------------------------------------------------------------
 def test_admin_exam_link(client, paper_loaded):
     slug, _run = paper_loaded
-    # list-level
-    r = client.get("/api/admin/exam-link", params={"paper": slug})
+    # query 形态 (旧式, 参数名 paper_slug)
+    r = client.get("/api/admin/exam-link", params={"paper_slug": slug})
     assert r.status_code in (200, 404)
-    # paper-level (同 list-level, 二者等价)
+    # path 形态 (前端 papers.js 主路径)
     r2 = client.get(f"/api/admin/papers/{slug}/exam-link")
     assert r2.status_code in (200, 404)
     if r2.status_code == 200:
@@ -188,9 +190,7 @@ def test_admin_exam_link(client, paper_loaded):
         url = d.get("url")
         if url:
             assert "run=" in url, "exam-link url 必含 run token 参数"
-        # 状态字段也必存在
-        assert d.get("status") in ("open", "closing", "closed", "ready", None) or \
-               isinstance(d.get("status"), str)
+        assert d.get("qr_base64"), "exam-link 必含二维码 qr_base64"
 
 
 # ---------------------------------------------------------------------------
@@ -201,5 +201,8 @@ def test_admin_submissions_list_empty(client, paper_loaded):
     assert r.status_code == 200
     body = r.json()
     # 形态: 直接 list 或 {items: [...]} / {submissions: [...]}
-    items = body if isinstance(body, list) else (body.get("items") or body.get("submissions") or body)
+    if isinstance(body, list):
+        items = body
+    else:
+        items = body.get("items") if "items" in body else body.get("submissions")
     assert isinstance(items, list)

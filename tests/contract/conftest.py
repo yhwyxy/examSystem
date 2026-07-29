@@ -1,152 +1,214 @@
-"""Task 0 契约测试共享夹具。
+"""契约测试共享夹具 —— 纯 Go 黑盒模式。
 
 设计目标:
-1. 同时支持两种被测对象 —— Python TestClient 基线 与 Go HTTP 黑盒 URL；
-2. tmp 目录隔离 papers / sqlite / exam_runs, 不污染工作区 data/;
-3. 注入确定性 fake scorer, 不依赖真实 LLM 服务;
+1. 被测对象是真实运行的 Go exam-server (HTTP 黑盒), 不依赖任何 Python 后端;
+2. 测试数据(试卷/run)全部经 Go admin API 注入, teardown 同样经 API 清理;
+3. 数据隔离: 独立 PostgreSQL schema (contract_test, 每会话重建) + tmp data_root;
 4. 固定题库 fixtures 来自 tests/fixtures/contract/。
 
+运行方式:
+- 默认: conftest 自动 `go build` 并启动 exam-server (需本机可达 PostgreSQL,
+  DSN 取 EXAM_CONTRACT_DATABASE_URL, 缺省用 config.dev.yaml 的开发库);
+- 或设 EXAM_CONTRACT_BASE_URL 指向已运行的 Go 服务 (跳过自启动, 数据不隔离,
+  仅建议临时调试用)。
+
 环境变量:
-- EXAM_CONTRACT_BASE_URL: 指向 Go 服务 (http://127.0.0.1:8000); 不设则用 Python TestClient
-- EXAM_CONTRACT_EXPECT_GO=1: 测试里 Go 专属增强字段(grading_status / draft 节流 / health 等)断言才开启
-- EXAM_FAKE_WORKER_DONE_TOPIC / EXAM_FAKE_WORKER_RESULT_* : 给 fake_worker_entry.py 用, conftest 默认不依赖
+- EXAM_CONTRACT_BASE_URL:      外部 Go 服务地址 (可选)
+- EXAM_CONTRACT_DATABASE_URL:  自启动模式的 PostgreSQL DSN (可选, 不含 search_path)
+- EXAM_CONTRACT_EXPECT_GO:     Go 增强字段断言开关, 默认开 (test_go_enhancements)
 """
 from __future__ import annotations
 
+import itertools
 import json
 import os
-import threading
+import socket
+import subprocess
 import time
 from pathlib import Path
 from typing import Any, Callable, Iterator
 
 import pytest
 
-# 让 tests/contract 可导入顶层 backend 包
-import sys
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-# 旧 Python backend 已从仓库删除; 本套件的夹具(python_env/paper_loaded)仍依赖它做
-# 双跑基准, 待改造为"经 Go admin API 注入数据"的纯黑盒模式后恢复运行。
-try:
-    import backend  # noqa: F401
-except ImportError:
-    pytest.skip(
-        "legacy Python backend removed; contract suite pending Go-only refactor",
-        allow_module_level=True,
-    )
-
+ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "contract"
-GO_BASE_URL = os.environ.get("EXAM_CONTRACT_BASE_URL", "").rstrip("/")
-EXPECT_GO = os.environ.get("EXAM_CONTRACT_EXPECT_GO", "0") == "1"
+
+DEFAULT_DSN = "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable"
+CONTRACT_SCHEMA = "contract_test"
+
+_slug_counter = itertools.count(1)
 
 
 # ---------------------------------------------------------------------------
-# Fake Scoring Service —— 确定性主观题评分, 不调真实模型
+# Go 服务生命周期 (session 级)
 # ---------------------------------------------------------------------------
-def _build_fake_result(req: Any) -> Any:
-    """按学生答案长度 / 参考答案长度比例, 构造确定性 ScoringResult。
+def _free_port() -> int:
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
 
-    使用真实 SubjectiveScoringService 同接口的 ScoringResult 实例, 字段严格匹配:
-    question_id / score / max_score / scoring_mode / track / confidence /
-    need_manual_review / review_level, 其余用默认值。
-    """
-    from subjective_scoring import ScoringResult, ScoringMode, ReviewLevel
 
-    max_score = float(getattr(req, "max_score", 0) or 0)
-    reference = str(getattr(req, "reference_answer", "") or "")
-    student = str(getattr(req, "student_answer", "") or "")
-    ratio = (len(student) / len(reference)) if reference else 0.0
-    score_ratio = max(0.0, min(1.0, ratio))
-    score = round(max_score * score_ratio, 2)
+def _reset_schema(dsn: str) -> None:
+    """DROP + CREATE contract_test schema, 保证每个测试会话从空库开始。"""
+    import psycopg
 
-    # mode 透传请求里的 (可能为 None); 给个默认 TEXT
-    mode = getattr(req, "scoring_mode", None) or ScoringMode.TEXT
+    with psycopg.connect(dsn, autocommit=True) as conn:
+        conn.execute(f"DROP SCHEMA IF EXISTS {CONTRACT_SCHEMA} CASCADE")
+        conn.execute(f"CREATE SCHEMA {CONTRACT_SCHEMA}")
 
-    return ScoringResult(
-        question_id=str(getattr(req, "question_id", "?")),
-        score=score,
-        max_score=max_score,
-        scoring_mode=mode,
-        track="FakeSubjectiveService",
-        confidence=0.95,
-        need_manual_review=False,
-        review_level=ReviewLevel.AUTO_PASS,
+
+def _schema_dsn(dsn: str) -> str:
+    sep = "&" if "?" in dsn else "?"
+    return f"{dsn}{sep}options=-c%20search_path%3D{CONTRACT_SCHEMA}"
+
+
+@pytest.fixture(scope="session")
+def go_base_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    external = os.environ.get("EXAM_CONTRACT_BASE_URL", "").rstrip("/")
+    if external:
+        yield external
+        return
+
+    base_dsn = os.environ.get("EXAM_CONTRACT_DATABASE_URL", DEFAULT_DSN)
+    try:
+        _reset_schema(base_dsn)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"契约测试需要可达的 PostgreSQL ({exc})", allow_module_level=False)
+    dsn = _schema_dsn(base_dsn)
+
+    work = tmp_path_factory.mktemp("go-contract")
+    data_root = work / "data"
+    (data_root / "papers").mkdir(parents=True)
+    (data_root / "exam_runs").mkdir()
+    cfg_path = work / "config.yaml"
+    cfg_path.write_text(
+        "\n".join(
+            [
+                "server:",
+                '  host: "127.0.0.1"',
+                f'  data_root: "{data_root}"',
+                "admin:",
+                "  enable_auth: false",
+                "database:",
+                f'  url: "{dsn}"',
+                "",
+            ]
+        ),
+        encoding="utf-8",
     )
 
+    binary = work / "exam-server"
+    build = subprocess.run(
+        ["go", "build", "-o", str(binary), "./cmd/exam-server"],
+        cwd=ROOT, capture_output=True, text=True, timeout=180,
+    )
+    assert build.returncode == 0, f"go build 失败:\n{build.stderr}"
 
-class _FakeSubjectiveService:
-    """确定性主观题评分: 按答案长度比例给分, 保证可重复。"""
+    migrate = subprocess.run(
+        [str(binary), "migrate", "--config", str(cfg_path)],
+        cwd=ROOT, capture_output=True, text=True, timeout=60,
+    )
+    assert migrate.returncode == 0, f"migrate 失败:\n{migrate.stdout}\n{migrate.stderr}"
 
-    def __init__(self) -> None:
-        self.calls: list[Any] = []
-        self._lock = threading.Lock()
-
-    # 与真实 SubjectiveScoringService 同接口: .score(req) -> result
-    def score(self, req: Any) -> Any:
-        with self._lock:
-            self.calls.append(req)
-        return _build_fake_result(req)
-
-    def close(self) -> None:  # noqa: D401
-        return None
-
-
-# ---------------------------------------------------------------------------
-# Python 后端环境启动 (tmp 隔离)
-# ---------------------------------------------------------------------------
-@pytest.fixture
-def python_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """初始化 Python 后端到 tmp 目录: papers/sqlite/runs + 注入 fake scorer。"""
-    # 导入顺序敏感: 先改路径再 init
-    from backend import question_loader as ql
-    from backend import database
-    from backend import exam_run_service
-    from backend import grader
-    from backend import config as cfg_module
-
-    papers = tmp_path / "papers"
-    papers.mkdir()
-    (papers / "index.json").write_text(json.dumps({"papers": []}), encoding="utf-8")
-    backups = tmp_path / "backups" / "papers"
-    backups.mkdir(parents=True)
-    runs = tmp_path / "exam_runs"
-    runs.mkdir()
-
-    monkeypatch.setattr(ql, "PAPERS_DIR", papers)
-    monkeypatch.setattr(ql, "INDEX_PATH", papers / "index.json")
-    monkeypatch.setattr(ql, "BACKUPS_DIR", backups)
-    monkeypatch.setattr(ql, "DATA_DIR", tmp_path)
-    monkeypatch.setattr(ql, "LEGACY_QUESTIONS_PATH", tmp_path / "questions.json")
-    ql.clear_question_cache()
-
-    monkeypatch.setattr(database, "DB_PATH", tmp_path / "exam.db")
-    database._initialized = False
-    database.init_db()
-
-    monkeypatch.setattr(exam_run_service, "EXAM_RUNS_DIR", runs)
-    monkeypatch.setattr(exam_run_service, "PROJECT_ROOT", tmp_path)
-    # 禁用评分回调调度(测试内不依赖后台 worker), None 是 set_grading_scheduler 合法值
-    exam_run_service.set_grading_scheduler(None)
-
-    # admin 关鉴权, 契约测试更稳定
-    # config.yaml 默认 enable_auth=False; 全程使用 frozen dataclass, 不在此改写
-
-    # 注入 fake scorer
-    fake = _FakeSubjectiveService()
-    grader.set_subjective_service(fake)
-
-    yield tmp_path
-    # teardown: 停后台线程
+    port = _free_port()
+    log = (work / "server.log").open("w")
+    proc = subprocess.Popen(
+        [str(binary), "serve", "--config", str(cfg_path),
+         "--bind", f"127.0.0.1:{port}", "--static", "frontend"],
+        cwd=ROOT, stdout=log, stderr=subprocess.STDOUT,
+    )
+    base = f"http://127.0.0.1:{port}"
     try:
-        exam_run_service.stop_finalize_loop()
-    except Exception:
-        pass
-    grader.set_subjective_service(None)
+        import httpx
+
+        deadline = time.time() + 15
+        last_err: Exception | None = None
+        while time.time() < deadline:
+            if proc.poll() is not None:
+                raise AssertionError(
+                    f"exam-server 提前退出:\n{(work / 'server.log').read_text()}")
+            try:
+                r = httpx.get(f"{base}/api/health", timeout=1.0, trust_env=False)
+                if r.status_code == 200:
+                    break
+            except Exception as exc:  # noqa: BLE001
+                last_err = exc
+            time.sleep(0.1)
+        else:
+            raise AssertionError(f"exam-server 健康检查超时: {last_err}")
+        yield base
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        log.close()
 
 
 # ---------------------------------------------------------------------------
-# 固定题库 fixtures -> 注入到 python_env
+# HTTP 客户端 (黑盒; trust_env=False 隔离本机代理设置)
+# ---------------------------------------------------------------------------
+class _GoResponse:
+    def __init__(self, resp: Any) -> None:
+        self.status_code = resp.status_code
+        self.text = resp.text
+        try:
+            self._json = resp.json()
+        except ValueError:
+            self._json = None
+
+    def json(self) -> Any:
+        return self._json
+
+    @property
+    def ok(self) -> bool:
+        return 200 <= self.status_code < 300
+
+
+class _GoHTTPClient:
+    def __init__(self, base_url: str) -> None:
+        import httpx
+
+        self._cli = httpx.Client(base_url=base_url, timeout=10.0, trust_env=False)
+
+    def _do(self, method: str, path: str, **kw: Any) -> _GoResponse:
+        return _GoResponse(self._cli.request(method, path, **kw))
+
+    def get(self, path: str, **kw: Any) -> _GoResponse:
+        return self._do("GET", path, **kw)
+
+    def post(self, path: str, **kw: Any) -> _GoResponse:
+        return self._do("POST", path, **kw)
+
+    def put(self, path: str, **kw: Any) -> _GoResponse:
+        return self._do("PUT", path, **kw)
+
+    def patch(self, path: str, **kw: Any) -> _GoResponse:
+        return self._do("PATCH", path, **kw)
+
+    def delete(self, path: str, **kw: Any) -> _GoResponse:
+        return self._do("DELETE", path, **kw)
+
+    def close(self) -> None:
+        self._cli.close()
+
+
+@pytest.fixture
+def client(go_base_url: str) -> Iterator[_GoHTTPClient]:
+    c = _GoHTTPClient(go_base_url)
+    yield c
+    c.close()
+
+
+@pytest.fixture
+def admin_headers() -> dict[str, str]:
+    """enable_auth=false, 管理端免鉴权。"""
+    return {}
+
+
+# ---------------------------------------------------------------------------
+# 固定题库 fixtures -> 经 Go admin API 注入
 # ---------------------------------------------------------------------------
 def _load_paper(name: str) -> dict[str, Any]:
     return json.loads((FIXTURES_DIR / name).read_text(encoding="utf-8"))
@@ -169,124 +231,41 @@ def sanitized_exam_golden() -> dict[str, Any]:
 
 
 @pytest.fixture
-def paper_loaded(python_env: Path, paper_smoke: dict[str, Any]) -> str:
-    """把固定卷写进 tmp papers 目录, 返回 slug。"""
-    from backend import paper_store
-    from backend import question_loader as ql
-    ql.clear_question_cache()
-    slug = paper_smoke["paper_id"]
-    paper_store.create_paper(slug=slug, name=paper_smoke["name"])
-    paper_store.save_paper(slug, paper_smoke)
-    # 初始化一个开放 run
-    from backend import exam_run_service
-    run = exam_run_service.open_run(slug)
+def paper_loaded(client: _GoHTTPClient, paper_smoke: dict[str, Any]
+                 ) -> Iterator[tuple[str, dict[str, Any]]]:
+    """经 admin API 上传固定卷并开考, 返回 (slug, run)。
+
+    每个测试用唯一 slug, 避免 run 状态跨用例串扰; teardown 关考 + 删卷。
+    """
+    slug = f"go-contract-p{next(_slug_counter)}"
+    doc = dict(paper_smoke)
+    doc["paper_id"] = slug
+
+    r = client.put(f"/api/admin/papers/{slug}", json=doc)
+    assert r.ok, f"上传试卷失败 [{r.status_code}]: {r.text}"
+
+    r = client.post(f"/api/admin/papers/{slug}/open", json={})
+    assert r.ok, f"开考失败 [{r.status_code}]: {r.text}"
+    opened = r.json()
+    run = {
+        "id": opened.get("run_id"),
+        "paper_id": slug,
+        "round_no": opened.get("round_no"),
+        "public_token": opened.get("public_token"),
+    }
+    assert run["public_token"], f"open 响应缺 public_token: {opened}"
+
     yield slug, run
 
-
-@pytest.fixture(autouse=True)
-def _disable_rate_limit(monkeypatch: pytest.MonkeyPatch):
-    """契约测试全程关闭速率限制, 否则 wait_until 轮询会撞 60/窗口触发 429。"""
-    from backend import main as main_module
-    monkeypatch.setattr(main_module, "_check_rate_limit",
-                       lambda *a, **k: None)
-    with main_module._rate_lock:
-        main_module._rate_store.clear()
-    yield
-    with main_module._rate_lock:
-        main_module._rate_store.clear()
+    client.post(f"/api/admin/papers/{slug}/close", json={})
+    client.delete(f"/api/admin/papers/{slug}")
 
 
 # ---------------------------------------------------------------------------
-# HTTP 客户端 —— 双跑核心
+# 辅助: 轮询等待
 # ---------------------------------------------------------------------------
-class _GoHTTPClient:
-    """对 Go 服务发真实 HTTP 请求的黑盒客户端 (基于 httpx, 与 TestClient 同栈)。"""
-
-    def __init__(self, base_url: str) -> None:
-        import httpx
-        self._base = base_url
-
-    def _url(self, path: str) -> str:
-        return f"{self._base}{path if path.startswith('/') else '/' + path}"
-
-    def _client(self) -> Any:
-        import httpx
-        return httpx.Client(base_url=self._base, timeout=10.0)
-
-    def _do(self, method: str, path: str, json_body: Any | None, **kw: Any) -> Any:
-        import httpx
-        # 兼容 kw 与显式 json_body 同时存在 (旧 fixture bug: 同时 json=json_body + **kw
-        # 在测试用 json=... kwargs 时撞名 "multiple values for keyword argument 'json'").
-        # 优先级: 显式 json_body 覆盖 kw.json; 同时清洗 kw 内 json.
-        body = json_body
-        if body is None and "json" in kw:
-            body = kw.pop("json")
-        elif "json" in kw:
-            kw.pop("json")
-        with httpx.Client(base_url=self._base, timeout=10.0) as cli:
-            r = cli.request(method, path, json=body, **kw)
-        return _GoResponse(r)
-
-    def get(self, path: str, **kw: Any) -> Any:
-        return self._do("GET", path, None, **kw)
-
-    def post(self, path: str, json_body: Any | None = None, **kw: Any) -> Any:
-        return self._do("POST", path, json_body, **kw)
-
-    def put(self, path: str, json_body: Any | None = None, **kw: Any) -> Any:
-        return self._do("PUT", path, json_body, **kw)
-
-    def delete(self, path: str, **kw: Any) -> Any:
-        return self._do("DELETE", path, None, **kw)
-
-
-class _GoResponse:
-    def __init__(self, resp: Any) -> None:
-        self.status_code = resp.status_code
-        try:
-            self._json = resp.json()
-        except (ValueError, Exception):
-            self._json = None
-
-    def json(self) -> Any:
-        return self._json
-
-    @property
-    def ok(self) -> bool:
-        return 200 <= self.status_code < 300
-
-
-@pytest.fixture
-def client(python_env: Path) -> Iterator[Any]:
-    """默认返回 Python TestClient; 设了 EXAM_CONTRACT_BASE_URL 则走 Go 黑盒。"""
-    if GO_BASE_URL:
-        yield _GoHTTPClient(GO_BASE_URL)
-        return
-
-    # Python 基线路径
-    from fastapi.testclient import TestClient
-    from backend import main as main_module
-    # 重置进程级速率限制器, 测试执行前后都清, 避免跨用例 429 污染
-    with main_module._rate_lock:
-        main_module._rate_store.clear()
-    try:
-        with TestClient(main_module.app) as c:
-            yield c
-    finally:
-        with main_module._rate_lock:
-            main_module._rate_store.clear()
-
-
-@pytest.fixture
-def admin_headers(client: Any) -> dict[str, str]:
-    """enable_auth=False 时返回空 headers。Go 路径同样标注。"""
-    return {}
-
-
-# ---------------------------------------------------------------------------
-# 辅助: 等待 Go 服务的 grading_status 收敛 (Go 专属, 测试内部轮询)
-# ---------------------------------------------------------------------------
-def wait_until(predicate: Callable[[], bool], timeout: float = 5.0, interval: float = 0.05) -> bool:
+def wait_until(predicate: Callable[[], bool], timeout: float = 5.0,
+               interval: float = 0.05) -> bool:
     deadline = time.time() + timeout
     while time.time() < deadline:
         if predicate():
