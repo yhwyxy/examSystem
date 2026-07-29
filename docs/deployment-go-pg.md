@@ -1,7 +1,7 @@
 # 部署指南: Go + PostgreSQL 后端 (Task 12 Step 6)
 
 适用: exam-server.exe (Go) + PostgreSQL 18 + scoring_worker (Python 评分) 双进程栈.
-替代 Python+SQLite 旧栈, 支撑更高并发. Python 旧栈保留作回滚备份 (见 rollback-go-pg.md).
+替代已移除的 Python+SQLite 旧栈, 支撑更高并发 (旧栈及回滚文档见 git 历史).
 
 ## 前置 (一次性)
 
@@ -18,7 +18,7 @@
   - `frontend/`                  Go serve 静态资源
   - `scoring_worker/`            Python 评分 worker 包
   - `scripts/windows/`           start.ps1 / stop.ps1 / package.ps1
-  - `docs/`                      本文档 + rollback-go-pg.md
+  - `docs/`                      本文档等
   - `manifest.sha256`            完整性核对清单
 - DataRoot (独立持久目录, **不在包内**): `D:\exam-data\` (PG 数据 / uploads / backups)
 - ModelRoot (独立持久目录, **不在包内**): `D:\exam-models\bge-reranker-v2-m3\`
@@ -35,7 +35,7 @@
    - **禁止**覆盖 `config.production.yaml` (含生产密钥, 不在包内).
    - **禁止**触碰 DataRoot / ModelRoot.
 6. start.ps1 起服务, 等 /api/health 绿.
-7. 失败回滚: 见 docs/rollback-go-pg.md.
+7. 失败回滚: 恢复升级前全量备份 (数据库 + DataRoot), 回退到上一个 dist 包.
 
 ## 启动 (start.ps1)
 

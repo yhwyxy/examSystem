@@ -8,14 +8,17 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # 配置文件：宿主改 config.yaml 后重启即可生效（注意 CorsMiddleware 等启动时定型项需重启）
+      # 配置文件：宿主改 config.yaml 后重启即可生效
       - ./config.yaml:/app/config.yaml:ro
-      # 数据目录：多专业试卷 data/papers + exam.db（可写，便于管理端录入）
+      # 数据目录：多专业试卷 data/papers + run 快照 data/exam_runs（可写，便于管理端录入）
       - ./data:/app/data
     environment:
-      - PYTHONUNBUFFERED=1
-      - RERANK_USE_REMOTE=${RERANK_USE_REMOTE:-false}
-      - RERANK_API_URL=${RERANK_API_URL:-}
-      - RERANK_API_KEY=${RERANK_API_KEY:-}
-      - RERANK_MODEL=${RERANK_MODEL:-}
+      # PostgreSQL 连接串（最高优先级，覆盖 config.yaml 的 database.url）
+      # host 网络外的容器请指向可达的 PG 地址, 如 host.docker.internal:5432
+      - EXAM_DATABASE_URL=${EXAM_DATABASE_URL:-}
+      # 管理端密码覆盖（可选）
+      - EXAM_ADMIN_PASSWORD=${EXAM_ADMIN_PASSWORD:-}
     restart: unless-stopped
+
+# 主观题评分 worker (scoring_worker/, Python) 需另行部署，
+# 与本服务通过共享 PostgreSQL 的 grading_jobs 队列衔接，见 docs/deployment-go-pg.md。

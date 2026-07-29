@@ -26,6 +26,16 @@ import pytest
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+# 旧 Python backend 已从仓库删除; 本套件的夹具(python_env/paper_loaded)仍依赖它做
+# 双跑基准, 待改造为"经 Go admin API 注入数据"的纯黑盒模式后恢复运行。
+try:
+    import backend  # noqa: F401
+except ImportError:
+    pytest.skip(
+        "legacy Python backend removed; contract suite pending Go-only refactor",
+        allow_module_level=True,
+    )
+
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "contract"
 GO_BASE_URL = os.environ.get("EXAM_CONTRACT_BASE_URL", "").rstrip("/")
 EXPECT_GO = os.environ.get("EXAM_CONTRACT_EXPECT_GO", "0") == "1"

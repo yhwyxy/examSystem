@@ -1,17 +1,13 @@
 # 部署导向索引
 
-本仓库现为**双栈并存**: 新 Go+PostgreSQL 栈 (主力) 与 Python+SQLite 旧栈 (回滚备份).
+生产栈: **Go (exam-server) + PostgreSQL + scoring_worker (Python 评分)** 双进程.
 
-## Go + PostgreSQL 栈 (主力)
+> 旧 Python+SQLite 栈已从仓库移除 (切换完成), 如需查阅参见 git 历史.
+
+## Go + PostgreSQL 栈
 
 - 完整部署流程: [docs/deployment-go-pg.md](docs/deployment-go-pg.md)
-- 回滚流程: [docs/rollback-go-pg.md](docs/rollback-go-pg.md)
-- 迁移收尾 + 已知遗留清单: [docs/cutover-go-pg.md](docs/cutover-go-pg.md)
 - 部署后健康自检: `scoring_worker --preflight` + `Invoke-RestMethod /api/health`
-
-## Python + SQLite 旧栈 (回滚备份)
-
-旧栈仅保留作 Go 标线上线后的应急回退通道, 不再新增功能. 维护说明见仓库根 README.md 旧栈段落.
 
 ## 关键运维命令速查
 

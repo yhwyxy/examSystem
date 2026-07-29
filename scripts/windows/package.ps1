@@ -46,7 +46,7 @@ New-Item -ItemType Directory -Path $scriptsDest -Force | Out-Null
 Get-ChildItem -Path (Join-Path $SourceRoot "scripts/windows") -Filter *.ps1 | ForEach-Object {
     Copy-Item $_.FullName $scriptsDest
 }
-# docs (deployment-go-pg.md / rollback-go-pg.md)
+# docs (deployment-go-pg.md 等)
 $docsDest = Join-Path $OutDir "docs"
 New-Item -ItemType Directory -Path $docsDest -Force | Out-Null
 Get-ChildItem -Path (Join-Path $SourceRoot "docs") -Filter *.md -ErrorAction SilentlyContinue | ForEach-Object {
