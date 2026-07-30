@@ -42,6 +42,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/jobs"
 	"github.com/yhwyxy/examSystem/internal/objective"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
@@ -164,12 +165,10 @@ func cmdServe(args []string) error {
 	// 构造 student 路径所需 services: submissions + jobs; 注 objective.Grade + papers.LoadSnapshot.
 	subRepo := submissions.NewRepository()
 	jobsSvc := jobs.NewService(nil)
-	// GracePeriodSeconds < 0 表示不校验 deadline + grace; cfg.Exam.GracePeriodSeconds 默认 30s.
-	// auto_submit (AutoSubmitReason 非空) 路径会跳过 deadline 校验 (见 Service.Submit).
-	grace := -1
-	if cfg.Exam.AutoSubmit {
-		grace = cfg.Exam.GracePeriodSeconds
-	}
+	// deadline + grace 校验恒开启 (cfg.Exam.GracePeriodSeconds 默认 30s).
+	// 之前 auto_submit=false 时整体关闭校验 + auto_submit_reason 可绕过, 均已收紧
+	// (见 submissions.Service.Submit).
+	grace := cfg.Exam.GracePeriodSeconds
 	subSvc := submissions.NewService(pool, subRepo, papers.LoadSnapshot,
 		func(q map[string]any, ans any, partial bool) (map[string]any, error) {
 			return objective.Grade(q, ans, partial)
@@ -201,8 +200,11 @@ func cmdServe(args []string) error {
 	// Task 12a: sessions.Service (student /api/exam/* 公开 + 鉴权端点
 	//   依赖 sessions.RunsLookup 接口). 用 adapter 包装 runs.Repository,
 	//   适配 hash_token 形态 (FindByPublicTokenHash) + RunLite 字段裁剪.
+	//   WithExamDuration 注入 config 默认时长 (run 自带 duration_minutes 优先,
+	//   见 sessions.StartOrResume; config 值仅在 run 未设时兜底).
 	runsLookup := &runsLookupAdapter{repo: runsRepo, pool: pool}
 	sessionsSvc := sessions.NewService(sessionsRepo, runsLookup,
+		sessions.WithExamDuration(time.Duration(cfg.Exam.DurationMinutes)*time.Minute),
 		sessions.WithGracePeriod(time.Duration(cfg.Exam.GracePeriodSeconds)*time.Second))
 
 	// Task 14: runs.Service (admin 开考/关考/exam-link 真业务依赖). 注入 :=
@@ -220,6 +222,10 @@ func cmdServe(args []string) error {
 	}
 	runService = runService.WithExamAutoSubmit(cfg.Exam.AutoSubmit) // 2026-07-26 不硬编码
 
+	// 热点路由限流器 (login/submit/start/draft/status); 进程退出时停 sweep goroutine.
+	limiter := ratelimit.NewLimiter()
+	defer limiter.Stop()
+
 	router := httpapi.NewRouter(httpapi.Dependencies{
 		Config:             cfg,
 		StaticRoot:         static,
@@ -232,6 +238,7 @@ func cmdServe(args []string) error {
 		RunService:         runService, // Task 14: 真 admin 开考 / 关考 / exam-link
 		Review:             reviewSvc,
 		Sessions:           sessionsSvc,
+		RateLimiter:        limiter,
 	})
 
 	srv := &http.Server{
@@ -438,6 +445,8 @@ type runsLookupAdapter struct {
 
 // FindByToken 把 run_token (raw) hash 后调 runs.FindByPublicTokenHash 并裁剪成 RunLite.
 // 用 Begin-Tx 桥 (runs.Repository.FindBy* 强接 pgx.Tx), defer Rollback 释放.
+// 查无此 token -> sessions.ErrInvalidSessionToken (HTTP 401), 不能把
+// runs.ErrRunNotFound 原样上抛 (sessions 不识别 -> 会被当 500 内部错).
 func (a *runsLookupAdapter) FindByToken(ctx context.Context, runToken string) (*sessions.RunLite, error) {
 	h := sha256.Sum256([]byte(runToken))
 	tx, err := a.pool.Begin(ctx)
@@ -446,6 +455,9 @@ func (a *runsLookupAdapter) FindByToken(ctx context.Context, runToken string) (*
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	run, err := a.repo.FindByPublicTokenHash(ctx, tx, hex.EncodeToString(h[:]))
+	if err != nil && (errors.Is(err, runs.ErrRunNotFound) || errors.Is(err, runs.ErrTokenNotFound)) {
+		return nil, sessions.ErrInvalidSessionToken
+	}
 	return runToLite(run, err)
 }
 

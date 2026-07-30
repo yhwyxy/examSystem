@@ -250,7 +250,13 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 	}
 	// closing 仍允许, 与 Python 一致 (closing 的宽限由 grace_period 决定, 不在此阻)
 	now := s.now()
-	deadline := now.Add(s.examDuration)
+	// 会话时长优先取 run 自带 duration_minutes (admin 开考时设定);
+	// run 未带 (0) 时回退 config 注入的 s.examDuration.
+	duration := s.examDuration
+	if runLite.Duration > 0 {
+		duration = runLite.Duration
+	}
+	deadline := now.Add(duration)
 	if runLite.Status == string(RunClosing) && runLite.FinalizeAt != nil {
 		// closing 期 run 自带 finalize_at; 会话截止取 min(now+duration, finalize_at)
 		if runLite.FinalizeAt.Before(deadline) {
@@ -336,13 +342,20 @@ type SaveDraftResult struct {
 	Revision     int
 	DraftSavedAt time.Time
 	Throttled    bool // true 表示距离上次保存太近, 拒写 (rls 0 行无变化)
+	// RunStatus / FinalizeAt 来自 session 所属 run, 供前端锁卷判断;
+	// SessionStatus 恒 "active" (submitted 时 SaveDraft 直接报错).
+	RunStatus     string
+	SessionStatus string
+	FinalizeAt    *time.Time
 }
 
-// SaveDraft 对齐 Python save_draft: 给定 session_token + 旧 revision + 新 draft,
-// 用 CAS 把 draft_revision+1. 多重约束:
+// SaveDraft 对齐前端 exam.js 契约: 给定 session_token + "新 revision" (客户端在
+// 本地 revision 基础上 +1 后发送) + 新 draft, 用 CAS 校验服务器当前 revision ==
+// newRevision-1 后写入. 多重约束:
 //   - token 校验 (Find by token hash) 错 -> ErrInvalidSessionToken
 //   - session 不在 active -> ErrSessionSubmitted (已交卷)
-//   - draft_revision 不匹配 -> ErrStaleDraftRevision (409 STALE_DRAFT)
+//   - 服务器 draft_revision != newRevision-1 -> ErrStaleDraftRevision
+//     (409 STALE_DRAFT_REVISION; 返回值携带服务器当前 revision 供前端自愈)
 //   - 已超 deadline -> ErrRunClosed (409 RUN_CLOSED; Python 用 deadline 已过)
 //   - 距离上次 draft_saved_at 太近 (draftThrottle>0) -> Throttled=true, 写入被同 CAS
 //     拒绝但要明确告诉前端 retry_after. 实现: 若 draftThrottle>0 且 draft_saved_at 不为空,
@@ -351,7 +364,7 @@ type SaveDraftResult struct {
 //
 // draftJSON 由 HTTP 层做 sanitize/类型校验; service 仅做 raw jsonb 落库 (与 Python 一致).
 func (s *Service) SaveDraft(ctx context.Context, q pgxExec,
-	sessionToken string, oldRevision int, draftJSON []byte) (*SaveDraftResult, error) {
+	sessionToken string, newRevision int, draftJSON []byte) (*SaveDraftResult, error) {
 	if sessionToken == "" {
 		return nil, ErrInvalidSessionToken
 	}
@@ -391,24 +404,50 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	// throttle 检查 (靠近上次写)
 	if s.draftThrottle > 0 && sess.DraftSavedAt != nil {
 		if elapsed := s.now().Sub(*sess.DraftSavedAt); elapsed < s.draftThrottle {
-			return &SaveDraftResult{
+			res := &SaveDraftResult{
 				Revision:     sess.DraftRevision, // 不变
 				DraftSavedAt: *sess.DraftSavedAt,
 				Throttled:    true,
-			}, nil
+			}
+			s.fillRunInfo(ctx, sess.RunID, res)
+			return res, nil
 		}
 	}
 
-	// CAS
-	res, err := s.repo.UpdateDraftCAS(ctx, q, sess.ID, oldRevision, draftJSON)
+	// CAS: 客户端发的是"新 revision", 服务器当前须是 newRevision-1.
+	if newRevision <= 0 {
+		return &SaveDraftResult{Revision: sess.DraftRevision}, ErrStaleDraftRevision
+	}
+	res, err := s.repo.UpdateDraftCAS(ctx, q, sess.ID, newRevision-1, draftJSON)
 	if err != nil {
+		if errors.Is(err, ErrStaleDraftRevision) && res != nil {
+			// 把服务器当前 revision 透传给 HTTP 层 (current_revision 自愈通道)
+			return &SaveDraftResult{Revision: res.Revision}, err
+		}
 		return nil, err
 	}
-	return &SaveDraftResult{
+	out := &SaveDraftResult{
 		Revision:     res.Revision,
 		DraftSavedAt: derefTime(res.DraftSavedAt),
 		Throttled:    false,
-	}, nil
+	}
+	s.fillRunInfo(ctx, sess.RunID, out)
+	return out, nil
+}
+
+// fillRunInfo 补充 SaveDraftResult 的 run 侧字段; run 查询失败不阻断草稿保存
+// (草稿已落库, run 状态只是前端展示辅助).
+func (s *Service) fillRunInfo(ctx context.Context, runID string, res *SaveDraftResult) {
+	res.SessionStatus = string(StatusActive)
+	if s.runsLookup == nil {
+		return
+	}
+	run, err := s.runsLookup.FindByID(ctx, runID)
+	if err != nil || run == nil {
+		return
+	}
+	res.RunStatus = run.Status
+	res.FinalizeAt = run.FinalizeAt
 }
 
 // derefTime 把 *time.Time 解为 time.Time; nil 当 zero, 仅用于返回结构体.
@@ -419,21 +458,27 @@ func derefTime(t *time.Time) time.Time {
 	return *t
 }
 
-// StatusResult 是 Status 调用结果.
+// StatusResult 是 Status 调用结果. json tag 与前端 exam.js 轮询契约对齐
+// (snake_case; 之前无 tag 输出 PascalCase 导致前端全读 undefined).
 type StatusResult struct {
-	SessionID     string
-	RunID         string
-	EmployeeID    string
-	Name          string
-	Status        SessionStatus
-	StartedAt     time.Time
-	DeadlineAt    time.Time
-	DraftRevision int
-	DraftSavedAt  *time.Time
-	Draft         json.RawMessage
+	SessionID     string          `json:"session_id"`
+	RunID         string          `json:"run_id"`
+	EmployeeID    string          `json:"employee_id"`
+	Name          string          `json:"name"`
+	Status        SessionStatus   `json:"session_status"`
+	RunStatus     string          `json:"run_status"`
+	StartedAt     time.Time       `json:"started_at"`
+	DeadlineAt    time.Time       `json:"deadline_at"`
+	DraftRevision int             `json:"draft_revision"`
+	DraftSavedAt  *time.Time      `json:"draft_saved_at"`
+	FinalizeAt    *time.Time      `json:"finalize_at"`
+	SubmissionID  *string         `json:"submission_id"`
+	Draft         json.RawMessage `json:"answers"`
+	ServerTime    time.Time       `json:"server_time"`
 }
 
-// Status 对齐 Python get_session_status: 用 token hash 查会话; 返回草案 / 截止 / revision.
+// Status 对齐 Python get_session_status: 用 token hash 查会话; 返回草案 / 截止 / revision
+// + run 状态 (锁卷判断) + 已交卷时的 submission_id (前端跳转成功页).
 // 错误: token 不匹配 -> ErrInvalidSessionToken; session 不存在 -> ErrSessionNotFound.
 func (s *Service) Status(ctx context.Context, q pgxExec, sessionToken string) (*StatusResult, error) {
 	if sessionToken == "" {
@@ -449,7 +494,7 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 		}
 		return nil, fmt.Errorf("sessions.Status probe by token: %w", err)
 	}
-	return &StatusResult{
+	res := &StatusResult{
 		SessionID:     sess.ID,
 		RunID:         sess.RunID,
 		EmployeeID:    sess.EmployeeID,
@@ -460,7 +505,26 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 		DraftRevision: sess.DraftRevision,
 		DraftSavedAt:  sess.DraftSavedAt,
 		Draft:         sess.DraftJSON,
-	}, nil
+		ServerTime:    s.now(),
+	}
+	// run 状态 (closing/closed -> 前端锁卷); 查询失败不阻断状态返回.
+	if s.runsLookup != nil {
+		if run, rerr := s.runsLookup.FindByID(ctx, sess.RunID); rerr == nil && run != nil {
+			res.RunStatus = run.Status
+			res.FinalizeAt = run.FinalizeAt
+		}
+	}
+	// 已交卷 -> 取回 submission_id (sessions 与 submissions 表在同一 schema;
+	// 这里内联轻量查询, 与本文件按 token 查 session 的内联 SQL 同一风格).
+	if sess.Status == StatusSubmitted {
+		var sid string
+		if serr := q.QueryRow(ctx, `
+SELECT id::text FROM submissions WHERE run_id = $1 AND employee_id = $2
+ORDER BY id DESC LIMIT 1`, sess.RunID, sess.EmployeeID).Scan(&sid); serr == nil {
+			res.SubmissionID = &sid
+		}
+	}
+	return res, nil
 }
 
 // SubmitManualRequest 是 SubmitManual 的入参. answers / answers_map 由 HTTP 层解析

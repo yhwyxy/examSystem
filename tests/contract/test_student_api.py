@@ -68,9 +68,6 @@ def test_health(client):
 # ---------------------------------------------------------------------------
 # /api/exam (脱敏卷) —— 用 sanitized_exam 黄金 fixture 比对
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="已知缺陷: GET /api/exam 仅返 5 字段, 缺 round_no/paper_name/"
-                          "closed/run_status/exam_info, 前端 exam.js:199-211 依赖 (审计问题#8)",
-                   strict=False)
 def test_get_public_exam_shape(client, paper_loaded, sanitized_exam_golden):
     slug, run = paper_loaded
     r = client.get("/api/exam", params={"paper": slug, "run": run["public_token"]})
@@ -164,22 +161,17 @@ def test_start_session_idempotent_resume(client, paper_loaded):
 # ---------------------------------------------------------------------------
 # /api/exam/start —— 拒绝错误 run token
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="已知缺陷: 无效 run_token 开考返回 500 而非 4xx "
-                          "(错误映射缺 runs.ErrRunNotFound, 审计 M3)", strict=False)
 def test_start_session_rejects_bad_token(client, paper_loaded):
     slug, _ = paper_loaded
     body = {"paper_id": slug, "run_token": "not-a-real-token",
             "name": "x", "employee_id": "y"}
     r = client.post("/api/exam/start", json=body)
-    assert r.status_code in (400, 403, 404)
+    assert r.status_code in (400, 401, 403, 404)
 
 
 # ---------------------------------------------------------------------------
 # /api/exam/sessions/{id}/draft + /status —— 写草稿与查询
 # ---------------------------------------------------------------------------
-@pytest.mark.xfail(reason="已知缺陷: draft revision 语义 off-by-one (前端发新版本号, 后端 CAS "
-                          "要求当前版本号) + status 接口返回 PascalCase (审计实测断点 2/3)",
-                   strict=False)
 def test_save_draft_and_status(client, paper_loaded):
     slug, run = paper_loaded
     s = client.post("/api/exam/start", json={
@@ -208,8 +200,6 @@ def test_save_draft_and_status(client, paper_loaded):
     assert st["draft_saved_at"] is not None
 
 
-@pytest.mark.xfail(reason="已知缺陷: draft revision 语义 off-by-one, 回退旧 revision 反而成功 "
-                          "(审计实测断点 2)", strict=False)
 def test_save_draft_rejects_stale_revision(client, paper_loaded):
     slug, run = paper_loaded
     s = client.post("/api/exam/start", json={
@@ -221,11 +211,14 @@ def test_save_draft_rejects_stale_revision(client, paper_loaded):
     client.put(f"/api/exam/sessions/{sid}/draft", json={
         "session_token": stok, "revision": 1, "answers": {"c-single": ["A"]},
     })
-    # 故意回退到旧 revision 0 => 应 4xx
+    # 故意回退到旧 revision 0 => 应 409 + current_revision 自愈通道
     r = client.put(f"/api/exam/sessions/{sid}/draft", json={
         "session_token": stok, "revision": 0, "answers": {"c-single": ["B"]},
     })
     assert r.status_code in (400, 409)
+    detail = (r.json() or {}).get("detail") or {}
+    assert detail.get("code") == "STALE_DRAFT_REVISION"
+    assert detail.get("current_revision") == 1
 
 
 def test_save_draft_rejects_bad_session_token(client, paper_loaded):

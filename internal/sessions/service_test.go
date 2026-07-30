@@ -216,7 +216,8 @@ func TestSaveDraftSuccess(t *testing.T) {
 	defer tx.Rollback(ctx)
 
 	draft := []byte(`{"q1":"answer-a"}`)
-	r, err := env.svc.SaveDraft(ctx, tx, token, 0, draft)
+	// 客户端发"新 revision" (本地 0 + 1); 服务器 CAS 当前==0 后写为 1.
+	r, err := env.svc.SaveDraft(ctx, tx, token, 1, draft)
 	if err != nil {
 		t.Fatalf("SaveDraft: %v", err)
 	}
@@ -243,7 +244,7 @@ func TestSaveDraftStaleRevision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx1: %v", err)
 	}
-	if _, err := env.svc.SaveDraft(ctx, tx1, res.SessionToken, 0, []byte(`{"a":1}`)); err != nil {
+	if _, err := env.svc.SaveDraft(ctx, tx1, res.SessionToken, 1, []byte(`{"a":1}`)); err != nil {
 		tx1.Rollback(ctx)
 		t.Fatalf("first SaveDraft: %v", err)
 	}
@@ -251,15 +252,18 @@ func TestSaveDraftStaleRevision(t *testing.T) {
 		t.Fatalf("commit tx1: %v", err)
 	}
 
-	// 第二次用旧 revision=0 -> 应 STALE
+	// 第二次仍发 revision=1 (服务器已是 1, 期望 0) -> 应 STALE 且带回当前 revision
 	tx2, err := env.pool.Begin(ctx)
 	if err != nil {
 		t.Fatalf("begin tx2: %v", err)
 	}
 	defer tx2.Rollback(ctx)
-	_, err = env.svc.SaveDraft(ctx, tx2, res.SessionToken, 0, []byte(`{"a":2}`))
+	stale, err := env.svc.SaveDraft(ctx, tx2, res.SessionToken, 1, []byte(`{"a":2}`))
 	if !errors.Is(err, sessions.ErrStaleDraftRevision) {
 		t.Errorf("err = %v, want ErrStaleDraftRevision", err)
+	}
+	if stale == nil || stale.Revision != 1 {
+		t.Errorf("stale result = %+v, want Revision=1 (current_revision 自愈通道)", stale)
 	}
 }
 
@@ -293,7 +297,7 @@ func TestStatusSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx1: %v", err)
 	}
-	if _, err := env.svc.SaveDraft(ctx, tx1, res.SessionToken, 0, []byte(`{"q":"A"}`)); err != nil {
+	if _, err := env.svc.SaveDraft(ctx, tx1, res.SessionToken, 1, []byte(`{"q":"A"}`)); err != nil {
 		tx1.Rollback(ctx)
 		t.Fatalf("SaveDraft: %v", err)
 	}

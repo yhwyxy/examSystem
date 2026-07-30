@@ -352,7 +352,7 @@ async function exportData() {
     const paperFilter = $('filterPaper');
     if (paperFilter && paperFilter.value) params.set('paper_id', paperFilter.value);
     const q = params.toString();
-    const resp = await authFetch(`${API}/export${q ? '?' + q : ''}`);
+    const resp = await authFetch(`${API}/submissions/export${q ? '?' + q : ''}`);
     if (!resp.ok) {
       const data = await resp.json().catch(() => ({}));
       throw new Error(apiErrorMessage(data, '导出失败'));

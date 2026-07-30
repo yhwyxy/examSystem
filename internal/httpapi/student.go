@@ -146,6 +146,8 @@ func submitErrorToHTTP(w http.ResponseWriter, err error) {
 		writeStudentError(w, http.StatusBadRequest, "INVALID_AUTO_SUBMIT_REASON", "auto_submit_reason not allowed")
 	case errors.Is(err, submissions.ErrSubmitDisabled):
 		writeStudentError(w, http.StatusServiceUnavailable, "SERVICE_UNAVAILABLE", "submissions service disabled")
+	case errors.Is(err, submissions.ErrSnapshotUnavailable):
+		writeStudentError(w, http.StatusInternalServerError, "SNAPSHOT_UNAVAILABLE", "grading snapshot unavailable; submission not recorded, please retry")
 	case errors.Is(err, submissions.ErrNoRows):
 		writeStudentError(w, http.StatusNotFound, "NOT_FOUND", "submission not found")
 	default:

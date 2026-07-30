@@ -25,6 +25,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/skip2/go-qrcode"
 	"github.com/yhwyxy/examSystem/internal/export"
+	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 )
@@ -38,8 +39,10 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		// 注: main 必传 Auth 实例 (enabled=false 时 RequireAdmin 放行).
 		return
 	}
-	// login 不需要鉴权 -> 直接挂在 api 子树外部 (Task 9 spec):
-	api.Post("/admin/login", adminLoginHandler(deps))
+	// login 不需要鉴权 -> 直接挂在 api 子树外部 (Task 9 spec);
+	// 但必须限流 (10/min burst 3 per IP), 否则口令可无限暴破.
+	api.Post("/admin/login", rateLimitByIP(deps.RateLimiter, ratelimit.PresetStart,
+		"admin-login", adminLoginHandler(deps)))
 	// /api/admin/* 子树: RequireAdmin 保护
 	authMW := deps.Auth.RequireAdmin
 	api.Route("/admin", func(admin chi.Router) {

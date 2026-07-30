@@ -238,9 +238,10 @@ RETURNING draft_revision, draft_saved_at, status`, draftJSON, sessionID, oldRevi
 	if isNoRows(err) {
 		// 0 行, 判 reason: 找这一行看 status / 是否存在
 		row2 := q.QueryRow(ctx,
-			"SELECT status FROM exam_sessions WHERE id = $1", sessionID)
+			"SELECT status, draft_revision FROM exam_sessions WHERE id = $1", sessionID)
 		var st2 string
-		errScan := row2.Scan(&st2)
+		var curRev int
+		errScan := row2.Scan(&st2, &curRev)
 		if isNoRows(errScan) {
 			return nil, ErrSessionNotFound
 		}
@@ -250,7 +251,10 @@ RETURNING draft_revision, draft_saved_at, status`, draftJSON, sessionID, oldRevi
 		if SessionStatus(st2) == StatusSubmitted {
 			return nil, ErrSessionSubmitted
 		}
-		return nil, ErrStaleDraftRevision
+		// CAS 失败: 携带服务器当前 revision 返回, 供 HTTP 层写进
+		// STALE_DRAFT_REVISION 错误的 current_revision 字段 (前端自愈通道).
+		return &DraftUpdateResult{Revision: curRev, Status: SessionStatus(st2)},
+			ErrStaleDraftRevision
 	}
 	return nil, fmt.Errorf("sessions.UpdateDraftCAS: %w", err)
 }

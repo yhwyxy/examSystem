@@ -10,6 +10,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
@@ -48,6 +49,10 @@ type Dependencies struct {
 
 	// Task 12a student /api/exam/* 8 端点 (公开 + token 鉴权), nil 时路由返 503.
 	Sessions *sessions.Service // GetPaper / StartOrResume / SaveDraft / Status
+
+	// RateLimiter 是热点路由限流器 (login/submit/start/draft/status).
+	// nil (单测常态) 时全部直通.
+	RateLimiter *ratelimit.Limiter
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。
@@ -81,18 +86,26 @@ func NewRouter(deps Dependencies) http.Handler {
 	// /api/* 子树: API 行为
 	r.Route("/api", func(api chi.Router) {
 		api.Get("/health", healthHandler())
-		api.Post("/reload-config", reloadConfigHandler(deps))
+		// reload-config 是运维操作, 不得匿名可达: Auth 注入时套 RequireAdmin
+		// (enable_auth=false 的开发态 RequireAdmin 本身放行, 行为不变).
+		if deps.Auth != nil {
+			api.With(deps.Auth.RequireAdmin).Post("/reload-config", reloadConfigHandler(deps))
+		} else {
+			api.Post("/reload-config", reloadConfigHandler(deps))
+		}
 
 		// Task 6 student 提交 + 状态查询.提交路由 (POST /api/session/submit)
 		// 接收 raw JSON, 调 submissions.Service.Submit 主路径编排.
 		// 注: 不用 if nil gate (与 admin.RunService nil gate 一致, 路由always mount, handler 内返503).
 		// 这样无 SubmissionsService 注入时 UI/CI 路由仍可达, handler 友好返 503 而非 404
 		// (避免 UI 误判 "不支持此功能" 而非 "服务暂不可用")
-		api.Post("/session/submit", submitHandler(deps))
+		submitH := rateLimitByIP(deps.RateLimiter, ratelimit.PresetPublic, "submit",
+			submitHandler(deps))
+		api.Post("/session/submit", submitH)
 		// UI exam.js:746 实际调 POST /api/submit (非 /api/session/submit);
 		// 路径 mismatch bug 2026-07-26 核查发现, 加 /api/submit 等价 handler 适配 UI,
 		// 旧 /api/session/submit 保留向后兼容.
-		api.Post("/submit", submitHandler(deps))
+		api.Post("/submit", submitH)
 		api.Get("/submission/{id}/status", submissionStatusHandler(deps))
 
 		// Task 9 admin 路由组 (/api/admin/*): papers/open/close/batch/reorder/preview/

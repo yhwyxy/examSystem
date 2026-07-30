@@ -117,7 +117,9 @@ async function load() {
   if (!id) throw new Error('缺少提交 ID');
   const res = await authFetch('/api/admin/submissions/' + encodeURIComponent(id));
   if (!res.ok) throw new Error('详情加载失败');
-  submission = await res.json();
+  const payload = await res.json();
+  // Go 后端返回 {submission:{...}, review_logs:[...]} 信封；兼容旧扁平形态。
+  submission = payload.submission ?? payload;
   render();
 }
 
@@ -127,9 +129,9 @@ async function review(qid, sid, resultContainer) {
   if (!scoreInput || !noteInput) throw new Error('未找到复核输入框');
   const score = Number(scoreInput.value);
   const note = noteInput.value;
-  const body = { submission_id: Number(id), question_id: qid, new_score: score, note };
+  const body = { question_id: qid, new_score: score, note };
   if (sid) body.sub_question_id = sid;
-  const res = await authFetch('/api/admin/review', {
+  const res = await authFetch('/api/admin/submissions/' + encodeURIComponent(id) + '/review', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body)

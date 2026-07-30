@@ -147,10 +147,12 @@ func (s *Service) Submit(ctx context.Context, in SubmitRequest) (*SubmitResult, 
 	default:
 		return nil, ErrSubmissionClosed
 	}
-	// deadline + grace 校验: 超期则拒绝 (auto_submit 走专门路径, 不在此 handler).
+	// deadline + grace 校验: 超期一律拒绝. auto_submit_reason 来自请求体 (客户端可
+	// 任意伪造), 不得作为绕过条件 —— 合法的自动交卷发生在 deadline 附近, grace 窗口
+	// (默认 30s) 已覆盖其提交延迟.
 	if s.GracePeriodSeconds >= 0 && sess.DeadlineAt != nil {
 		deadlineWithGrace := sess.DeadlineAt.Add(time.Duration(s.GracePeriodSeconds) * time.Second)
-		if time.Now().UTC().After(deadlineWithGrace) && in.AutoSubmitReason == nil {
+		if time.Now().UTC().After(deadlineWithGrace) {
 			return nil, ErrSubmissionClosed
 		}
 	}
@@ -172,8 +174,12 @@ func (s *Service) Submit(ctx context.Context, in SubmitRequest) (*SubmitResult, 
 		return nil, ErrDuplicateSubmission
 	}
 	// --- (b) 事务外 CPU 工作: LoadSnapshot + objective grade ---
+	// 快照不可用时直接失败 (不静默按 0 分定稿); 学生可重试, 管理员可从错误日志定位.
 	now := time.Now().UTC()
-	objScore, _, objDetailJSON, _, hasSubjective, _ := s.computeObjective(ctx, run, in.AnswersMap)
+	objScore, _, objDetailJSON, _, hasSubjective, err := s.computeObjective(ctx, run, in.AnswersMap)
+	if err != nil {
+		return nil, err
+	}
 
 	// --- (c) 短事务写: FOR UPDATE session + FOR UPDATE run + INSERT submission + INSERT job + UPDATE session submitted ---
 	tx, err := s.pool.Begin(ctx)
@@ -246,22 +252,31 @@ func (s *Service) Submit(ctx context.Context, in SubmitRequest) (*SubmitResult, 
 // ErrSubmitDisabled 表示依赖未注入 (Service 零值时 Submit 返回此错). HTTP 映射 503.
 var ErrSubmitDisabled = errors.New("SUBMIT_DISABLED")
 
+// ErrSnapshotUnavailable 表示 run 快照缺失或校验失败, 无法客观判分.
+// Submit 主路径遇到它直接失败 (不静默按 0 分定稿). HTTP 映射 500.
+var ErrSnapshotUnavailable = errors.New("SNAPSHOT_UNAVAILABLE")
+
 // computeObjective 在事务外加载快照并评分, 返回 PreparedSubmission 的客观分字段.
 // 主观题占位 score=0; Worker (Task 7) 异步补完.
 //
-// 任一步出错返回零分 + reason 字段写入 detail 中
-// (与 Python insert_submission_pending 兼容: 评分失败不阻塞入库).
+// 快照缺失/校验失败 -> ErrSnapshotUnavailable (由 Submit 拒绝提交, 不静默 0 分入库).
+// 单题评分器出错仍按占位处理 (reason 写进 detail), 不阻塞整卷.
 // computeObjective 返回 (objScore, objMax, objDetailJSON, questionTotal,
 // hasSubjective, err). hasSubjective=true 表示快照含主观题 (需异步 worker).
 func (s *Service) computeObjective(ctx context.Context, run *RunLite,
 	answersMap map[string]any) (score, max int, detailJSON []byte, qTotal int,
 	hasSubjective bool, err error) {
-	if run.SnapshotPath == "" || answersMap == nil {
-		return 0, 0, []byte("[]"), 0, false, nil
+	if run.SnapshotPath == "" {
+		return 0, 0, nil, 0, false,
+			fmt.Errorf("%w: run %s has no snapshot path", ErrSnapshotUnavailable, run.ID)
+	}
+	if answersMap == nil {
+		answersMap = map[string]any{}
 	}
 	snap, err := s.snapshotLoad(run.SnapshotPath, run.SnapshotHash)
 	if err != nil {
-		return 0, 0, []byte("[]"), 0, false, nil
+		return 0, 0, nil, 0, false,
+			fmt.Errorf("%w: %v", ErrSnapshotUnavailable, err)
 	}
 	questions, _ := snap.Doc["questions"].([]any)
 	details := make([]map[string]any, 0, len(questions))

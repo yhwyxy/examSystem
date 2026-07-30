@@ -21,7 +21,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
-	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 )
@@ -38,73 +38,67 @@ func mountStudentExam(api chi.Router, deps Dependencies) {
 		api.Get("/exam/sessions/{id}/status", serviceNotReady("SESSIONS_NOT_CONFIGURED"))
 		return
 	}
-	api.Get("/exam", getPublicExamHandler(deps))
-	api.Post("/exam/start", startExamHandler(deps))
-	api.Put("/exam/sessions/{id}/draft", putDraftHandler(deps))
-	api.Get("/exam/sessions/{id}/status", getSessionStatusHandler(deps))
+	api.Get("/exam", rateLimitByIP(deps.RateLimiter, ratelimit.PresetPublic,
+		"exam-get", getPublicExamHandler(deps)))
+	api.Post("/exam/start", rateLimitByIP(deps.RateLimiter, ratelimit.PresetPublic,
+		"exam-start", startExamHandler(deps)))
+	api.Put("/exam/sessions/{id}/draft", rateLimitBySessionID(deps.RateLimiter,
+		ratelimit.PresetDraftStatus, "draft", putDraftHandler(deps)))
+	api.Get("/exam/sessions/{id}/status", rateLimitBySessionID(deps.RateLimiter,
+		ratelimit.PresetDraftStatus, "status", getSessionStatusHandler(deps)))
 }
 
 
 // getPublicExamHandler GET /api/exam?paper={slug}&run={run_token}
-// 步骤: Find run by run_token -> LoadSnapshot(脱敏前的真快照) -> SanitizeForStudent.
-// 返 {"paper_id","round_no","duration_minutes","deadline_at","questions":[...脱敏...]}.
+// 步骤: FindByToken -> runs.GetPublicExam (读 run 冻结快照 + hash 校验 + 脱敏).
+// 必须走 run 快照而非 papers.LoadSnapshot(可编辑卷): 开考后管理员编辑试卷不得
+// 影响进行中的 run, 否则可编辑卷字节变化 -> hash 校验失败 -> 全体学生取卷 500.
 func getPublicExamHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		runToken := q.Get("run")
-		if runToken == "" || deps.RunService == nil || deps.Pool == nil || deps.Papers == nil {
+		if runToken == "" || deps.RunService == nil || deps.Pool == nil {
 			writeAdminError(w, http.StatusBadRequest, "MISSING_QUERY",
 				"both paper slug & run token required")
 			return
 		}
-		// FindByToken 走 Service 层 (内部 sha256 hash + repo 查询), 需真 tx (非 nil).
-		var run *runs.Run
-		err := withTx(r.Context(), deps.Pool, func(tx pgx.Tx) (err error) {
-			run, err = deps.RunService.FindByToken(r.Context(), tx, runToken)
+		var exam *runs.PublicExamResult
+		err := withTx(r.Context(), deps.Pool, func(tx pgx.Tx) error {
+			run, err := deps.RunService.FindByToken(r.Context(), tx, runToken)
+			if err != nil {
+				return err
+			}
+			exam, err = deps.RunService.GetPublicExam(r.Context(), tx, run)
 			return err
 		})
 		if err != nil {
-			writeAdminError(w, http.StatusUnauthorized, "INVALID_RUN_TOKEN",
-				"run_token lookup failed: "+err.Error())
-			return
-		}
-		// run 必须含 snapshot_path + snapshot_hash (paper 包提供).
-		snap, err := deps.Papers.LoadSnapshot(run.PaperID, run.SnapshotHash)
-		if err != nil || snap == nil {
-			writeAdminError(w, http.StatusInternalServerError, "SNAPSHOT_LOAD_FAILED",
-				"load snapshot: "+err.Error())
-			return
-		}
-		// SanitizeForStudent 统一脱敏 (Question=map[string]any; questions 切片).
-		// 先按 []papers.Question 强断言; 不行则按 []any 安全转拷贝.
-		var questions []papers.Question
-		switch qs := snap.Doc["questions"].(type) {
-		case []papers.Question:
-			questions = qs
-		case []any:
-			questions = make([]papers.Question, 0, len(qs))
-			for _, q := range qs {
-				if qq, ok := q.(papers.Question); ok {
-					questions = append(questions, qq)
-				} else if qq, ok := q.(map[string]any); ok {
-					questions = append(questions, qq)
-				}
+			if errors.Is(err, runs.ErrTokenNotFound) {
+				writeAdminError(w, http.StatusUnauthorized, "INVALID_RUN_TOKEN",
+					"run token invalid")
+				return
 			}
-		default:
-			questions = []papers.Question{}
+			writeAdminError(w, http.StatusInternalServerError, "EXAM_LOAD_FAILED",
+				"load exam: "+err.Error())
+			return
 		}
-		sanitized := papers.SanitizeForStudent(questions)
-		// 响应 deadline_at 用 run.FinalizeAt (closing/closed 时是 finalize 时间).
-		var deadlineAt any
-		if run.FinalizeAt != nil {
-			deadlineAt = run.FinalizeAt
+		var finalizeAt any
+		if exam.FinalizeAt != nil {
+			finalizeAt = exam.FinalizeAt
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"paper_id":          run.PaperID,
-			"round_no":          run.RoundNo,
-			"duration_minutes":  run.DurationMinutes,
-			"deadline_at":       deadlineAt,
-			"questions":         sanitized,
+			"paper_id":         exam.PaperID,
+			"run_id":           exam.RunID,
+			"round_no":         exam.RoundNo,
+			"paper_name":       exam.PaperName,
+			"run_status":       exam.RunStatus,
+			"closed":           exam.Closed,
+			"duration_minutes": exam.DurationMinutes,
+			"finalize_at":      finalizeAt,
+			"deadline_at":      finalizeAt,
+			"server_time":      exam.ServerTime,
+			"auto_submit":      exam.AutoSubmit,
+			"exam_info":        exam.ExamInfo,
+			"questions":        exam.Questions,
 		})
 	}
 }
@@ -179,7 +173,9 @@ func startExamHandler(deps Dependencies) http.HandlerFunc {
 
 
 // putDraftHandler PUT /api/exam/sessions/{id}/draft Body={session_token, revision, answers}.
-// 响应{success, draft_revision, draft_saved_at, run_status, finalize_at}.
+// revision 是"客户端新版本号" (本地 revision+1); 服务端 CAS 要求当前 == revision-1.
+// 响应{success, draft_revision, draft_saved_at, run_status, session_status, finalize_at}.
+// CAS 失败回 409 STALE_DRAFT_REVISION + detail.current_revision (前端自愈通道).
 func putDraftHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
@@ -199,22 +195,52 @@ func putDraftHandler(deps Dependencies) http.HandlerFunc {
 		res, err := deps.Sessions.SaveDraft(r.Context(), deps.Pool,
 			body.SessionToken, body.Revision, body.Answers)
 		if err != nil {
-			writeAdminError(w, mapSessionErrCode(err), "SAVE_DRAFT_FAILED", err.Error())
+			if errors.Is(err, sessions.ErrStaleDraftRevision) {
+				cur := 0
+				if res != nil {
+					cur = res.Revision
+				}
+				writeStaleDraftError(w, cur)
+				return
+			}
+			writeAdminError(w, mapSessionErrCode(err), sessionErrCodeName(err), err.Error())
 			return
 		}
+		var finalizeAt any
+		if res.FinalizeAt != nil {
+			finalizeAt = res.FinalizeAt
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"success":         true,
-			"draft_revision":  res.Revision,
-			"draft_saved_at":  res.DraftSavedAt,
-			"throttled":       res.Throttled,
+			"success":        !res.Throttled,
+			"draft_revision": res.Revision,
+			"draft_saved_at": res.DraftSavedAt,
+			"run_status":     res.RunStatus,
+			"session_status": res.SessionStatus,
+			"finalize_at":    finalizeAt,
+			"throttled":      res.Throttled,
 		})
 	}
 }
 
+// writeStaleDraftError 输出 409 STALE_DRAFT_REVISION + current_revision.
+// 前端 exam.js 读 detail.code == 'STALE_DRAFT_REVISION' 与 detail.current_revision
+// 同步本地 revision 后下轮重发 —— 这是草稿乐观锁的自愈通道.
+func writeStaleDraftError(w http.ResponseWriter, currentRevision int) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(http.StatusConflict)
+	body := map[string]any{
+		"code":             "STALE_DRAFT_REVISION",
+		"message":          "draft revision stale; sync current_revision and retry",
+		"current_revision": currentRevision,
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"error": body, "detail": body})
+}
+
 
 // getSessionStatusHandler GET /api/exam/sessions/{id}/status?session_token=...
-// 响应 sessions.StatusResult: {started_at, deadline_at, draft_revision, draft_saved_at,
-//   finalize_at, run_status, session_status, answers, time_remaining, drift_seconds}.
+// 响应 sessions.StatusResult (json tag 已对齐前端 snake_case 契约):
+// {session_id, session_status, run_status, started_at, deadline_at, draft_revision,
+//  draft_saved_at, finalize_at, submission_id, answers, server_time}.
 func getSessionStatusHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stok := r.URL.Query().Get("session_token")
@@ -225,7 +251,7 @@ func getSessionStatusHandler(deps Dependencies) http.HandlerFunc {
 		}
 		res, err := deps.Sessions.Status(r.Context(), deps.Pool, stok)
 		if err != nil {
-			writeAdminError(w, mapSessionErrCode(err), "STATUS_FAILED", err.Error())
+			writeAdminError(w, mapSessionErrCode(err), sessionErrCodeName(err), err.Error())
 			return
 		}
 		WriteJSON(w, http.StatusOK, res)
@@ -247,18 +273,40 @@ func mapStartErrCode(err error) int {
 
 
 // mapSessionErrCode 把 sessions.SaveDraft / Status 错误映射到 HTTP 状态码.
-// ErrInvalidSessionToken -> 401; ErrRevisionMismatch (stale draft) -> 409;
-// ErrRunClosed -> 409; 其他 -> 500.
+// ErrInvalidSessionToken -> 401; ErrStaleDraftRevision / ErrRunClosed /
+// ErrSessionSubmitted -> 409; ErrSessionNotFound -> 404; 其他 -> 500.
 func mapSessionErrCode(err error) int {
 	if errors.Is(err, sessions.ErrInvalidSessionToken) {
 		return http.StatusUnauthorized
 	}
+	if errors.Is(err, sessions.ErrSessionNotFound) {
+		return http.StatusNotFound
+	}
 	if errors.Is(err, sessions.ErrStaleDraftRevision) ||
 		errors.Is(err, sessions.ErrRunClosed) ||
+		errors.Is(err, sessions.ErrSessionSubmitted) ||
 		errors.Is(err, sessions.ErrActiveExists) {
 		return http.StatusConflict
 	}
 	return http.StatusInternalServerError
+}
+
+// sessionErrCodeName 把 sessions 包 sentinel 错误映射到前端可识别的错误码字符串.
+// 前端 exam.js 依赖 RUN_CLOSED / RUN_CLOSING / SESSION_SUBMITTED 等 code 做锁卷.
+func sessionErrCodeName(err error) string {
+	switch {
+	case errors.Is(err, sessions.ErrInvalidSessionToken):
+		return "INVALID_SESSION_TOKEN"
+	case errors.Is(err, sessions.ErrSessionNotFound):
+		return "SESSION_NOT_FOUND"
+	case errors.Is(err, sessions.ErrSessionSubmitted):
+		return "SESSION_SUBMITTED"
+	case errors.Is(err, sessions.ErrStaleDraftRevision):
+		return "STALE_DRAFT_REVISION"
+	case errors.Is(err, sessions.ErrRunClosed):
+		return "RUN_CLOSED"
+	}
+	return "SESSION_INTERNAL"
 }
 
 
