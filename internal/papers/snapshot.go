@@ -209,17 +209,39 @@ func LoadSnapshot(path, expectedSHA256Hex string) (*Snapshot, error) {
 }
 
 // AtomicWriteJSON 把 doc 以 JSON 缩进 2 写到 path, 临时文件 + fsync + rename.
-// 与 Python _atomic_write_json 等价.
+// 与 Python _atomic_write_json 等价. 仅用于可编辑试卷文件; run 快照必须走
+// AtomicWriteCanonical (哈希与文件字节一致, scoring_worker 对原始字节做 sha256).
 func AtomicWriteJSON(path string, doc Document) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("papers.AtomicWriteJSON mkdir: %w", err)
-	}
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
 		return fmt.Errorf("papers.AtomicWriteJSON marshal: %w", err)
 	}
 	raw = append(raw, '\n')
+	return atomicWriteBytes(path, raw)
+}
+
+// AtomicWriteCanonical 把 doc 以 canonical 紧凑 JSON (与 ComputeSHA256 完全同一套
+// 字节) 原子写到 path, 返回这些字节的 sha256 hex. 保证 "文件原始字节 sha256 ==
+// 入库 snapshot_hash", 这是 Python scoring_worker (snapshot.py 对文件字节直接
+// hash) 校验通过的前提.
+func AtomicWriteCanonical(path string, doc Document) (string, error) {
+	raw, err := canonicalJSON(doc)
+	if err != nil {
+		return "", fmt.Errorf("papers.AtomicWriteCanonical marshal: %w", err)
+	}
+	h := sha256.Sum256(raw)
+	if err := atomicWriteBytes(path, raw); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h[:]), nil
+}
+
+// atomicWriteBytes 临时文件 + fsync + rename 落盘 raw 字节.
+func atomicWriteBytes(path string, raw []byte) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("papers.AtomicWriteJSON mkdir: %w", err)
+	}
 	tmp := path + ".tmp"
 	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
 	if err != nil {

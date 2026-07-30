@@ -94,10 +94,6 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, slug string,
 		// 回退: 直接用 doc (非 useNumber); sha 与 Python 不一致但不影响业务
 		docUseNumber = doc
 	}
-	snapshotHash, err := papers.ComputeSHA256(docUseNumber)
-	if err != nil {
-		return nil, fmt.Errorf("runs.Open: compute snapshot hash: %w", err)
-	}
 
 	// token: 32 bytes random -> base64url no padding
 	tokenBytes := make([]byte, 32)
@@ -110,14 +106,15 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, slug string,
 	// run id: uuid v4 string
 	runID := "run-" + uuid.NewString()
 
-	// 写 snapshot 文件: 必须用 docUseNumber (json.Number) 而非 doc (float64),
-	// 因为 json.MarshalIndent(float64(100),...) 在 Go 里输出 "100" (丢 ".0"),
-	// 而 ComputeSHA256 走 UseNumber 时输出 "100.0"; 两套字节在二次 LoadSnapshot
-	// 校验时 hash 不一致. 用 docUseNumber 写盘可让文件保留原始 100.0/60 字面量,
-	// 与 snapshot_hash 自洽. sanitize 仍由后续 GetPublicExam 在 LoadSnapshot 之后再做.
+	// 写 snapshot 文件: AtomicWriteCanonical 把 canonical 紧凑字节落盘并返回其
+	// sha256 —— 文件原始字节与入库 snapshot_hash 严格一致. 这是 Go↔Python 评分
+	// 闭环的关键: Python scoring_worker 对文件原始字节做 sha256 校验, 之前用
+	// MarshalIndent 写盘导致每个 grading job 都因 hash 不匹配重试至 dead.
+	// Go 侧 LoadSnapshot 是 "解析后重新 canonical 化再 hash", 两侧现均自洽.
 	snapshotPath := filepath.Join(s.pubRoot,
 		fmt.Sprintf("paper-%s-run-%s.json", slug, runID))
-	if err := papers.AtomicWriteJSON(snapshotPath, docUseNumber); err != nil {
+	snapshotHash, err := papers.AtomicWriteCanonical(snapshotPath, docUseNumber)
+	if err != nil {
 		return nil, fmt.Errorf("runs.Open: write snapshot: %w", err)
 	}
 
