@@ -174,20 +174,43 @@ func (s *Service) Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error
 	return &ApplyResult{NewTotalScore: newTotal, NewStatus: "reviewed"}, nil
 }
 
+// entryQIDMatches 匹配条目题号: 规范键 question_id, 兼容仅写 id 的旧条目
+// (worker 2026-07 前的 objective/subjective 条目只有 id, 曾致所有复核 404).
+func entryQIDMatches(it map[string]any, qid string) bool {
+	if qid == "" {
+		return false
+	}
+	if v, _ := it["question_id"].(string); v == qid {
+		return true
+	}
+	v, _ := it["id"].(string)
+	return v == qid
+}
+
+// entrySubResults 取复合题子结果数组: 规范键 sub_results (worker 写入, 前端
+// detail.js 同款契约), 兼容早期设想的 sub_questions 键 (存量测试数据).
+func entrySubResults(it map[string]any) []any {
+	if subs, ok := it["sub_results"].([]any); ok {
+		return subs
+	}
+	subs, _ := it["sub_questions"].([]any)
+	return subs
+}
+
 // findScoreInDetail 从 grading_detail jsonb 解析目标题的旧分 / 满分 / 题型;
-// SubQID 空时取整题主分, 非空时取子题分 (含 sub_questions 数组). found=false 表示未命中.
+// SubQID 空时取整题主分, 非空时取子题分 (含 sub_results 数组). found=false 表示未命中.
 //
-// grading_detail item 字段集 (来自 submissions.objPlaceholder / grading.Placeholder):
+// grading_detail item 字段集 (worker grading.py 规范化输出):
 //
-//	question_id, type, score, machine_score, final_score, max_score, is_correct,
-//	review_status, manually_reviewed, sub_questions (optional, composite 题)
+//	question_id, id, type, score, machine_score, final_score, max_score, is_correct,
+//	review_status, manually_reviewed, sub_results (optional, composite 题)
 func findScoreInDetail(detail []byte, qid, subQID string) (_ []byte, old, mx float64, qtype string, found bool) {
 	var items []map[string]any
 	if err := json.Unmarshal(detail, &items); err != nil {
 		return detail, 0, 0, "", false
 	}
 	for _, it := range items {
-		if it["question_id"] != qid {
+		if !entryQIDMatches(it, qid) {
 			continue
 		}
 		t, _ := it["type"].(string)
@@ -197,9 +220,8 @@ func findScoreInDetail(detail []byte, qid, subQID string) (_ []byte, old, mx flo
 			mx = numFloat(it["max_score"])
 			return detail, old, mx, qtype, true
 		}
-		// composite 子题: sub_questions 数组里找 sub_question_id == subQID.
-		subs, _ := it["sub_questions"].([]any)
-		for _, sraw := range subs {
+		// composite 子题: sub_results 数组里找 sub_question_id == subQID.
+		for _, sraw := range entrySubResults(it) {
 			s, ok := sraw.(map[string]any)
 			if !ok {
 				continue
@@ -223,7 +245,7 @@ func setDetailScoreInPlace(detail []byte, qid, subQID string, newScore float64) 
 		return detail, err
 	}
 	for _, it := range items {
-		if it["question_id"] != qid {
+		if !entryQIDMatches(it, qid) {
 			continue
 		}
 		if subQID == "" {
@@ -232,9 +254,8 @@ func setDetailScoreInPlace(detail []byte, qid, subQID string, newScore float64) 
 			it["manually_reviewed"] = true
 			it["review_status"] = "reviewed"
 		} else {
-			subs, _ := it["sub_questions"].([]any)
 			var subTotal float64
-			for _, sraw := range subs {
+			for _, sraw := range entrySubResults(it) {
 				s, ok := sraw.(map[string]any)
 				if !ok {
 					continue

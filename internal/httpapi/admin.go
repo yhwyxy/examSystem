@@ -1059,9 +1059,13 @@ func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				-- 低置信卷数: worker 整卷状态里没有 'low_confidence' 值 (它写
 				-- need_review/partial_manual/high_confidence/reviewed), 低置信体现在
 				-- grading_detail_json 单题的 low_confidence 标志上, 按"含任一低置信题"计数.
+				-- 兼容三种条目形态: 顶层 low_confidence / 顶层 lowest_confidence_flagged
+				-- (worker 旧格式) / review_status='low_confidence' 字符串.
 				COUNT(*) FILTER (WHERE jsonb_typeof(grading_detail_json) = 'array' AND EXISTS (
 					SELECT 1 FROM jsonb_array_elements(grading_detail_json) e
-					WHERE (e ->> 'low_confidence')::boolean IS TRUE))
+					WHERE (e ->> 'low_confidence')::boolean IS TRUE
+					   OR (e ->> 'lowest_confidence_flagged')::boolean IS TRUE
+					   OR e ->> 'review_status' = 'low_confidence'))
 			FROM submissions`).Scan(
 			&submittedCount, &avgScore, &maxScore, &minScore,
 			&pendingReview, &lowConfidenceCount)

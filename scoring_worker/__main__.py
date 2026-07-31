@@ -142,8 +142,7 @@ def main() -> int:
                 import psycopg
                 with psycopg.connect(cfg.database_url) as conn:
                     conn.autocommit = False
-                    processed = run_one_job(conn, cfg.worker_id,
-                                            cfg.lease_seconds, cache, ssvc)
+                    processed = run_one_job(conn, cfg, cache, ssvc)
                     if not processed:
                         time.sleep(cfg.poll_interval_seconds)
             except Exception:  # 重生; 不允许 worker 死

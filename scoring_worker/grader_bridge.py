@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -170,7 +171,7 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         mode = ScoringMode.CODE
     else:
         mode = ScoringMode.TEXT
-    scoring_points = parse_scoring_rubric(
+    scoring_points = _structured_scoring_points(question) or parse_scoring_rubric(
         question.get("scoring_rubric"),
         question.get("score"),
     )
@@ -195,6 +196,31 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         "scoring_points": sp_list,
     }
     return _build_scoring_request_kwargs(request_kwargs)
+
+
+def _structured_scoring_points(
+    question: dict[str, Any],
+) -> list[tuple[str, float]] | None:
+    """题目自带结构化 scoring_points ([{text, score, ...}]) 时直接采用.
+
+    试卷快照的 subquestions 常带该字段 (无 scoring_rubric 文本), 此前被忽略
+    导致整题只按单一整分点评 -> 得分点粒度全丢.
+    """
+    raw = question.get("scoring_points")
+    if not isinstance(raw, list) or not raw:
+        return None
+    points: list[tuple[str, float]] = []
+    for p in raw:
+        if not isinstance(p, dict):
+            continue
+        text = str(p.get("text") or "").strip()
+        try:
+            w = float(p.get("score", 0) or 0)
+        except (TypeError, ValueError):
+            continue
+        if text and w > 0:
+            points.append((text, w))
+    return points or None
 
 
 def _build_scoring_request_kwargs(kwargs: dict[str, Any]) -> Any:
@@ -303,22 +329,29 @@ _PRESERVED_FIELDS = {
 
 
 def _merge_preserved_review(entry: dict, preserve: dict | None) -> dict:
+    entry.setdefault("manually_reviewed", False)
     if not preserve:
         return entry
-    is_manual = bool(preserve.get("manually_reviewed"))
+    # 仅人工复核过的旧条目才回填 (final_score 拒绝被 regrade 的 machine_score
+    # 覆盖); 非人工旧条目一律采用新机器结果 (旧实现无条件回填旧值, regrade 形同虚设).
+    if not preserve.get("manually_reviewed"):
+        return entry
     for f in ("final_score", "review_status", "reviewer_id",
               "reviewed_at", "manually_reviewed",
               "review_comment", "review_action"):
         v = preserve.get(f)
-        if v is not None and is_manual:
+        if v is not None:
             entry[f] = v
-        elif v is not None:
-            entry[f] = v
-    # 关键: 若 manual, final_score 拒绝被 worker 重置 -> 走新 machine_score 不替换 manual.
-    # 若 admin 完成 hands-on review 后 worker regrade generation+1, 旧 final_score 不应
-    # 被自动 = machine_score 覆盖.
-    entry.setdefault("manually_reviewed", False)
     return entry
+
+
+def _entry_flag(e: dict[str, Any], key: str) -> bool:
+    """条目旗标兼容读: 顶层优先, 缺则看嵌套 detail (worker 旧格式只写 detail 层,
+    曾致 aggregate 全部漏检 -> 整卷 need_review 被误标 'reviewed')."""
+    if e.get(key):
+        return True
+    d = e.get("detail")
+    return bool(isinstance(d, dict) and d.get(key))
 
 
 def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
@@ -329,7 +362,9 @@ def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
     3. 任一 need_manual_review=True -> 'need_review'
     4. 否则根据 machine_score 与 max 比例 -> high_confidence/reviewed 链.
 
-    与 backend/grader.py parity 名字.
+    与 backend/grader.py parity 名字. 旗标读取兼容顶层 / detail 嵌套层, 并把
+    单题 review_status 字符串 (low_confidence/need_review/unanswered) 一并算作
+    需人工信号.
     """
     if not entries:
         return "need_review"
@@ -338,23 +373,23 @@ def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
     found_low = False
     found_manual = False
     found_need_manual = False
+    found_unanswered = False
 
     for e in entries:
         s = float(e.get("machine_score", 0) or 0)
         m = float(e.get("max_score", 0) or 0)
         score += s
         max_score += m
-        if e.get("low_confidence"):
+        rs = str(e.get("review_status") or "")
+        if _entry_flag(e, "low_confidence") or rs == "low_confidence":
             found_low = True
         if e.get("manually_reviewed"):
             found_manual = True
-        if e.get("need_manual_review"):
+        if _entry_flag(e, "need_manual_review") or rs == "need_review":
             found_need_manual = True
-
-    found_unanswered = False
-    for e in entries:
-        if e.get("review_status") == "unanswered":
+        if rs == "unanswered":
             found_unanswered = True
+
     if found_unanswered or found_need_manual or found_low:
         return "need_review"
     if found_manual:
@@ -367,6 +402,17 @@ def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
     return "reviewed"
 
 
+def _is_blank_answer(student_answer: Any) -> bool:
+    """空答案判定: None / 空串 / 空 dict / 空 list."""
+    if student_answer is None:
+        return True
+    if isinstance(student_answer, str):
+        return student_answer.strip() == ""
+    if isinstance(student_answer, (dict, list)):
+        return len(student_answer) == 0
+    return False
+
+
 def grade_subjective(
     question: dict[str, Any], student_answer: Any, *,
     preserve: dict[str, Any] | None = None,
@@ -374,10 +420,16 @@ def grade_subjective(
     """主观题打分入口 (grading.py 调用).
 
     返回 (final_score, machine_score, review_status, detail_entry).
-    student_answer: str / dict (dict -> json dict 解出整体? quote_priority)
-
-    composite 题:  按 subquestions 递归 (各自打分后求和)
+    composite 题答案是 dict {sub_id: {"answer": str} | str}, 必须先于字符串
+    强转分流 (曾把整个 dict 的 repr 串喂给每个子题评分).
     """
+    if str(question.get("type")) == "composite":
+        if _is_blank_answer(student_answer):
+            return (0.0, 0.0, "unanswered", _empty_subjective_detail(
+                question, preserve=preserve))
+        ssvc = get_subjective_service()
+        return _grade_composite(ssvc, question, student_answer, preserve)
+
     if not isinstance(student_answer, str):
         student_answer = "" if student_answer is None else str(student_answer)
     if student_answer.strip() == "":
@@ -385,9 +437,6 @@ def grade_subjective(
             question, preserve=preserve))
 
     ssvc = get_subjective_service()
-    if str(question.get("type")) == "composite":
-        return _grade_composite(ssvc, question, student_answer, preserve)
-
     request = build_scoring_request(question, student_answer)
     result = ssvc.score(request)
     entry = detail_from_scoring_result(question, student_answer,
@@ -401,34 +450,79 @@ def grade_subjective(
 
 
 def _grade_composite(
-    ssvc: Any, question: dict[str, Any], student_answer: str,
+    ssvc: Any, question: dict[str, Any], student_answer: Any,
     preserve: dict[str, Any] | None,
 ) -> tuple[float, float, str, dict[str, Any]]:
     """Composite 题: 沿 subquestions 各自打分; final = sum(sub_final).
 
-    student_answer 期望是 dict{"sub_q_id": "answer"} 或 json 解析失败 fallback whole str.
+    student_answer: dict {sub_id: {"answer": str} | str} 或其 JSON 字符串.
+    条目输出 sub_results (前端 detail.js / Go review 契约: sub_question_id +
+    score/final_score/review_status), 需人工旗标聚合到题级.
     """
-    subs = question.get("subquestions") or []
-    subs_map = question.get("sub_questions") or question.get("sub_qs") or []
-    if not subs_map and not subs:
-        subs = []
+    subs = (question.get("subquestions") or question.get("sub_questions")
+            or question.get("sub_qs") or [])
+    ans_map = student_answer
+    if isinstance(ans_map, str):
+        try:
+            ans_map = json.loads(ans_map)
+        except ValueError:
+            ans_map = {}
+    if not isinstance(ans_map, dict):
+        ans_map = {}
+    # 子题级 preserve: 旧条目 sub_results[] 中人工复核过的子项按 sub_id 建索引.
+    sub_preserve: dict[str, dict] = {}
+    for s in ((preserve or {}).get("sub_results") or []):
+        if isinstance(s, dict) and s.get("manually_reviewed"):
+            key = s.get("sub_question_id") or s.get("question_id") or s.get("id")
+            if key:
+                sub_preserve[str(key)] = s
+
     final_total = 0.0
     machine_total = 0.0
-    reviews: list[str] = []
-    sub_details: list[dict] = []
-    for sub in (subs_map or subs):
-        sub_id = sub.get("id")
-        ans = student_answer if isinstance(student_answer, dict) else student_answer
-        if isinstance(ans, dict):
-            ans = ans.get(sub_id, "")
-        f, m, r, e = grade_subjective(sub, ans)
+    sub_results: list[dict] = []
+    for sub in subs:
+        sub_id = str(sub.get("id"))
+        raw = ans_map.get(sub_id, "")
+        if isinstance(raw, dict):
+            raw = raw.get("answer", "")
+        f, m, r, e = grade_subjective(sub, raw,
+                                      preserve=sub_preserve.get(sub_id))
         final_total += f
         machine_total += m
-        reviews.append(r)
-        sub_details.append(e)
-    return (round(final_total, 6), round(machine_total, 6),
-            aggregate_review_status(sub_details),
-            {"subquestion_results": sub_details})
+        sub_results.append({
+            "sub_question_id": sub_id,
+            "question_id": sub_id,
+            "type": sub.get("type"),
+            "question": sub.get("question", ""),
+            "student_answer": raw,
+            "reference_answer": sub.get("answer", ""),
+            "max_score": float(sub.get("score", 0) or 0),
+            "score": m,
+            "machine_score": m,
+            "final_score": f,
+            "review_status": e.get("review_status", r),
+            "manually_reviewed": bool(e.get("manually_reviewed", False)),
+            "low_confidence": bool(e.get("low_confidence", False)),
+            "need_manual_review": bool(e.get("need_manual_review", False)),
+            "reason": e.get("reason"),
+            "detail": e,
+        })
+    reasons = [s["reason"] for s in sub_results if s.get("reason")]
+    entry = {
+        "sub_results": sub_results,
+        "machine_score": round(machine_total, 6),
+        "final_score": round(final_total, 6),
+        "low_confidence": any(s["low_confidence"] for s in sub_results),
+        "need_manual_review": any(s["need_manual_review"] for s in sub_results),
+        "manually_reviewed": any(s["manually_reviewed"] for s in sub_results),
+        "confidence": round(min(
+            (float(s.get("detail", {}).get("confidence", 0.0) or 0.0)
+             for s in sub_results), default=0.0), 4),
+        "grading_method": "subjective",
+        "reason": "; ".join(reasons) if reasons else None,
+    }
+    overall = aggregate_review_status(sub_results)
+    return (round(final_total, 6), round(machine_total, 6), overall, entry)
 
 
 def _empty_subjective_detail(question: dict[str, Any],

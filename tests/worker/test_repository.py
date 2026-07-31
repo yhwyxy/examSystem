@@ -140,7 +140,7 @@ def test_complete_writes_submission_and_job_status(grading_setup):
     assert j is not None
     c1.commit(); c1.close()
     c2 = _new_conn(schema)
-    out = repo.complete_job(c2, j, 0, 0.0, 0.0, b'[]', review_status="graded")
+    out = repo.complete_job(c2, j, 0.0, 0.0, b'[]', review_status="graded")
     assert out == "done"
     c2.commit()
     cur = c2.cursor()
@@ -176,7 +176,7 @@ def test_complete_lost_when_no_active_lease(grading_setup):
     c1.commit(); c1.close()
     _t.sleep(2.5)  # 等 lease 过期
     c2 = _new_conn(schema)
-    out = repo.complete_job(c2, j, 0, 0.0, 0.0, b'[]', review_status="graded")
+    out = repo.complete_job(c2, j, 0.0, 0.0, b'[]', review_status="graded")
     assert out == "lost", f"lease 过期后 complete 应返'lost', got {out}"
     c2.rollback(); c2.close()
 
@@ -246,7 +246,7 @@ def test_regrade_generation_higher_supersedes_old(grading_setup):
                           now(), now(), now())""", (j1.submission_id,))
     c2.commit(); c2.close()
     c3 = _new_conn(schema)
-    out = repo.complete_job(c3, j1, 0, 0.0, 0.0, b'[]', review_status="graded")
+    out = repo.complete_job(c3, j1, 0.0, 0.0, b'[]', review_status="graded")
     assert out == "superseded", f"gen mismatch 应返 'superseded', got {out}"
     c3.rollback(); c3.close()
 
@@ -259,11 +259,11 @@ def test_double_complete_is_idempotent_on_done(grading_setup):
     j = repo.claim_job(c1, "w1", 30); assert j is not None
     c1.commit(); c1.close()
     c2 = _new_conn(schema)
-    out1 = repo.complete_job(c2, j, 0, 0.0, 0.0, b'[]', review_status="graded")
+    out1 = repo.complete_job(c2, j, 0.0, 0.0, b'[]', review_status="graded")
     assert out1 == "done"
     c2.commit(); c2.close()
     c3 = _new_conn(schema)
-    out2 = repo.complete_job(c3, j, 0, 0.0, 0.0, b'[]', review_status="graded")
+    out2 = repo.complete_job(c3, j, 0.0, 0.0, b'[]', review_status="graded")
     assert out2 == "lost", f"double complete 应返 'lost', got {out2}"
     c3.rollback(); c3.close()
 

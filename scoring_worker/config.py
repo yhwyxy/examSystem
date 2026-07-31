@@ -15,6 +15,9 @@ class Config:
     max_score: float
     concurrency: int
     log_level: str
+    # 多选部分给分开关: 必须与 Go 服务 config scoring.multiple_choice_partial 一致,
+    # 否则 regrade 重写的 grading_detail 单题分与提交时的 objective_score 列不一致.
+    multiple_choice_partial: bool
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -28,4 +31,7 @@ class Config:
             max_score=float(os.getenv("MAX_SCORE", "100.0")),
             concurrency=int(os.getenv("WORKER_CONCURRENCY", "1")),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
+            multiple_choice_partial=(
+                os.getenv("MULTIPLE_CHOICE_PARTIAL", "true").strip().lower()
+                != "false"),
         )

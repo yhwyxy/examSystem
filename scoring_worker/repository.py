@@ -131,7 +131,7 @@ UPDATE submissions
 SET grading_detail_json = %(grading_detail_json)s,
     subjective_score_machine = %(subjective_score_machine)s,
     subjective_score_final = %(subjective_score_final)s,
-    total_score = %(objective_score)s + %(subjective_score_final)s,
+    total_score = coalesce(objective_score, 0) + %(subjective_score_final)s,
     review_status = %(review_status)s,
     grading_status = 'done',
     graded_at = now()
@@ -163,13 +163,15 @@ RETURNING id;
 
 
 
-def complete_job(conn, job: Job, objective_score: int,
+def complete_job(conn, job: Job,
                  subjective_score_machine: float, subjective_score_final: float,
                  grading_detail_json, review_status: str = "graded") -> str:
     """Fenced 完成: verify lease -> update submission -> job done.
 
     返回 'done' (正常) 或 'lost' (租约已失效 / 被回收). Submission 写入位置仅当
     grading_generation 匹配 (防 higher generation 抢占 -> return 'lost').
+    total_score 用库内 objective_score 列 (提交时 Go 按 config 判分的权威值)
+    + 本次主观 final; worker 不再传 objective 参数 (曾 int() 截断 4.5 -> 4).
     ``grading_detail_json`` accepts JSON-compatible objects plus serialized JSON
     bytes/strings, because the runtime serializes the detail before writing it.
     """
@@ -190,7 +192,6 @@ def complete_job(conn, job: Job, objective_score: int,
         "grading_detail_json": Jsonb(grading_detail_json),
         "subjective_score_machine": subjective_score_machine,
         "subjective_score_final": subjective_score_final,
-        "objective_score": objective_score,
         "review_status": review_status,
         "generation": job.generation,
     }).fetchone() is None:

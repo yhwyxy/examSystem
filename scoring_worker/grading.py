@@ -12,8 +12,15 @@ import json
 from typing import Any, List
 
 
-def _grade_objective(question: dict, student_answer: Any) -> dict:
-    """单客观题评分: {single_choice, multiple_choice, true_false}."""
+def _grade_objective(question: dict, student_answer: Any,
+                     partial: bool = True) -> dict:
+    """单客观题评分: {single_choice, multiple_choice, true_false}.
+
+    条目格式与 Go internal/objective.Grade 对齐 (question_id + score/machine/
+    final 三分齐备), worker regrade 整体覆写 grading_detail 时不破坏前端契约.
+    multiple_choice 算法同 Go: 含错项 -> 0; partial 按命中比例给分;
+    partial=False 全对才满分.
+    """
     qt = question.get("type", "")
     if qt not in {"single_choice", "multiple_choice", "true_false"}:
         return None
@@ -31,53 +38,75 @@ def _grade_objective(question: dict, student_answer: Any) -> dict:
             student_set = set(student_answer) if student_answer is not None else set()
         except TypeError:
             student_set = {student_answer} if student_answer is not None else set()
-        if student_set == correct_set:
-            fs = score
-        elif student_set and student_set.issubset(correct_set):
-            fs = score * 0.5  # 部分 (binary 容许 partial=False 是终)
-        else:
-            fs = 0.0
         is_correct = (student_set == correct_set)
+        if student_set - correct_set:
+            fs = 0.0  # 含错项直接 0 (与 Go gradeMultipleChoice 一致)
+        elif partial and correct_set:
+            fs = round(score * len(student_set & correct_set) / len(correct_set), 6)
+        else:
+            fs = score if is_correct else 0.0
+    qid = question.get("id")
     return {
-        "id": question.get("id"), "type": qt, "student_answer": student_answer,
-        "correct_answer": correct, "max_score": score, "score": fs,
+        "id": qid, "question_id": qid, "type": qt,
+        "question": question.get("question", ""),
+        "student_answer": student_answer,
+        "correct_answer": correct, "reference_answer": correct,
+        "max_score": score, "score": fs,
+        "machine_score": fs, "final_score": fs,
         "is_correct": is_correct,
+        "grading_method": "objective_rule", "confidence": 1.0,
+        "review_status": "auto_scored", "manually_reviewed": False,
     }
 
 
-def _grade_subjective(question: dict, student_answer: Any, ssvc: Any) -> dict:
+def _grade_subjective(question: dict, student_answer: Any, ssvc: Any,
+                      preserve: dict | None = None) -> dict:
     """单主观题评分: 调 subjective-scoring 0.1.7 通过 grader_bridge 完整打分.
 
     ssvc 参数保持位置兼容 (grade_submission 调用方仍传), 但实际桥接 +
-    lazy load 由 grader_bridge 内部完成; preserve=None (worker 'blue-sky').
+    lazy load 由 grader_bridge 内部完成; preserve 是该题旧 detail 条目
+    (manually_reviewed 时保留人工 final_score, regrade 不覆盖).
+
+    顶层条目契约 (前端 detail.js + Go review 直接消费):
+      question_id / score(=machine) / final_score / low_confidence /
+      need_manual_review; composite 额外 is_composite + sub_results.
     """
     from .grader_bridge import grade_subjective as _grade
-    preserve = None  # Worker grading 时 preserve=None; regrade preserve 由调用方传
     final, machine, review_status, entry = _grade(question, student_answer,
                                                   preserve=preserve)
-    return {
-        "id": question.get("id"), "type": question.get("type"),
+    qid = question.get("id")
+    r = {
+        "id": qid, "question_id": qid, "type": question.get("type"),
         "question": question.get("question", ""),
         "student_answer": student_answer,
         "reference_answer": question.get("answer", ""),
         "max_score": float(question.get("score", 0) or 0),
         "machine_score": machine,
+        "score": machine,
         "final_score": final,
         "confidence": float(entry.get("confidence", 0.0) or 0.0),
         "grading_method": entry.get("grading_method", "subjective"),
+        "reason": entry.get("reason"),
         "review_status": review_status,
         "manually_reviewed": bool(entry.get("manually_reviewed", False)),
+        "low_confidence": bool(entry.get("low_confidence", False)),
+        "need_manual_review": bool(entry.get("need_manual_review", False)),
         "lowest_confidence_flagged": bool(entry.get("low_confidence", False)),
         "detail": entry,
     }
+    if entry.get("sub_results"):
+        r["is_composite"] = True
+        r["sub_results"] = entry["sub_results"]
+    return r
 
 
 def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any,
-                       preserve: dict | None = None) -> dict:
+                       preserve: dict | None = None,
+                       multiple_choice_partial: bool = True) -> dict:
     """整卷打分: 按快照 questions 顺序重建完整数组.
 
     preserve: qid -> dict 已手工 reviewed 条目 (final_score 设 manual 分;
-    regrade 不允许覆盖). Worker 默认 None.
+    regrade 不允许覆盖). Worker 由 runtime._load_preserve_index 传入.
 
     返回: {
         detail: List[dict],       # 按 snapshot 顺序 (含客观+主观完整 detail)
@@ -99,12 +128,14 @@ def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any,
         student_answer = answers_map.get(qid)
         qt = q.get("type", "")
         if qt in {"single_choice", "multiple_choice", "true_false"}:
-            r = _grade_objective(q, student_answer)
+            r = _grade_objective(q, student_answer,
+                                 partial=multiple_choice_partial)
             if r is not None:
                 detail.append(r)
                 obj_score += float(r["score"])
         else:
-            r = _grade_subjective(q, student_answer, ssvc)
+            r = _grade_subjective(q, student_answer, ssvc,
+                                  preserve=(preserve or {}).get(qid))
             subj_machine += r["machine_score"]
             subj_final += r["final_score"]
             detail.append(r)

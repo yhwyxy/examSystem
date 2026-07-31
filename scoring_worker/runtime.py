@@ -1,43 +1,70 @@
 """Runtime 主循环: poll 队列 -> claim -> load snapshot -> grade -> complete.
 
-单线程 worker 接收一条 job, 在单 conn 内做 fenced transaction: verify lease
--> complete_job (subjective 写回 / job done). heartbeat 在另一线程每 heartbeat
-seconds 调 renew_lease.
+单线程 worker 接收一条 job; claim / payload 读取后立即结束事务, 评分期间不持有
+未提交事务 (否则 complete 的 fenced verify 用的 now() 冻结在事务开始时刻,
+租约校验形同虚设). 评分期间由独立心跳线程 (独立连接, autocommit) 每
+heartbeat_seconds 调 renew_lease 续租, 支撑超过 lease_seconds 的长评分.
 """
 from __future__ import annotations
 
 import json
 import logging
+import threading
 from . import repository as repo
 
 logger = logging.getLogger(__name__)
 
 
-def run_one_job(conn, worker_id: str, lease_seconds: int,
-                snapshot_cache, ssvc: object) -> bool:
+def _heartbeat_loop(cfg, job, stop: threading.Event) -> None:
+    """独立连接续租; 续租失败 (租约被回收/被抢) 即退出, 主线程 complete 时
+    会被 fenced verify 拦下拿到 'lost'."""
+    import psycopg
+    try:
+        with psycopg.connect(cfg.database_url, autocommit=True) as conn:
+            while not stop.wait(max(1, cfg.heartbeat_seconds)):
+                if not repo.renew_lease(conn, job.id, cfg.worker_id,
+                                        job.lease_token, cfg.lease_seconds):
+                    logger.warning("job=%s lease renew rejected (lost/superseded)",
+                                   job.id)
+                    return
+    except Exception:
+        logger.exception("job=%s heartbeat thread error", job.id)
+
+
+def run_one_job(conn, cfg, snapshot_cache, ssvc: object) -> bool:
     """抢一条 job, 算分完成. 返回 True (处理了一条) / False (空队列 - idle sleep).
 
-    全过程在一个 conn 内; fenced complete (lease verify), 任一异常 traceback
+    fenced complete (lease verify) 在评分后的新事务里执行; 任一异常 traceback
     -> fail_job + conn.rollback 后续再退. 返回 idle (False) / processed (True).
     """
-    job = repo.claim_job(conn, worker_id, lease_seconds)
+    job = repo.claim_job(conn, cfg.worker_id, cfg.lease_seconds)
     if job is None:
         return False
     conn.commit()
 
     try:
         payload = repo.load_job_payload(conn, job.id)
+        preserve = _load_preserve_index(conn, job.submission_id)
+        conn.commit()  # 结束读事务: 评分期间不持有事务
         doc = snapshot_cache.get(payload["snapshot_path"], payload.get("snapshot_hash"))
         answers = payload.get("answers_json") or "{}"
         if isinstance(answers, str):
             answers = json.loads(answers)
         from .grading import grade_submission
-        preserve = _load_preserve_index(conn, job.submission_id)
-        result = grade_submission(doc, answers, ssvc, preserve=preserve)
+        stop_hb = threading.Event()
+        hb = threading.Thread(target=_heartbeat_loop, args=(cfg, job, stop_hb),
+                              name=f"hb-job-{job.id}", daemon=True)
+        hb.start()
+        try:
+            result = grade_submission(
+                doc, answers, ssvc, preserve=preserve,
+                multiple_choice_partial=cfg.multiple_choice_partial)
+        finally:
+            stop_hb.set()
+            hb.join(timeout=5)
         detail_json = json.dumps(result["detail"]).encode("utf-8")
         out = repo.complete_job(
             conn, job,
-            objective_score=int(result["objective_score"]),
             subjective_score_machine=float(result["subjective_score_machine"]),
             subjective_score_final=float(result["subjective_score_final"]),
             grading_detail_json=detail_json,
@@ -80,10 +107,12 @@ def _load_preserve_index(conn, submission_id: int) -> dict | None:
     for e in details:
         if not isinstance(e, dict):
             continue
+        # 条目键兼容: 规范格式 question_id, worker 旧格式仅 id.
+        qid = str(e.get("question_id") or e.get("id"))
         if e.get("manually_reviewed") is not True:
             # keep only manual preserved entries
             if e.get("review_status") in {"approved_manual", "rejected_manual"}:
-                out[str(e.get("question_id"))] = e
+                out[qid] = e
             continue
-        out[str(e.get("question_id"))] = e
+        out[qid] = e
     return out or None
