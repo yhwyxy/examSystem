@@ -75,8 +75,9 @@ type PreparedSubmission struct {
 	AutoSubmitReason  *string
 
 	// 客观题即时判分结果 (事务外算好)。主观题请求占位为 0, 待 worker 填充。
-	ObjectiveScore     int
-	ObjectiveMaxScore   int
+	// float64: 题库存在 1.5 分制单选, int 截断会永久丢 0.5 分 (DB 列 double precision).
+	ObjectiveScore     float64
+	ObjectiveMaxScore   float64
 	ObjectiveDetailJSON []byte // 单题判分明细 (array of objective.GradeResult 字段)
 	QuestionTotal       int
 }
@@ -106,7 +107,7 @@ type Submission struct {
 	ID                string
 	GradingStatus     Status
 	ReviewStatus      ReviewStatus
-	ObjectiveScore    int
+	ObjectiveScore    float64
 }
 
 // ErrSubmissionClosed 表示 session / run 已关闭，不允许提交。

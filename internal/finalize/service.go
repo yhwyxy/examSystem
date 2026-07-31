@@ -152,6 +152,7 @@ FOR UPDATE OF s`,
 		return 0, false, cerr
 	}
 	// 2) 逐行对每 session 调 Task 6 CreateFromSessionTx (auto_submit_reason=admin_closed).
+	closedIDs := make([]string, 0, len(collected))
 	for _, sess := range collected {
 		input := buildAutoSubmitted(sess)
 		subID, needsGrading, cerr := s.alloc.CreateFromSessionTx(ctx, tx, input)
@@ -175,7 +176,19 @@ FOR UPDATE OF s`,
 				return 0, false, cerr
 			}
 		}
+		closedIDs = append(closedIDs, sess.ID)
 		nClosed++
+	}
+	// 2b) 自动收卷的 session 置 submitted (同事务): 否则学生端状态轮询永远等不到
+	// session_status=submitted / submission_id, 收卷后卡在"正在自动收卷"页.
+	if len(closedIDs) > 0 {
+		if _, cerr := tx.Exec(ctx, `
+UPDATE exam_sessions SET status = 'submitted', updated_at = $2
+WHERE id = ANY($1) AND status = 'active'`,
+			closedIDs, time.Now().UTC()); cerr != nil {
+			err = fmt.Errorf("finalize.FinalizeRun mark sessions submitted: %w", cerr)
+			return 0, false, cerr
+		}
 	}
 	// 2) update run status=closing -> closed. 注意: exam_runs 没 updated_at, 用
 	// closed_at = now 替代 (与 Python close_run parity).

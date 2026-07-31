@@ -46,6 +46,9 @@ type Service struct {
 	grade              GraderFunc
 	jobs               JobEnqueuer
 	GracePeriodSeconds int // plan Step 2: 超过 deadline + grace 后拒绝提交 (-1 = 不校验)
+	// MultipleChoicePartial 对应 config scoring.multiple_choice_partial:
+	// true 时多选按命中比例给分 (无错项前提), false 全对才给分. main 装配时注入.
+	MultipleChoicePartial bool
 }
 
 // NewService 构造 Service. 任一必传依赖 nil 返回 nil (不允许 panic).
@@ -264,7 +267,7 @@ var ErrSnapshotUnavailable = errors.New("SNAPSHOT_UNAVAILABLE")
 // computeObjective 返回 (objScore, objMax, objDetailJSON, questionTotal,
 // hasSubjective, err). hasSubjective=true 表示快照含主观题 (需异步 worker).
 func (s *Service) computeObjective(ctx context.Context, run *RunLite,
-	answersMap map[string]any) (score, max int, detailJSON []byte, qTotal int,
+	answersMap map[string]any) (score, max float64, detailJSON []byte, qTotal int,
 	hasSubjective bool, err error) {
 	if run.SnapshotPath == "" {
 		return 0, 0, nil, 0, false,
@@ -298,7 +301,7 @@ func (s *Service) computeObjective(ctx context.Context, run *RunLite,
 			details = append(details, objPlaceholder(question, ans, objMaxScoreOf(question), "subjective_pending"))
 			continue
 		}
-		d, gerr := s.grade(question, ans, false)
+		d, gerr := s.grade(question, ans, s.MultipleChoicePartial)
 		if gerr != nil {
 			details = append(details, objPlaceholder(question, ans, objMaxScoreOf(question), gerr.Error()))
 			continue
@@ -312,7 +315,8 @@ func (s *Service) computeObjective(ctx context.Context, run *RunLite,
 		}
 	}
 	encoded := jsonMarshalArray(details)
-	return int(totalScore), int(totalMax), encoded, qTotal, hasSubjective, nil
+	// 不做 int 截断: 题库有 1.5 分制客观题, 分数按 float 原样落库 (列 double precision).
+	return totalScore, totalMax, encoded, qTotal, hasSubjective, nil
 }
 
 // jsonMarshalArray 局部封装; 出错时返回 [] (保证 SUBMIT 主路径不卡评分失败).
@@ -334,7 +338,7 @@ type submissionInsertInput struct {
 	RunID            string
 	Department       *string
 	Answers          []byte
-	ObjectiveScore   int
+	ObjectiveScore   float64
 	ObjectiveDetail  []byte
 	ClientIP         *string
 	UserAgent        *string

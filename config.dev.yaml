@@ -1,29 +1,35 @@
 # config.dev.yaml - 本地开发环境配置
-# 用于 Windows 本地开发测试，与生产配置隔离
+# 用于本地开发测试，与生产配置隔离。
+# 注意: 键名必须与 internal/config/config.go 的 yaml tag 一致,
+# yaml.v3 会静默忽略未知键 (曾因 max_open_conns 等错误键名导致调优配置全部失效)。
 
 database:
+  # docker-compose.postgres.yml 映射的是宿主机 5433 端口;
+  # 本机原生 PostgreSQL 才是 5432 —— 换机部署时按实际端口改。
   url: "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable"
-  max_open_conns: 10
-  max_idle_conns: 5
-  conn_max_lifetime_sec: 300
-  dial_timeout_sec: 5
+  max_conns: 10
+  min_conns: 2
+  connect_timeout_seconds: 5
+  statement_timeout_seconds: 30
 
 server:
   host: "127.0.0.1"
   port: 8000
   data_root: "data"
 
+exam:
+  duration_minutes: 90
+  auto_submit: true
+  grace_period_seconds: 30
+
+scoring:
+  multiple_choice_partial: true
+  wrong_choice_penalty: false
+  score_precision: 1
+
 admin:
   enable_auth: true
   password: "admin123"
 
-paper:
-  storage: "fs"
-  base_dir: "data/papers"
-  snapshot_dir: "data/exam_runs"
-
-scoring:
-  worker_url: "http://127.0.0.1:8001"
-
 logging:
-  level: "debug"
+  directory: "logs"

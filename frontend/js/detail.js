@@ -25,6 +25,7 @@ function badge(s) {
     low_confidence: { className: 'badge-low-confidence', label: '低置信' },
     auto_scored: { className: 'badge-auto-scored', label: '自动判分' },
     need_review: { className: 'badge-need-review', label: '待复核' },
+    partial_manual: { className: 'badge-need-review', label: '部分人工' },
     high_confidence: { className: 'badge-high-confidence', label: '高置信' },
     grading: { className: 'badge-grading', label: '评分中' },
   }[s] || { className: 'badge-pending', label: s || '未知' };

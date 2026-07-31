@@ -164,6 +164,9 @@ func cmdServe(args []string) error {
 
 	// 构造 student 路径所需 services: submissions + jobs; 注 objective.Grade + papers.LoadSnapshot.
 	subRepo := submissions.NewRepository()
+	// 多选部分给分开关 (config scoring.multiple_choice_partial); repo 供 finalize
+	// 自动收卷的事务内判分路径, svc 供 HTTP 主提交路径.
+	subRepo.MultipleChoicePartial = cfg.Scoring.MultipleChoicePartial
 	jobsSvc := jobs.NewService(nil)
 	// deadline + grace 校验恒开启 (cfg.Exam.GracePeriodSeconds 默认 30s).
 	// 之前 auto_submit=false 时整体关闭校验 + auto_submit_reason 可绕过, 均已收紧
@@ -173,6 +176,7 @@ func cmdServe(args []string) error {
 		func(q map[string]any, ans any, partial bool) (map[string]any, error) {
 			return objective.Grade(q, ans, partial)
 		}, jobsSvc, grace)
+	subSvc.MultipleChoicePartial = cfg.Scoring.MultipleChoicePartial
 
 	// Task 8: finalize 服务 - 收卷轮询 (ScanDue 每 1s) + FinalizeRun 原子事务.
 	runsRepo := runs.NewRepository()

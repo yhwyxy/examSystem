@@ -927,8 +927,12 @@ func serviceNotReady(code string) http.HandlerFunc {
 // listSubmissionsHandler GET /api/admin/submissions: 列表过滤+排序+分页.
 // Query: run_id / employee_id / status (grading_status 值) / review_status /
 //
+//	keyword (name/employee_id 模糊) / paper_id /
 //	order_by=in(submitted_at|grading_generation|total_score) / order=asc|desc /
 //	limit=200 (max 1000) / offset=0.
+//
+// LEFT JOIN exam_runs 取 round_no; run 行缺失 (旧栈遗留数据) -> run_is_legacy=true.
+// 返回字段与前端 admin.js renderRows 一一对应 (轮次/部门/客观分/主观分等列).
 func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -937,12 +941,12 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 
 		// ORDER BY 白名单 (避免 SQL 注入); 默认 submitted_at DESC.
 		orderBy := map[string]string{
-			"submitted_at":       "submitted_at",
-			"grading_generation": "grading_generation",
-			"total_score":        "total_score",
+			"submitted_at":       "s.submitted_at",
+			"grading_generation": "s.grading_generation",
+			"total_score":        "s.total_score",
 		}[q.Get("order_by")]
 		if orderBy == "" {
-			orderBy = "submitted_at"
+			orderBy = "s.submitted_at"
 		}
 		order := "DESC"
 		if q.Get("order") == "asc" {
@@ -955,7 +959,14 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			args  []any
 			phIdx = 1
 		)
-		sb.WriteString("SELECT id, paper_id, run_id, employee_id, name, grading_status, grading_generation, review_status, total_score, submitted_at FROM submissions")
+		sb.WriteString(`SELECT s.id, s.paper_id, s.paper_name, s.run_id,
+			s.employee_id, s.name, s.department,
+			s.grading_status, s.grading_generation, s.review_status,
+			s.objective_score, s.subjective_score_final, s.total_score,
+			s.auto_submit_reason, s.submitted_at,
+			r.round_no, (r.id IS NULL) AS run_is_legacy
+		FROM submissions s
+		LEFT JOIN exam_runs r ON r.id = s.run_id`)
 		sb.WriteString(" WHERE 1=1")
 		addFilter := func(col, val string) {
 			if val == "" {
@@ -965,10 +976,17 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			args = append(args, val)
 			phIdx++
 		}
-		addFilter("run_id", q.Get("run_id"))
-		addFilter("employee_id", q.Get("employee_id"))
-		addFilter("grading_status", q.Get("status"))
-		addFilter("review_status", q.Get("review_status"))
+		addFilter("s.run_id", q.Get("run_id"))
+		addFilter("s.employee_id", q.Get("employee_id"))
+		addFilter("s.grading_status", q.Get("status"))
+		addFilter("s.review_status", q.Get("review_status"))
+		addFilter("s.paper_id", q.Get("paper_id"))
+		if kw := strings.TrimSpace(q.Get("keyword")); kw != "" {
+			sb.WriteString(" AND (s.name ILIKE $" + strconv.Itoa(phIdx) +
+				" OR s.employee_id ILIKE $" + strconv.Itoa(phIdx) + ")")
+			args = append(args, "%"+kw+"%")
+			phIdx++
+		}
 		sb.WriteString(" ORDER BY " + orderBy + " " + order)
 		sb.WriteString(" LIMIT $" + strconv.Itoa(phIdx))
 		args = append(args, limit)
@@ -984,23 +1002,33 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		defer rows.Close()
 		type item struct {
-			ID            int64     `json:"id"`
-			PaperID       string    `json:"paper_id"`
-			RunID         string    `json:"run_id"`
-			EmployeeID    string    `json:"employee_id"`
-			Name          string    `json:"name"`
-			GradingStatus string    `json:"grading_status"`
-			Generation    int64     `json:"grading_generation"`
-			ReviewStatus  string    `json:"review_status"`
-			TotalScore    float64   `json:"total_score"`
-			SubmittedAt   time.Time `json:"submitted_at"`
+			ID                   int64     `json:"id"`
+			PaperID              string    `json:"paper_id"`
+			PaperName            *string   `json:"paper_name"`
+			RunID                string    `json:"run_id"`
+			EmployeeID           string    `json:"employee_id"`
+			Name                 string    `json:"name"`
+			Department           *string   `json:"department"`
+			GradingStatus        string    `json:"grading_status"`
+			Generation           int64     `json:"grading_generation"`
+			ReviewStatus         string    `json:"review_status"`
+			ObjectiveScore       float64   `json:"objective_score"`
+			SubjectiveScoreFinal float64   `json:"subjective_score_final"`
+			TotalScore           float64   `json:"total_score"`
+			AutoSubmitReason     *string   `json:"auto_submit_reason"`
+			SubmittedAt          time.Time `json:"submitted_at"`
+			RoundNo              *int      `json:"round_no"`
+			RunIsLegacy          bool      `json:"run_is_legacy"`
 		}
 		items := make([]item, 0, limit)
 		for rows.Next() {
 			var it item
-			if err := rows.Scan(&it.ID, &it.PaperID, &it.RunID, &it.EmployeeID, &it.Name,
-				&it.GradingStatus, &it.Generation, &it.ReviewStatus, &it.TotalScore,
-				&it.SubmittedAt); err != nil {
+			if err := rows.Scan(&it.ID, &it.PaperID, &it.PaperName, &it.RunID,
+				&it.EmployeeID, &it.Name, &it.Department,
+				&it.GradingStatus, &it.Generation, &it.ReviewStatus,
+				&it.ObjectiveScore, &it.SubjectiveScoreFinal, &it.TotalScore,
+				&it.AutoSubmitReason, &it.SubmittedAt,
+				&it.RoundNo, &it.RunIsLegacy); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED",
 					"scan submission: "+err.Error())
 				return
@@ -1028,7 +1056,12 @@ func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				COALESCE(MAX(total_score), 0),
 				COALESCE(MIN(total_score), 0),
 				COUNT(*) FILTER (WHERE review_status IN ('pending', 'need_review', 'low_confidence')),
-				COUNT(*) FILTER (WHERE review_status = 'low_confidence')
+				-- 低置信卷数: worker 整卷状态里没有 'low_confidence' 值 (它写
+				-- need_review/partial_manual/high_confidence/reviewed), 低置信体现在
+				-- grading_detail_json 单题的 low_confidence 标志上, 按"含任一低置信题"计数.
+				COUNT(*) FILTER (WHERE jsonb_typeof(grading_detail_json) = 'array' AND EXISTS (
+					SELECT 1 FROM jsonb_array_elements(grading_detail_json) e
+					WHERE (e ->> 'low_confidence')::boolean IS TRUE))
 			FROM submissions`).Scan(
 			&submittedCount, &avgScore, &maxScore, &minScore,
 			&pendingReview, &lowConfidenceCount)

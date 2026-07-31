@@ -89,6 +89,9 @@ def go_base_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
                 f'  data_root: "{data_root}"',
                 "admin:",
                 "  enable_auth: false",
+                # 与生产 config.yaml 对齐: 多选按命中比例给分 (无错项前提)
+                "scoring:",
+                "  multiple_choice_partial: true",
                 "database:",
                 f'  url: "{dsn}"',
                 "",

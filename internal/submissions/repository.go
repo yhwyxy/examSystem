@@ -27,8 +27,12 @@ var (
 	ErrNoRows = errors.New("NO_ROWS")
 )
 
-// Repository 实现 SubmissionRead 与 sessions.SubmissionStore. 零依赖纯 SQL.
-type Repository struct{}
+// Repository 实现 SubmissionRead 与 sessions.SubmissionStore. 纯 SQL, 唯一状态是
+// MultipleChoicePartial (config scoring.multiple_choice_partial, main 装配注入),
+// 供 deprecated 事务内判分路径 (CreateFromSessionTx / finalize 自动收卷) 使用.
+type Repository struct {
+	MultipleChoicePartial bool
+}
 
 // NewRepository 返回零状态实例.
 func NewRepository() *Repository { return &Repository{} }
@@ -182,12 +186,13 @@ func (r *Repository) CreateFromSessionTx(ctx context.Context, tx pgx.Tx,
 	in sessions.SubmissionInput) (string, bool, error) {
 	// 客观题即时判分 (在事务内; 主 HTTP 路径传 Prepared 已避免此处 IO).
 	var (
-		objScore      int
+		objScore      float64
 		objDetailJSON []byte
 		hasSubjective = true
 	)
 	if in.SnapshotPath != "" && in.AnswersMap != nil {
-		objScore, _, objDetailJSON, _, hasSubjective = gradeObjectiveInTx(ctx, in)
+		objScore, _, objDetailJSON, _, hasSubjective =
+			gradeObjectiveInTx(ctx, in, r.MultipleChoicePartial)
 	}
 	if len(objDetailJSON) == 0 {
 		objDetailJSON = []byte("[]")
@@ -236,8 +241,9 @@ func (r *Repository) CreateFromSessionTx(ctx context.Context, tx pgx.Tx,
 //
 // 任一步失败返回零分 (与 Python insert_submission_pending 兼容: 评分完后再异
 // 步处理). 不返回 error 以保证 INSERT 主路径不被卡.
-func gradeObjectiveInTx(ctx context.Context, in sessions.SubmissionInput) (
-	int, int, []byte, int, bool) {
+// partial: 多选部分给分开关 (config scoring.multiple_choice_partial).
+func gradeObjectiveInTx(ctx context.Context, in sessions.SubmissionInput,
+	partial bool) (float64, float64, []byte, int, bool) {
 	if in.SnapshotPath == "" || in.AnswersMap == nil {
 		return 0, 0, []byte("[]"), 0, true
 	}
@@ -263,7 +269,7 @@ func gradeObjectiveInTx(ctx context.Context, in sessions.SubmissionInput) (
 		maxScore := objMaxScoreOf(question)
 		switch {
 		case isObj:
-			d, gerr := objective.Grade(question, ans, false)
+			d, gerr := objective.Grade(question, ans, partial)
 			if gerr != nil {
 				details = append(details, objPlaceholder(question, ans, maxScore, gerr.Error()))
 				continue
@@ -285,7 +291,8 @@ func gradeObjectiveInTx(ctx context.Context, in sessions.SubmissionInput) (
 	if merr != nil {
 		return 0, 0, []byte("[]"), 0, true
 	}
-	return int(objScore), int(objMax), objJSON, len(questions), hasSubjective
+	// float 原样返回, 不截断 (1.5 分制客观题).
+	return objScore, objMax, objJSON, len(questions), hasSubjective
 }
 
 // objQID 取 question["id"]; 兼容 int / string 形态, 统一回 string.
