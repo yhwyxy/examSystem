@@ -745,6 +745,11 @@ tbody tr:hover {
   animation: pulse 1.5s infinite;
 }
 
+.badge-open-ended {
+  background: var(--purple-soft, #f0e6ff);
+  color: var(--purple, #7c3aed);
+}
+
 .badge-auto-submit {
   background: var(--amber-soft);
   color: var(--amber);

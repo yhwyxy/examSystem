@@ -937,25 +937,9 @@
       "score": 20.0,
       "scoring_mode": "text",
       "question": "请阐述自己从事电气工程或自动化专业工作后的打算和想法",
-      "answer": "答案各自发挥",
       "id": "q43",
-      "scoring_points": [
-        {
-          "id": "q43_p1",
-          "text": "围绕电气工程或自动化专业工作后的打算和想法展开",
-          "score": 10.0,
-          "required": true
-        },
-        {
-          "id": "q43_p2",
-          "text": "表述完整、主题明确（参考答案为各自发挥）",
-          "score": 10.0
-        }
-      ],
-      "open_ended": true,
-      "open_ended_kind": "fully_open",
-      "open_ended_note": "参考答案为“答案各自发挥”，无唯一标准答案。",
-      "require_manual_review": true
+      "answer": "",
+      "scoring_points": []
     }
   ]
 }

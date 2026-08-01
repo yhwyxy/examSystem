@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import pathlib
+from typing import Any
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
@@ -148,6 +149,103 @@ def test_build_scoring_request_passes_code_language_for_code_mode():
     assert req.code_language == "javascript"
     assert req.code_scoring_profile == "find_index_static"
     assert req.scoring_mode.value == "code"
+
+
+def test_build_scoring_request_empty_scoring_points_without_answer():
+    """scoring_points=[] + answer="" 的场景 (q43 开放题) 验证.
+
+    - _structured_scoring_points([]) 应返回 [] (不走 rubric 兜底)
+    - build_scoring_request 中 scoring_points 应为空列表
+    - reference_answer 应透传空串
+    """
+    from scoring_worker.grader_bridge import build_scoring_request
+    q: dict[str, Any] = {
+        "id": "q43",
+        "type": "essay",
+        "scoring_mode": "text",
+        "score": 20.0,
+        "scoring_points": [],
+        "answer": "",
+        "question": "请阐述自己从事电气工程或自动化专业工作后的打算和想法",
+    }
+    req = build_scoring_request(q, "我想从事电气工程工作")
+    assert len(req.scoring_points) == 0, "scoring_points 应为空列表"
+    assert req.reference_answer == "", "reference_answer 应透传空串"
+    assert req.question_id == "q43"
+    assert req.max_score == 20.0
+
+
+def test_grade_subjective_empty_scoring_points_empty_answer_triggers_manual_review(monkeypatch):
+    """scoring_points=[] + 学生答案为空 → 不走 engine, 直接返回 unanswered."""
+    import scoring_worker.grader_bridge as gb
+
+    def _no_load(*a, **kw):
+        raise AssertionError("不应加载 subjective service (空答案)")
+    monkeypatch.setattr(gb, "get_subjective_service", _no_load)
+
+    q: dict[str, Any] = {
+        "id": "q43",
+        "type": "essay",
+        "scoring_mode": "text",
+        "score": 20.0,
+        "scoring_points": [],
+        "answer": "",
+        "question": "请阐述自己从事电气工程或自动化专业工作后的打算和想法",
+    }
+    f, m, rs, entry = gb.grade_subjective(q, "", preserve=None)
+    assert f == 0.0
+    assert m == 0.0
+    assert rs == "open_ended", f"开放题空答案应标记 open_ended, 实际 {rs!r}"
+    assert entry["review_status"] == "open_ended"
+    assert entry["need_manual_review"] is True  # 开放题需要人工审核
+    assert entry["reason"] == "open_ended"
+    assert entry["student_answer"] == ""
+
+
+def test_grade_subjective_empty_scoring_points_with_answer_forces_review(monkeypatch):
+    """scoring_points=[] + 学生有答案 + reference_answer="" → engine 触发 force_review.
+
+    绕过 engine 直接 mock service.score() 返回 ScoringResult 来验证
+    detail 层对 need_manual_review=True 的正确映射。
+    """
+    import scoring_worker.grader_bridge as gb
+    from subjective_scoring import ReviewLevel, ScoringMode, ScoringResult, ScoringRequest
+
+    class FakeSvc:
+        def score(self, request: ScoringRequest) -> ScoringResult:
+            return ScoringResult(
+                question_id=request.question_id,
+                scoring_mode=ScoringMode.TEXT,
+                track="TextRerankerScorer",
+                score=0.0,
+                max_score=request.max_score,
+                confidence=0.0,
+                need_manual_review=True,
+                review_level=ReviewLevel.MANUAL_REQUIRED,
+                matched_points=[],
+                missed_points=[],
+                warnings=["无评分点且无标准答案，文本评分无法进行"],
+                decision="manual_review",
+                decision_reason="no_scoring_points_no_reference",
+            )
+
+    monkeypatch.setattr(gb, "get_subjective_service", lambda: FakeSvc())
+
+    q: dict[str, Any] = {
+        "id": "q43",
+        "type": "essay",
+        "scoring_mode": "text",
+        "score": 20.0,
+        "scoring_points": [],
+        "answer": "",
+        "question": "请阐述自己从事电气工程或自动化专业工作后的打算和想法",
+    }
+    f, m, rs, entry = gb.grade_subjective(q, "我想从事电气工程工作", preserve=None)
+    assert entry["need_manual_review"] is True, "开放题 → need_manual_review=True"
+    assert rs == "open_ended", f"review_status 应为 open_ended, 实际 {rs!r}"
+    assert entry["review_status"] == "open_ended"
+    assert m == 0.0
+    assert f == 0.0
 
 
 def test_get_subjective_service_local_mode_missing_model(tmp_path, monkeypatch):

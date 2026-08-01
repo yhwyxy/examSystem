@@ -171,10 +171,13 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         mode = ScoringMode.CODE
     else:
         mode = ScoringMode.TEXT
-    scoring_points = _structured_scoring_points(question) or parse_scoring_rubric(
-        question.get("scoring_rubric"),
-        question.get("score"),
-    )
+    scoring_points = _structured_scoring_points(question)
+    if scoring_points is None:
+        # 没有显式评分点时才走 rubric 解析；评分点已配为空数组则不进入
+        scoring_points = parse_scoring_rubric(
+            question.get("scoring_rubric"),
+            question.get("score"),
+        )
     sp_list = _to_scoring_points(scoring_points)
     code_lang = question.get("code_language")
     if not code_lang:
@@ -206,12 +209,14 @@ def _structured_scoring_points(
 ) -> list[tuple[str, float]] | None:
     """题目自带结构化 scoring_points ([{text, score, ...}]) 时直接采用.
 
-    试卷快照的 subquestions 常带该字段 (无 scoring_rubric 文本), 此前被忽略
-    导致整题只按单一整分点评 -> 得分点粒度全丢.
+    空列表 [] 也返回 [] — 代表「显式配置了无评分点」, 不走 rubric 兜底.
+    试卷数据或快照中 `scoring_points: []` 就是要求题目走强制人工复核.
     """
     raw = question.get("scoring_points")
-    if not isinstance(raw, list) or not raw:
+    if not isinstance(raw, list):
         return None
+    if not raw:
+        return []
     points: list[tuple[str, float]] = []
     for p in raw:
         if not isinstance(p, dict):
@@ -243,19 +248,30 @@ def _build_scoring_request_kwargs(kwargs: dict[str, Any]) -> Any:
     return ScoringRequest(**cleaned)
 
 
+def _is_open_ended_question(question: dict[str, Any]) -> bool:
+    """scoring_points 显式配置为空列表 → 开放题，不走机器评分，强制人工。
+
+    与 _structured_scoring_points 的返回约定保持一致：
+    - scoring_points=[] 代表「显式配置了无评分点」
+    - 区别于 scoring_points 字段缺失（走 rubric 兜底）
+    """
+    sp = question.get("scoring_points")
+    return isinstance(sp, list) and not sp
+
+
 def _legacy_review_status(result: Any) -> str:
     review = getattr(result, "review_level", None)
     if review is None:
         return "low_confidence"
     val = review.value if hasattr(review, "value") else str(review)
     val = val.lower()
-    if val == "high":
+    if val in ("high", "auto_pass"):
         return "high_confidence"
-    if val == "medium":
+    if val in ("medium", "suggested_review"):
         return "reviewed"
-    if val == "low":
+    if val in ("low",):
         return "low_confidence"
-    if val == "manual":
+    if val in ("manual", "manual_required"):
         return "need_review"
     return "low_confidence"
 
@@ -294,6 +310,9 @@ def detail_from_scoring_result(
     ]
     smode = getattr(result, "scoring_mode", None)
     rvlevel = getattr(result, "review_level", None)
+    # 开放题（scoring_points=[] 显式配置）覆盖 review_status
+    if _is_open_ended_question(question):
+        review_status = "open_ended"
     entry: dict[str, Any] = {
         "question_id": question.get("id"),
         "type": question.get("type"),
@@ -364,11 +383,12 @@ def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
     1. low_confidence 标志任一 -> 'need_review' (Worker 上抛人工)
     2. 任一 manually_reviewed=True -> 'partial_manual'
     3. 任一 need_manual_review=True -> 'need_review'
-    4. 否则根据 machine_score 与 max 比例 -> high_confidence/reviewed 链.
+    4. open_ended 标记的题 -> 整卷 'need_review'（开放题需人工审核）
+    5. 否则根据 machine_score 与 max 比例 -> high_confidence/reviewed 链.
 
     与 backend/grader.py parity 名字. 旗标读取兼容顶层 / detail 嵌套层, 并把
-    单题 review_status 字符串 (low_confidence/need_review/unanswered) 一并算作
-    需人工信号.
+    单题 review_status 字符串 (low_confidence/need_review/unanswered/open_ended)
+    一并算作需人工信号.
     """
     if not entries:
         return "need_review"
@@ -378,6 +398,7 @@ def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
     found_manual = False
     found_need_manual = False
     found_unanswered = False
+    found_open_ended = False
 
     for e in entries:
         s = float(e.get("machine_score", 0) or 0)
@@ -393,8 +414,10 @@ def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
             found_need_manual = True
         if rs == "unanswered":
             found_unanswered = True
+        if rs == "open_ended":
+            found_open_ended = True
 
-    if found_unanswered or found_need_manual or found_low:
+    if found_unanswered or found_need_manual or found_low or found_open_ended:
         return "need_review"
     if found_manual:
         return "partial_manual"
@@ -429,16 +452,16 @@ def grade_subjective(
     """
     if str(question.get("type")) == "composite":
         if _is_blank_answer(student_answer):
-            return (0.0, 0.0, "unanswered", _empty_subjective_detail(
-                question, preserve=preserve))
+            entry = _empty_subjective_detail(question, preserve=preserve)
+            return (0.0, 0.0, entry["review_status"], entry)
         ssvc = get_subjective_service()
         return _grade_composite(ssvc, question, student_answer, preserve)
 
     if not isinstance(student_answer, str):
         student_answer = "" if student_answer is None else str(student_answer)
     if student_answer.strip() == "":
-        return (0.0, 0.0, "unanswered", _empty_subjective_detail(
-            question, preserve=preserve))
+        entry = _empty_subjective_detail(question, preserve=preserve)
+        return (0.0, 0.0, entry["review_status"], entry)
 
     ssvc = get_subjective_service()
     request = build_scoring_request(question, student_answer)
@@ -531,6 +554,8 @@ def _grade_composite(
 
 def _empty_subjective_detail(question: dict[str, Any],
                              *, preserve: dict[str, Any] | None = None) -> dict[str, Any]:
+    is_open = _is_open_ended_question(question)
+    reason = "open_ended" if is_open else "unanswered"
     entry = {
         "question_id": question.get("id"),
         "type": question.get("type"),
@@ -541,10 +566,10 @@ def _empty_subjective_detail(question: dict[str, Any],
         "max_score": float(question.get("score", 0) or 0),
         "grading_method": "subjective",
         "similarity": 0.0, "confidence": 0.0,
-        "reason": "unanswered",
-        "review_status": "unanswered",
-        "matched_points": [], "missed_points": [], "warnings": ["unanswered"],
-        "low_confidence": False, "need_manual_review": False,
+        "reason": reason,
+        "review_status": reason,
+        "matched_points": [], "missed_points": [], "warnings": [reason],
+        "low_confidence": False, "need_manual_review": is_open,
         "manually_reviewed": False,
     }
     return _merge_preserved_review(entry, preserve)

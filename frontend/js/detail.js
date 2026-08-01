@@ -28,6 +28,7 @@ function badge(s) {
     partial_manual: { className: 'badge-need-review', label: '部分人工' },
     high_confidence: { className: 'badge-high-confidence', label: '高置信' },
     grading: { className: 'badge-grading', label: '评分中' },
+    open_ended: { className: 'badge-open-ended', label: '开放题' },
   }[s] || { className: 'badge-pending', label: s || '未知' };
   return `<span class="badge ${meta.className}">${esc(meta.label)}</span>`;
 }
