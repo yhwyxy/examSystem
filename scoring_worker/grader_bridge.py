@@ -176,20 +176,23 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         question.get("score"),
     )
     sp_list = _to_scoring_points(scoring_points)
-    code_lang = (question.get("code_language")
-                 or (question.get("allowed_languages") or [None])[0]
-                 if isinstance(question.get("allowed_languages"), list)
-                    and question.get("allowed_languages")
-                 else question.get("code_language"))
+    code_lang = question.get("code_language")
+    if not code_lang:
+        allowed = question.get("allowed_languages")
+        if isinstance(allowed, list) and allowed:
+            code_lang = allowed[0]
+    # 语言随评分模式走: scoring_mode=code 的题不论 type (short_answer/essay
+    # 也可能是代码题) 都必须透传, 否则引擎默认按 python 解析 -> AST 全灭.
+    pass_lang = mode == ScoringMode.CODE or qtype in (
+        "sql", "sql_completion", "code_completion", "code")
     request_kwargs: dict[str, Any] = {
         "question_id": str(question.get("id", "?")),
         "question_type": qtype or "subjective",
         "question": str(question.get("question", "")),
         "reference_answer": str(question.get("answer", "")),
         "student_answer": student_answer,
-        "code_language": code_lang if qtype in
-                          ("sql", "sql_completion",
-                           "code_completion", "code") else None,
+        "code_language": code_lang if pass_lang else None,
+        "code_scoring_profile": question.get("code_scoring_profile") or None,
         "course_type": question.get("course_type"),
         "max_score": float(question.get("score", 0) or 0),
         "scoring_mode": mode,
@@ -232,6 +235,7 @@ def _build_scoring_request_kwargs(kwargs: dict[str, Any]) -> Any:
     from subjective_scoring import ScoringRequest  # type: ignore
     valid_keys = {"question_id", "question_type", "question",
                   "reference_answer", "student_answer", "code_language",
+                  "code_scoring_profile",
                   "course_type", "max_score", "scoring_mode",
                   "scoring_points", "scoring_config"}
     cleaned = {k: v for k, v in kwargs.items()

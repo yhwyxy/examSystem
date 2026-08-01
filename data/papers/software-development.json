@@ -410,6 +410,7 @@
       "question": "请用你所熟悉的任意一种编程语言写一段嵌套循环代码,请标明所使用的语言。",
       "id": "q16",
       "code_language": "python",
+      "code_scoring_profile": "nested_loop_static",
       "allowed_languages": [
         "python",
         "javascript",
@@ -594,6 +595,7 @@
       "score": 15.0,
       "scoring_mode": "code",
       "code_language": "javascript",
+      "code_scoring_profile": "find_index_static",
       "allowed_languages": [
         "javascript",
         "java",

@@ -133,6 +133,23 @@ def test_grade_composite_extracts_sub_answers(monkeypatch):
     assert overall == "reviewed"  # 6/10 < 0.8, 无人工/低置信信号
 
 
+def test_build_scoring_request_passes_code_language_for_code_mode():
+    """回归: scoring_mode=code 的题不论 type (short_answer/essay) 都必须
+    透传 code_language 与 code_scoring_profile.
+
+    曾因只认 type in {sql, code, code_completion} 丢语言 -> 引擎默认按
+    python 解析 JS 代码 -> 参考/学生 AST 双失败 -> 结构分 0 (q21 得 0 分)."""
+    from scoring_worker.grader_bridge import build_scoring_request
+    q = {"id": "q21", "type": "essay", "score": 15, "scoring_mode": "code",
+         "code_language": "javascript", "question": "找下标",
+         "answer": "function findIndex(a, x) { return a.indexOf(x); }",
+         "code_scoring_profile": "find_index_static"}
+    req = build_scoring_request(q, "function f(a, x) { return a.indexOf(x); }")
+    assert req.code_language == "javascript"
+    assert req.code_scoring_profile == "find_index_static"
+    assert req.scoring_mode.value == "code"
+
+
 def test_get_subjective_service_local_mode_missing_model(tmp_path, monkeypatch):
     """本地 mode (RERANK_USE_REMOTE 未设) + RERANKER_MODEL 指向不存在路径 -> raise 而非降级.
 
