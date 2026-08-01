@@ -13,7 +13,7 @@ dependencies = [
     "openpyxl>=3.1",
     "httpx>=0.27",
     "python-dotenv>=1.0",
-    "subjective-scoring[remote]==0.1.10",
+    "subjective-scoring[remote]==0.1.11",
 ]
 
 [project.optional-dependencies]
@@ -38,4 +38,4 @@ dev = [
 package = false
 
 [tool.uv.sources]
-subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.10" }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.11" }
