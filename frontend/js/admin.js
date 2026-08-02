@@ -141,8 +141,15 @@ function showMainContent() {
   $('mainContent').style.display = 'grid';
   showView(currentView || 'overview', { refresh: false });
   const tasks = [loadStats(), loadRows()];
-  if (window.PapersAdmin) tasks.push(window.PapersAdmin.loadPapersList());
-  else tasks.push(loadExamLink());
+  if (window.PapersAdmin) {
+    tasks.push(window.PapersAdmin.loadPapersList());
+    // publish 视图需要加载考试卡片列表; showView 因 {refresh:false} 跳过了
+    if ((currentView || 'overview') === 'publish' && window.PapersAdmin.loadExams) {
+      tasks.push(window.PapersAdmin.loadExams());
+    }
+  } else {
+    tasks.push(loadExamLink());
+  }
   Promise.all(tasks).catch(e => toast(e.message));
 }
 
