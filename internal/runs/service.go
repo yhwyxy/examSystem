@@ -110,7 +110,7 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, slug string,
 	// sha256 —— 文件原始字节与入库 snapshot_hash 严格一致. 这是 Go↔Python 评分
 	// 闭环的关键: Python scoring_worker 对文件原始字节做 sha256 校验, 之前用
 	// MarshalIndent 写盘导致每个 grading job 都因 hash 不匹配重试至 dead.
-	// Go 侧 LoadSnapshot 是 "解析后重新 canonical 化再 hash", 两侧现均自洽.
+	// Go 侧 LoadSnapshot 也按文件原始字节做 sha256 校验, 三方 (Go/Python/sync) 一致.
 	snapshotPath := filepath.Join(s.pubRoot,
 		fmt.Sprintf("paper-%s-run-%s.json", slug, runID))
 	snapshotHash, err := papers.AtomicWriteCanonical(snapshotPath, docUseNumber)

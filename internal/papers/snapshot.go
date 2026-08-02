@@ -174,32 +174,30 @@ func writeJSONString(b *strings.Builder, s string) {
 
 // LoadSnapshot 读取 paper snapshot JSON 文件, 校验 sha256 (强制可选), 返回 Snapshot.
 //
-// 与 Python open_run_snapshot 等价: 文件 path 必须在合法 snapshot 根目录下;
-// 期望 sha256Hex != "" 则比对计算 sha256 == 期望, 不一致报 ErrChecksumMismatch.
+// 与 Python open_run_snapshot / scoring_worker.snapshot.SnapshotCache.get 一致:
+// sha256 直接对文件原始字节计算 (而非解析后重新 canonical 序列化再算 hash).
+// 这样 sync 脚本 (scripts/sync_run_snapshots.py) 用原始字节写入的 hash 也能通过校验.
 //
-// 解码使用 UseNumber (与 Service.Open 计算 snapshot_hash 的 LoadDocumentUseNumber
-// 同源), 以保证 int 与 float 在 canonical JSON 中分别以 "60" / "60.0" 写出,
-// 使重算 hash 与已入库的 snapshot_hash 一致.
+// expectedSHA256Hex != "" 则比对文件原始字节 sha256 == 期望, 不一致报错.
 //
-// 此处只做读 + 校验; 路径防逃逸交给调用方 (store.go safeResolveWithinRoot),
-// 因为本函数不应自行决定 root.
+// 解码使用 UseNumber, 保证 int 与 float 在后续内存操作中区分 (json.Number).
+// 路径防逃逸由调用方负责 (store.go safeResolveWithinRoot / service.go Rel check).
 func LoadSnapshot(path, expectedSHA256Hex string) (*Snapshot, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("papers.LoadSnapshot: %w", err)
+	}
+	// 对文件原始字节算 sha256 (与 scoring_worker / sync 脚本一致)
+	h := sha256.Sum256(raw)
+	sum := hex.EncodeToString(h[:])
+	if expectedSHA256Hex != "" && sum != expectedSHA256Hex {
+		return nil, fmt.Errorf("papers.LoadSnapshot: snapshot checksum mismatch")
 	}
 	var doc Document
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
 	dec.UseNumber()
 	if err := dec.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("papers.LoadSnapshot parse: %w", err)
-	}
-	sum, err := ComputeSHA256(doc)
-	if err != nil {
-		return nil, fmt.Errorf("papers.LoadSnapshot sha: %w", err)
-	}
-	if expectedSHA256Hex != "" && sum != expectedSHA256Hex {
-		return nil, fmt.Errorf("papers.LoadSnapshot: snapshot checksum mismatch")
 	}
 	return &Snapshot{
 		Doc:       doc,
