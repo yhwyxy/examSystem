@@ -932,8 +932,15 @@
           "id": "q35-1",
           "question": "01号房屋的物权归属应当如何确定？为什么？",
           "score": 4,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-1_phrase",
+              "text": "归丙",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["归属丙", "丙取得", "变更为丙"]
+            },
             {
               "id": "q35-1_p1",
               "required": true,
@@ -953,8 +960,22 @@
           "id": "q35-2",
           "question": "甲、丙之间的房屋买卖合同效力如何？考察甲、丙之间合同效力时应当考虑本案中的哪些因素？",
           "score": 5,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-2_phrase1",
+              "text": "合同有效",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["有效合同", "买卖合同有效", "房屋买卖合同有效"]
+            },
+            {
+              "id": "q35-2_phrase2",
+              "text": "不构成恶意串通",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["单纯知情", "不属于恶意串通", "并非恶意串通"]
+            },
             {
               "id": "q35-2_p1",
               "required": true,
@@ -978,8 +999,15 @@
           "id": "q35-3",
           "question": "2月12日，甲、乙之间对原合同修改的行为的效力应当如何认定？为什么？",
           "score": 5,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-3_phrase",
+              "text": "变更合同",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["合意变更", "双方变更", "修改合同", "合同变更"]
+            },
             {
               "id": "q35-3_p1",
               "required": true,
@@ -999,8 +1027,15 @@
           "id": "q35-4",
           "question": "乙的诉讼请求是否应当得到支持？为什么？",
           "score": 5,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-4_phrase",
+              "text": "不应支持",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["不能得到支持", "不予支持", "无法得到支持", "不支持"]
+            },
             {
               "id": "q35-4_p1",
               "required": true,
@@ -1025,8 +1060,22 @@
           "id": "q35-5",
           "question": "针对甲要求乙履行购买02号房的义务，乙可主张什么权利？为什么？",
           "score": 5,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-5_phrase1",
+              "text": "解除合同",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["请求解除", "合同解除", "主张解除", "可解除"]
+            },
+            {
+              "id": "q35-5_phrase2",
+              "text": "返还",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["返还购房款", "返还本金", "退款"]
+            },
             {
               "id": "q35-5_p1",
               "required": true,
@@ -1050,8 +1099,22 @@
           "id": "q35-6",
           "question": "邻居丁所遭受的损失应当由谁赔偿？为什么？",
           "score": 4,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-6_phrase1",
+              "text": "A公司承担",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["A公司赔偿", "由A公司承担", "A公司侵权"]
+            },
+            {
+              "id": "q35-6_phrase2",
+              "text": "丙承担相应责任",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["丙承担", "丙赔偿", "丙有过错", "丙承担责任"]
+            },
             {
               "id": "q35-6_p1",
               "required": true,
@@ -1075,8 +1138,15 @@
           "id": "q35-7",
           "question": "丙热水器的毁损，应由谁承担赔偿责任？为什么？",
           "score": 4,
-          "scoring_mode": "text",
+          "scoring_mode": "case_analysis",
           "scoring_points": [
+            {
+              "id": "q35-7_phrase",
+              "text": "B公司承担",
+              "score": 2,
+              "match": "phrase",
+              "synonyms": ["由b公司承担", "b公司赔偿", "B公司赔偿"]
+            },
             {
               "id": "q35-7_p1",
               "required": true,
