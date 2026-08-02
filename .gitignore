@@ -55,3 +55,4 @@ loadtest/generated/
 loadtest/results/*
 !loadtest/results/summary.json
 !loadtest/.gitkeep
+.opencode/

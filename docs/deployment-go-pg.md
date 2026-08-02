@@ -20,6 +20,28 @@
   - `scripts/windows/`           start.ps1 / stop.ps1 / package.ps1
   - `docs/`                      本文档等
   - `manifest.sha256`            完整性核对清单
+- `scripts/windows/`           start.ps1 / stop.ps1 / package.ps1
+- `scripts/lint_papers.py`     题库静态检查 (L1-L6)
+- `scripts/sync_run_snapshots.py` 试卷快照同步
+- `docs/`                      本文档等
+
+## 启动前快照同步
+
+启动 worker 前必须做快照同步, 否则 worker 因 **snapshot_hash mismatch** 跳过所有评分:
+
+```powershell
+# 用 data/papers/*.json 最新内容覆盖 exam_runs 快照并更新 hash
+python scripts/sync_run_snapshots.py
+```
+
+同步脚本的输出格式: `<run_id>  <paper_id>  <hash_prefix>`, 每卷一行.
+输出 `Done. 0 failures.` 即全部成功.
+
+> **何时必须再跑**: 凡修改 `data/papers/*.json` (修改 scoring_mode / scoring_points / synonyms
+> / calculation 配置等) 后, 必须重新执行同步, 否则 worker 读到的快照与 hash 不匹配, 评分失败.
+
+同步脚本限制: 需本地 PostgreSQL 可访问 (`DATABASE_URL` / 默认 DSN), 且 `data/exam_runs/`
+目录有对应快照文件 (由 exam-open 时 Go 侧生成).
 - DataRoot (独立持久目录, **不在包内**): `D:\exam-data\` (PG 数据 / uploads / backups)
 - ModelRoot (独立持久目录, **不在包内**): `D:\exam-models\bge-reranker-v2-m3\`
   - 跨版本持久, 升级不覆盖 (升级只替换部署根的程序文件)
@@ -86,6 +108,60 @@ sentence-transformers 自己解析 cache.
 | `WORKER_ID` | `prod-worker-1` | 多实例区分 claim/续租 |
 | `LOG_LEVEL` | `INFO` | DEBUG/INFO/WARNING |
 
+## 精确评分模式 (exact scoring)
+
+题库支持 5 种本地精确评分模式, **不经过 reranker**:
+
+| scoring_mode | 评分器 | 适用题型 |
+|---|---|---|
+| `enumeration` | enumeration_scorer | 列举题: 评分点子串/同义词匹配, 命中得该条满分 |
+| `translation` | translation_scorer | 翻译题: 先校验目标语言, 再按短语条目匹配 |
+| `table` | table_scorer | 表格补全: 单元格期望值精确匹配, 可选行标签邻域校验 |
+| `ledger` | ledger_scorer | 会计分录: 金额(相对容差) + 科目关键词双条件 |
+| `case_analysis` | case_analysis_scorer | 案例分析: phrase 结论点精确命中 + 理由点回调 reranker |
+
+其他模式 (`text` / `calculation` / `code`) 走原有路径.
+
+**标注字段** (写在 `data/papers/*.json` 的 question 上, Go 侧忽略未知键):
+
+```jsonc
+{
+  "scoring_mode": "enumeration",
+  "scoring_points": [
+    {"id": "p1", "text": "人力控制", "score": 3, "synonyms": ["手动", "手动控制"]}
+  ]
+}
+```
+
+维护注意事项:
+- 改试卷后必须 `python scripts/lint_papers.py` (L1-L6, 零 error 方可提交)
+- 改试卷后必须 `python scripts/sync_run_snapshots.py` (否则 hash mismatch)
+- `_grade_by_exact_mode` 在 `grader_bridge.py` 的 `grade_subjective()` 入口分派,
+  命中直接返回, 不经过 text reranker
+
+## 题库维护
+
+修改 `data/papers/*.json` 后的标准操作流程:
+
+```powershell
+# 1. 静态检查 (L1-L6, 零 error 方可提交)
+python scripts/lint_papers.py
+
+# 2. 快照同步 (必须, 否则 worker hash mismatch)
+python scripts/sync_run_snapshots.py
+
+# 3. 触发重评 (可选, 更新已提交答卷的分数)
+# 通过 API 对 submission ids 逐一调 /api/admin/regrade/{id}
+```
+
+lint 规则概览:
+- **L1 (error)**: text/enumeration 评分点含"答出...之一"等元句式
+- **L2 (error)**: text 模式评分点无 CJK 字符 (库的有界修正整体跳过)
+- **L3 (error)**: 评分点含日期 (触发库的数字硬校验)
+- **L4 (warning)**: 化学式/单字母风险
+- **L5 (error)**: 模式配置完整性 (enumeration 需 scoring_points, table 需 cells 等)
+- **L6 (warning)**: 分值和不足满分
+
 ## 部署后健康自检
 
 ### scoring_worker --preflight (评分链路健康)
@@ -128,6 +204,8 @@ Invoke-RestMethod http://127.0.0.1:18080/api/health
 |---|---|
 | preflight exit 2 + warning "回退到词法相似度" | `RERANKER_MODEL` 指向 HF cache 顶层 (无 config.json); 改指 `snapshots/<hash>/` 或用 repo id |
 | preflight exit 2 + score=0 | reranker 加载失败但 warnings 未显形; 检查模型路径 / venv 依赖 / 磁盘 |
+| **worker 日志大量 snapshot hash mismatch** | 改过 `data/papers/*.json` 但未跑 `sync_run_snapshots.py`; 重跑同步即可 |
+| **enumeration 题得 0 分 (matched=0)** | 评分点 text 与作答字面差异大，缺 synonyms; 在 scoring_points 加 `synonyms` 字段 |
 | API 起不来 "ScheduledTask 不存在" | 未一次性 New-ScheduledTask; 见"启动"章节 |
 | worker claim 拒绝 "exam_app 无 INSERT 权限" | migrations 无 GRANT; 手动 `GRANT ALL ON ALL ... TO exam_app` |
 | Go serve 404 前端 | dist 缺 frontend/; package.ps1 时 frontend/ 不存在会 warning 但继续 |
