@@ -878,7 +878,7 @@
       "scoring_points": [
         {
           "id": "q41_p1",
-          "text": "西门子、ABB、施耐德、欧姆龙等",
+          "text": "西门子",
           "score": 5.0,
           "required": true,
           "synonyms": [
@@ -891,7 +891,7 @@
         },
         {
           "id": "q41_p2",
-          "text": "浙江中控、江苏科远、TMEIC、艾默生、横河等",
+          "text": "浙江中控",
           "score": 5.0,
           "required": true,
           "synonyms": [
