@@ -788,7 +788,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "矿石可选性研究的三个阶段:",
       "answer": "1)实验室试验 2)中间试验  3)工业试验。",
       "id": "q41",
@@ -796,24 +796,39 @@
         {
           "id": "q41_p1",
           "text": "实验室试验",
-          "score": 3.3333
+          "score": 3.3333,
+          "synonyms": [
+            "小型试验",
+            "小试",
+            "实验室"
+          ]
         },
         {
           "id": "q41_p2",
           "text": "中间试验",
-          "score": 3.3333
+          "score": 3.3333,
+          "synonyms": [
+            "半工业试验",
+            "扩大试验",
+            "中试",
+            "中间"
+          ]
         },
         {
           "id": "q41_p3",
           "text": "工业试验",
-          "score": 3.3334
+          "score": 3.3334,
+          "synonyms": [
+            "工业试验",
+            "工业"
+          ]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "calculation",
       "question": "一台360m2的烧结机月产量为33.5万吨,环冷余热每小时产气为35吨,一个月作业时间为30天,问下该烧结机吨矿产气是多少kg/t?",
       "answer": "吨矿产气量=35*24*30*1000/335000=75.22kg/t",
       "id": "q42",
@@ -830,7 +845,28 @@
           "score": 6.0,
           "required": true
         }
-      ]
+      ],
+      "calculation": {
+        "strategy": "static_values",
+        "steps": [
+          {
+            "id": "s1",
+            "description": "月产气量 25200 吨",
+            "expected": 25200,
+            "score": 4,
+            "tolerance": 1
+          }
+        ],
+        "final_answers": [
+          {
+            "id": "f1",
+            "description": "吨矿产气 kg/t",
+            "expected": 75.22,
+            "score": 6,
+            "tolerance": 0.5
+          }
+        ]
+      }
     },
     {
       "type": "short_answer",
@@ -863,7 +899,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "矿物粉碎的目的。",
       "answer": "(1)使物料粒度减小;\n(2)使有用矿物与脉石矿物充分单体解离。",
       "id": "q44",
@@ -872,13 +908,23 @@
           "id": "q44_p1",
           "text": "使物料粒度减小",
           "score": 5.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "粒度减小",
+            "破碎",
+            "磨矿"
+          ]
         },
         {
           "id": "q44_p2",
           "text": "使有用矿物与脉石矿物充分单体解离",
           "score": 5.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "单体解离",
+            "解离",
+            "有用矿物与脉石"
+          ]
         }
       ]
     }

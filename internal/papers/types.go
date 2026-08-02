@@ -54,10 +54,15 @@ var (
 	}
 
 	allowedScoringModes = map[string]struct{}{
-		"text":        {},
-		"sql":         {},
-		"code":        {},
-		"calculation": {},
+		"text":          {},
+		"sql":           {},
+		"code":          {},
+		"calculation":   {},
+		"enumeration":   {},
+		"translation":   {},
+		"table":         {},
+		"ledger":        {},
+		"case_analysis": {},
 	}
 
 	allowedCodeLanguages = map[string]struct{}{

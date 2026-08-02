@@ -871,29 +871,43 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "请写出国内外知名PLC品牌或DCS品牌",
       "answer": "国外知名品牌:西门子、ABB、施耐德、欧姆龙、TMEIC、艾默生、横河等\n国内知名品牌:浙江中控、江苏科远等",
       "id": "q41",
       "scoring_points": [
         {
           "id": "q41_p1",
-          "text": "西门子、ABB、施耐德、欧姆龙等",
+          "text": "西门子",
           "score": 5.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "abb",
+            "施耐德",
+            "欧姆龙",
+            "三菱",
+            "罗克韦尔"
+          ]
         },
         {
           "id": "q41_p2",
-          "text": "浙江中控、江苏科远、TMEIC、艾默生、横河等",
+          "text": "浙江中控",
           "score": 5.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "科远",
+            "tmeic",
+            "艾默生",
+            "横河",
+            "和利时"
+          ]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "请翻译automation、electrical、technology、intelligent的中文,简单解释AI和VR的内容",
       "answer": "automation:自动化;electrical:电气的;technology:技术;intelligent:智能的;\nAI:人工智能(研究、开发用于模拟、延伸和扩展人的智能的理论、方法、技术及应用系统的一门新的技术科学。)\nVR:虚拟现实技术(囊括计算机、电子信息、仿真技术于一体,其基本实现方式是计算机模拟虚拟环境从而给人以环境沉浸感。)",
       "id": "q42",
@@ -901,34 +915,60 @@
         {
           "id": "q42_p1",
           "text": "automation：自动化",
-          "score": 1.5
+          "score": 1.5,
+          "synonyms": [
+            "automation是自动化",
+            "automation自动化"
+          ]
         },
         {
           "id": "q42_p2",
           "text": "electrical：电气的",
-          "score": 1.5
+          "score": 1.5,
+          "synonyms": [
+            "electrical是电气的",
+            "electrical电气"
+          ]
         },
         {
           "id": "q42_p3",
           "text": "technology：技术",
-          "score": 1.5
+          "score": 1.5,
+          "synonyms": [
+            "technology是技术",
+            "technology技术"
+          ]
         },
         {
           "id": "q42_p4",
           "text": "intelligent：智能的",
-          "score": 1.5
+          "score": 1.5,
+          "synonyms": [
+            "intelligent是智能的",
+            "intelligent智能"
+          ]
         },
         {
           "id": "q42_p5",
           "text": "AI：人工智能（研究、开发用于模拟、延伸和扩展人的智能的理论、方法、技术及应用系统）",
           "score": 2.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "AI是人工智能",
+            "AI人工智能",
+            "人工智能"
+          ]
         },
         {
           "id": "q42_p6",
           "text": "VR：虚拟现实技术（计算机模拟虚拟环境从而给人以环境沉浸感）",
           "score": 2.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "VR是虚拟现实",
+            "VR虚拟现实",
+            "虚拟现实"
+          ]
         }
       ]
     },

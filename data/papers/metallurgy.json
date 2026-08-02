@@ -813,7 +813,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "氩气通过透气砖吹入钢包,强烈搅拌钢水,其作用和目的是什么?",
       "answer": "1、均匀钢水成分; 2、均匀钢水温度; 3、促使夹杂物碰撞上浮;",
       "id": "q41",
@@ -822,26 +822,37 @@
           "id": "q41_p1",
           "text": "均匀钢水成分",
           "score": 3.3333,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "成分均匀"
+          ]
         },
         {
           "id": "q41_p2",
           "text": "均匀钢水温度",
           "score": 3.3333,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "温度均匀"
+          ]
         },
         {
           "id": "q41_p3",
           "text": "促使夹杂物碰撞上浮",
           "score": 3.3334,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "夹杂物上浮",
+            "夹杂物碰撞长大",
+            "去除夹杂物"
+          ]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "结晶器保护渣的作用有哪些?",
       "answer": "绝热保温,防止钢液面结壳;隔绝空气,防止二次氧化; 吸收钢水中夹杂物; 改善润滑及结晶器传热",
       "id": "q42",
@@ -849,22 +860,26 @@
         {
           "id": "q42_p1",
           "text": "绝热保温，防止钢液面结壳",
-          "score": 2.5
+          "score": 2.5,
+          "synonyms": ["绝热保温"]
         },
         {
           "id": "q42_p2",
           "text": "隔绝空气，防止二次氧化",
-          "score": 2.5
+          "score": 2.5,
+          "synonyms": ["防止二次氧化"]
         },
         {
           "id": "q42_p3",
           "text": "吸收钢水中夹杂物",
-          "score": 2.5
+          "score": 2.5,
+          "synonyms": ["吸收夹杂", "净化钢水", "吸收非金属夹杂"]
         },
         {
           "id": "q42_p4",
           "text": "改善润滑及结晶器传热",
-          "score": 2.5
+          "score": 2.5,
+          "synonyms": ["润滑作用", "润滑坯壳", "改善润滑", "均匀传热", "控制传热"]
         }
       ]
     },
@@ -873,22 +888,23 @@
       "score": 20.0,
       "scoring_mode": "calculation",
       "calculation": {
-        "final_answers": [
+        "strategy": "static_values",
+        "steps": [
           {
-            "id": "silicomanganese",
-            "description": "硅锰合金加入量",
+            "id": "s1",
+            "description": "硅锰合金 753kg",
             "expected": 753,
             "score": 10,
-            "tolerance": 0.5,
-            "unit": "kg"
-          },
+            "tolerance": 3
+          }
+        ],
+        "final_answers": [
           {
-            "id": "ferrosilicon",
-            "description": "硅铁合金加入量",
+            "id": "f1",
+            "description": "硅铁 135kg",
             "expected": 135,
             "score": 10,
-            "tolerance": 0.5,
-            "unit": "kg"
+            "tolerance": 2
           }
         ]
       },

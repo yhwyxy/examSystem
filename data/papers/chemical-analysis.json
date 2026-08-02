@@ -904,25 +904,25 @@
           "question": "稀硫酸配置方法",
           "answer": "将浓硫酸徐徐加入水中并搅拌散热，不可将水加入酸中。",
           "score": 10.0,
-          "scoring_mode": "text",
+          "scoring_mode": "enumeration",
           "scoring_points": [
             {
               "id": "q42-1_p1",
-              "text": "将浓H2SO4徐徐加入水中",
+              "text": "将浓硫酸徐徐加入水中",
               "score": 3.0,
-              "required": true
+              "synonyms": ["浓硫酸加入水中", "酸入水", "浓硫酸缓慢加入水", "沿玻璃棒加入"]
             },
             {
               "id": "q42-1_p2",
               "text": "并加以搅拌以散热",
               "score": 3.0,
-              "required": true
+              "synonyms": ["搅拌", "散热", "不断搅拌"]
             },
             {
               "id": "q42-1_p3",
-              "text": "切不可反向进行，否则水迅速蒸发飞溅带出浓H2SO4伤人",
+              "text": "切不可反向进行，否则水迅速蒸发飞溅带出浓硫酸伤人",
               "score": 4.0,
-              "required": true
+              "synonyms": ["不可反向", "不能将水加入酸", "防止飞溅", "防止沸腾飞溅", "安全"]
             }
           ]
         }
@@ -960,6 +960,29 @@
               "text": "方程式配平正确",
               "score": 2.0
             }
+          ],
+          "extra_equivalences": [
+            [
+              "Na2CO3",
+              "无水碳酸钠",
+              "碳酸钠"
+            ],
+            [
+              "HCl",
+              "盐酸"
+            ],
+            [
+              "NaCl",
+              "氯化钠"
+            ],
+            [
+              "H2O",
+              "水"
+            ],
+            [
+              "CO2",
+              "二氧化碳"
+            ]
           ]
         },
         {
@@ -975,8 +998,37 @@
               "score": 10.0,
               "required": true
             }
+          ],
+          "extra_equivalences": [
+            [
+              "mol/L",
+              "摩尔每升"
+            ]
           ]
         }
+      ],
+      "extra_equivalences": [
+        [
+          "Na2CO3",
+          "无水碳酸钠",
+          "碳酸钠"
+        ],
+        [
+          "HCl",
+          "盐酸"
+        ],
+        [
+          "NaCl",
+          "氯化钠"
+        ],
+        [
+          "H2O",
+          "水"
+        ],
+        [
+          "CO2",
+          "二氧化碳"
+        ]
       ]
     }
   ]

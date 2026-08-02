@@ -451,7 +451,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "面向对象的特征有哪些",
       "id": "q17",
       "answer": "A、抽象：忽略与当前目标无关的方面，以便更充分地关注与当前目标有关的方面。\nB、继承：一种联结类的层次模型，允许和鼓励重用，提供明确表述共性的方法。\nC、封装：把过程和数据包围起来，对数据的访问只能通过已定义的界面。\nD、多态：允许不同类的对象对同一消息作出响应。",
@@ -513,7 +513,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "需求调研有哪些方法",
       "id": "q19",
       "answer": "观察法、体验法、问卷调查法、访谈法、单据分析法、报表分析法等。",
@@ -521,32 +521,59 @@
         {
           "id": "q19_p1",
           "text": "观察法",
-          "score": 1.5
+          "score": 1.5,
+          "synonyms": [
+            "观察法",
+            "现场观察"
+          ]
         },
         {
           "id": "q19_p2",
           "text": "体验法",
-          "score": 1.5
+          "score": 1.5,
+          "synonyms": [
+            "体验法",
+            "用户体验"
+          ]
         },
         {
           "id": "q19_p3",
           "text": "问卷调查法",
-          "score": 2.0
+          "score": 2.0,
+          "synonyms": [
+            "问卷调查",
+            "问卷"
+          ]
         },
         {
           "id": "q19_p4",
           "text": "访谈法",
-          "score": 2.0
+          "score": 2.0,
+          "synonyms": [
+            "访谈法",
+            "访谈",
+            "面谈",
+            "面对面"
+          ]
         },
         {
           "id": "q19_p5",
           "text": "单据分析或报表分析",
-          "score": 2.0
+          "score": 2.0,
+          "synonyms": [
+            "单据分析",
+            "报表分析"
+          ]
         },
         {
           "id": "q19_p6",
           "text": "其他合理的需求调研或市场分析方法",
-          "score": 1.0
+          "score": 1.0,
+          "synonyms": [
+            "会议研讨",
+            "头脑风暴",
+            "调研方法"
+          ]
         }
       ]
     },
@@ -588,6 +615,28 @@
           "text": "salary 大于 3000",
           "score": 2.0
         }
+      ],
+      "extra_equivalences": [
+        [
+          "SELECT",
+          "查询"
+        ],
+        [
+          "WHERE",
+          "条件"
+        ],
+        [
+          "emp_id",
+          "员工编号"
+        ],
+        [
+          "emp_name",
+          "员工姓名"
+        ],
+        [
+          "dept_name",
+          "部门名称"
+        ]
       ]
     },
     {

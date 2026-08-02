@@ -1,4 +1,4 @@
-  {
+{
   "paper_id": "welding",
   "name": "焊接专业",
   "exam_info": {
@@ -863,7 +863,7 @@
     {
       "type": "short_answer",
       "score": 13.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "焊条的选用原则有哪些?",
       "answer": "1.根据焊件木材的类型选用焊条\n2.根据焊缝的使用环境选用焊条\n3.根据焊条的抗裂性要求选用焊条\n4.根据焊接工艺要求选用焊条\n5.根据设备和施工条件选用焊条\n6.根据经济性选用焊条",
       "id": "q41",
@@ -871,39 +871,45 @@
         {
           "id": "q41_p1",
           "text": "根据焊件材料的类型选用焊条",
-          "score": 2.1667
+          "score": 2.1667,
+          "synonyms": ["等强度", "母材", "焊件材料"]
         },
         {
           "id": "q41_p2",
           "text": "根据焊缝的使用环境选用焊条",
-          "score": 2.1667
+          "score": 2.1667,
+          "synonyms": ["工作条件", "使用环境", "动载荷", "低温"]
         },
         {
           "id": "q41_p3",
           "text": "根据焊条的抗裂性要求选用焊条",
-          "score": 2.1667
+          "score": 2.1667,
+          "synonyms": ["抗裂性", "低氢型", "碱性焊条", "易裂"]
         },
         {
           "id": "q41_p4",
           "text": "根据焊接工艺要求选用焊条",
-          "score": 2.1667
+          "score": 2.1667,
+          "synonyms": ["工艺要求", "工艺性", "焊接工艺", "坡口"]
         },
         {
           "id": "q41_p5",
           "text": "根据设备和施工条件选用焊条",
-          "score": 2.1667
+          "score": 2.1667,
+          "synonyms": ["施工条件", "设备条件"]
         },
         {
           "id": "q41_p6",
           "text": "根据经济性选用焊条",
-          "score": 2.1665
+          "score": 2.1665,
+          "synonyms": ["经济性", "经济"]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 7.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "试述焊接的主要缺陷有哪些?",
       "answer": "未焊透、裂纹、夹渣、气孔、咬边、焊瘤、烧穿",
       "id": "q42",
@@ -948,7 +954,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "消除焊接残余应力的方法有哪些?",
       "answer": "1.整体高温回火\n2.局部高温回火\n3.机械拉伸法\n4.温差拉伸法\n5.振动法",
       "id": "q43",
@@ -983,7 +989,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "焊条型号E4315的含义是什么?",
       "answer": "E表示焊条;43表示熔敷金属抗拉强度的最小值430Mpa;1表示焊条使用于全位置焊接;5表示焊条药皮为低氢纳型,采用直流反接电源",
       "id": "q44",
@@ -998,19 +1004,32 @@
           "id": "q44_p2",
           "text": "43表示熔敷金属抗拉强度的最小值430Mpa",
           "score": 3.0,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "抗拉强度430",
+            "抗拉强度的最小值",
+            "抗拉强度不低于430"
+          ]
         },
         {
           "id": "q44_p3",
           "text": "1表示焊条适用于全位置焊接",
           "score": 2.5,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "全位置焊接"
+          ]
         },
         {
           "id": "q44_p4",
           "text": "5表示焊条药皮为低氢钠型，采用直流反接电源",
           "score": 2.5,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "低氢钠型",
+            "15表示",
+            "直流反接"
+          ]
         }
       ]
     }
