@@ -15,10 +15,6 @@ DSN = os.environ.get(
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def canonical(doc) -> bytes:
-    return json.dumps(doc, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
-
-
 def main() -> int:
     out = subprocess.run(
         ["psql", DSN, "-t", "-A", "-F", "|", "-c",
@@ -41,7 +37,9 @@ def main() -> int:
         snap["questions"] = papers[paper_id]["questions"]
         with open(snap_file, "w", encoding="utf-8") as f:
             json.dump(snap, f, ensure_ascii=False, indent=2)
-        digest = hashlib.sha256(canonical(snap)).hexdigest()
+        # 使用文件实际内容（与 snapshot.py 的校验方式一致）
+        file_content = open(snap_file, "r", encoding="utf-8").read()
+        digest = hashlib.sha256(file_content.encode("utf-8")).hexdigest()
         try:
             subprocess.run(["psql", DSN, "-q", "-c",
                            f"UPDATE exam_runs SET snapshot_hash='{digest}' WHERE id='{run_id}';"],
