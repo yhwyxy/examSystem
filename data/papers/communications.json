@@ -1021,10 +1021,17 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "table",
       "question": "关于IP地址划分,根据表格中的IP地址规律,请完善如下表格。",
       "answer": "类别\n网段名\n起始可用地址\n结束可用地址\n掩码\nA\n10.10.0.0\n10.10.0.1\n10.10.0.254\nB\n172.16.0.1\n255.255.0.0\nC\n192.168.1.0\n255.255.255.0\n类别\n网段名\n起始可用地址\n结束可用地址\n掩码\nA\n10.10.0.0\n10.10.0.1\n10.10.0.254\n255.255.255.0\nB\n172.16.0.0\n172.16.0.1\n172.16.255.254\n255.255.0.0\nC\n192.168.1.0\n192.168.1.1\n192.168.1.254\n255.255.255.0\nPAGE  4",
       "id": "q44",
+      "table": {"cells": [
+        {"label": "a", "expected": ["255.255.255.0"], "score": 2.0, "require_label_context": true},
+        {"label": "b", "expected": ["172.16.0.0"], "score": 2.0},
+        {"label": "b", "expected": ["172.16.255.254"], "score": 2.0},
+        {"label": "c", "expected": ["192.168.1.1"], "score": 2.0},
+        {"label": "c", "expected": ["192.168.1.254"], "score": 2.0}
+      ]},
       "scoring_points": [
         {
           "id": "q44_p1",

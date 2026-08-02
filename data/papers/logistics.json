@@ -1115,67 +1115,69 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "translation",
+      "translation": {"target_lang": "en"},
       "question": "请将以下中文翻译成英文：\n大幅，你好！我是指导员，如果下雨，为了保护产品，请关舱停止作业。",
       "answer": "HELLO!CHIEF OFFICER!I’M FOREMAN.IF IT IS RAINING, PLEASE CLOSE HATCH COVER AND STOP LOADING IN ORDER TO PROTECT THE PRODUCT.",
       "id": "q51",
       "scoring_points": [
         {
-          "id": "q51_p1",
-          "text": "HELLO! CHIEF OFFICER! I’M FOREMAN.",
+          "id": "p1",
+          "text": "HELLO! CHIEF OFFICER! I’M FOREMAN",
           "score": 2.5,
-          "required": true
+          "synonyms": ["chief officer", "foreman"]
         },
         {
-          "id": "q51_p2",
+          "id": "p2",
           "text": "IF IT IS RAINING",
           "score": 2.5,
-          "required": true
+          "synonyms": ["if it rains", "in case of rain", "when raining"]
         },
         {
-          "id": "q51_p3",
-          "text": "PLEASE CLOSE HATCH COVER AND STOP LOADING",
+          "id": "p3",
+          "text": "PLEASE CLOSE HATCH COVER",
           "score": 2.5,
-          "required": true
+          "synonyms": ["close the hatch", "close hatch"]
         },
         {
-          "id": "q51_p4",
-          "text": "IN ORDER TO PROTECT THE PRODUCT",
+          "id": "p4",
+          "text": "STOP WORKING",
           "score": 2.5,
-          "required": true
+          "synonyms": ["stop the operation", "stop cargo work", "suspend work"]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "translation",
+      "translation": {"target_lang": "en"},
       "question": "请将以下中文翻译成英文：\n船长，为了保持船体平衡，我们要换3、5舱作业，请打开舱口。",
       "answer": "CAPTAIN! IN ORDER TO KEEP SHIP’S BALANCE,  WE WILL SHIFT TO HOLD NO.3&5,PLEASE OPEN HATCH COVER.",
       "id": "q52",
       "scoring_points": [
         {
-          "id": "q52_p1",
-          "text": "CAPTAIN!",
+          "id": "p1",
+          "text": "CAPTAIN",
           "score": 2.0
         },
         {
-          "id": "q52_p2",
+          "id": "p2",
           "text": "IN ORDER TO KEEP SHIP’S BALANCE",
           "score": 3.0,
-          "required": true
+          "synonyms": ["keep the ship balanced", "keep ship balance", "even keel"]
         },
         {
-          "id": "q52_p3",
+          "id": "p3",
           "text": "WE WILL SHIFT TO HOLD NO.3&5",
           "score": 3.0,
-          "required": true
+          "synonyms": ["shift to no.3 and no.5", "shift to hold no.3", "no.3 and no.5 hatches"]
         },
         {
-          "id": "q52_p4",
+          "id": "p4",
           "text": "PLEASE OPEN HATCH COVER",
           "score": 2.0,
-          "required": true
+          "synonyms": ["open the hatch", "open hatch"]
         }
       ]
     }
