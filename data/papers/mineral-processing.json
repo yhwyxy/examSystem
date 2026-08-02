@@ -813,7 +813,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "calculation",
       "question": "一台360m2的烧结机月产量为33.5万吨,环冷余热每小时产气为35吨,一个月作业时间为30天,问下该烧结机吨矿产气是多少kg/t?",
       "answer": "吨矿产气量=35*24*30*1000/335000=75.22kg/t",
       "id": "q42",
@@ -830,7 +830,28 @@
           "score": 6.0,
           "required": true
         }
-      ]
+      ],
+      "calculation": {
+        "strategy": "static_values",
+        "steps": [
+          {
+            "id": "s1",
+            "description": "月产气量 25200 吨",
+            "expected": 25200,
+            "score": 4,
+            "tolerance": 1
+          }
+        ],
+        "final_answers": [
+          {
+            "id": "f1",
+            "description": "吨矿产气 kg/t",
+            "expected": 75.22,
+            "score": 6,
+            "tolerance": 0.5
+          }
+        ]
+      }
     },
     {
       "type": "short_answer",

@@ -169,6 +169,8 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
                     or question.get("code_language"))
     if mode_raw == "code" or (mode_raw == "" and has_lang):
         mode = ScoringMode.CODE
+    elif mode_raw == "calculation" and isinstance(question.get("calculation"), dict):
+        mode = ScoringMode.CALCULATION
     else:
         mode = ScoringMode.TEXT
     scoring_points = _structured_scoring_points(question)
@@ -200,8 +202,33 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         "max_score": float(question.get("score", 0) or 0),
         "scoring_mode": mode,
         "scoring_points": sp_list,
+        "scoring_config": _build_scoring_options(question),
     }
     return _build_scoring_request_kwargs(request_kwargs)
+
+
+def _build_scoring_options(question: dict[str, Any]) -> Any | None:
+    """题目带 calculation 配置或业务同义组时构造请求级 ScoringOptions。"""
+    calc = question.get("calculation")
+    eqs = question.get("extra_equivalences")
+    if not isinstance(calc, dict) and not eqs:
+        return None
+    try:
+        from subjective_scoring import ScoringOptions
+    except ImportError:
+        from subjective_scoring.models.schemas import ScoringOptions  # type: ignore
+    payload: dict[str, Any] = {}
+    if isinstance(calc, dict):
+        payload["calculation"] = calc
+    if isinstance(eqs, list) and eqs:
+        payload["text_bounded_corrections"] = {
+            "extra_equivalences": [
+                tuple(str(x) for x in g)
+                for g in eqs
+                if isinstance(g, list) and len(g) >= 2
+            ],
+        }
+    return ScoringOptions.model_validate(payload)
 
 
 def _structured_scoring_points(

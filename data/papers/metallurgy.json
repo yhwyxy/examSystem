@@ -884,22 +884,23 @@
       "score": 20.0,
       "scoring_mode": "calculation",
       "calculation": {
-        "final_answers": [
+        "strategy": "static_values",
+        "steps": [
           {
-            "id": "silicomanganese",
-            "description": "硅锰合金加入量",
+            "id": "s1",
+            "description": "硅锰合金 753kg",
             "expected": 753,
             "score": 10,
-            "tolerance": 0.5,
-            "unit": "kg"
-          },
+            "tolerance": 3
+          }
+        ],
+        "final_answers": [
           {
-            "id": "ferrosilicon",
-            "description": "硅铁合金加入量",
+            "id": "f1",
+            "description": "硅铁 135kg",
             "expected": 135,
             "score": 10,
-            "tolerance": 0.5,
-            "unit": "kg"
+            "tolerance": 2
           }
         ]
       },
