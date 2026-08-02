@@ -463,6 +463,13 @@ def grade_subjective(
         entry = _empty_subjective_detail(question, preserve=preserve)
         return (0.0, 0.0, entry["review_status"], entry)
 
+    # 精确评分模式分派 — 命中则直接返回，不经过 text reranker
+    scoring_mode = question.get("scoring_mode") or ""
+    if scoring_mode:
+        result = _grade_by_exact_mode(scoring_mode, question, student_answer, preserve)
+        if result is not None:
+            return result
+
     ssvc = get_subjective_service()
     request = build_scoring_request(question, student_answer)
     result = ssvc.score(request)
@@ -550,6 +557,91 @@ def _grade_composite(
     }
     overall = aggregate_review_status(sub_results)
     return (round(final_total, 6), round(machine_total, 6), overall, entry)
+
+
+_EXACT_SCORER_MAP: dict[str, str] = {
+    "enumeration": "score_enumeration",
+    "translation": "score_translation",
+    "ledger": "score_ledger",
+    "table": "score_table",
+    "case_analysis": "score_case_analysis",
+}
+
+
+def _grade_by_exact_mode(
+    mode: str, question: dict, student_answer: str,
+    preserve: dict | None = None,
+) -> tuple[float, float, str, dict] | None:
+    """精确评分模式分派；返回 None 表示走 text reranker 兜底。"""
+    fn_name = _EXACT_SCORER_MAP.get(mode)
+    if not fn_name:
+        return None
+    if fn_name == "score_case_analysis":
+        from .case_analysis_scorer import score_case_analysis as fn
+    else:
+        from . import exact_scorers
+        fn = getattr(exact_scorers, fn_name)
+    result = fn(question, student_answer)
+    entry = _exact_result_to_detail(question, student_answer, result, preserve)
+    return (round(float(entry["final_score"]), 6),
+            round(float(entry["machine_score"]), 6),
+            entry["review_status"], entry)
+
+
+def _exact_result_to_detail(
+    question: dict, student_answer: str, result, preserve: dict | None = None,
+) -> dict:
+    """ExactScoreResult -> 与 detail_from_scoring_result 同结构的 entry。"""
+    max_score = float(question.get("score", 0) or 0)
+    machine = max(0.0, min(max_score, float(result.score)))
+    manual = bool((preserve or {}).get("manually_reviewed"))
+    final = float((preserve or {}).get("final_score", machine)) if manual else machine
+    qid = question.get("id")
+    review_status = _exact_review_status(result.review_level)
+    need_manual = result.review_level == "manual_required"
+    confidence = 1.0 if result.review_level == "auto_pass" else 0.5
+    inner = {
+        "track": f"ExactScorer({question.get('scoring_mode')})",
+        "reason": result.detail.get("reason"),
+        "warnings": result.detail.get("warnings", []),
+        "max_score": max_score, "confidence": confidence,
+        "final_score": machine, "machine_score": machine,
+        "question_id": qid, "review_level": result.review_level,
+        "scoring_mode": question.get("scoring_mode"),
+        "matched_points": result.detail.get("matched_points", []),
+        "missed_points": result.detail.get("missed_points", []),
+        "student_answer": student_answer,
+        "reference_answer": question.get("answer", ""),
+        "manually_reviewed": manual, "need_manual_review": need_manual,
+    }
+    return {
+        "id": qid, "question_id": qid, "type": question.get("type"),
+        "question": question.get("question", ""),
+        "reference_answer": question.get("answer", ""),
+        "student_answer": student_answer,
+        "max_score": max_score,
+        "machine_score": machine, "score": machine, "final_score": final,
+        "confidence": confidence,
+        "grading_method": f"exact:{question.get('scoring_mode')}",
+        "reason": result.detail.get("reason"),
+        "review_status": review_status,
+        "manually_reviewed": manual,
+        "low_confidence": need_manual,
+        "need_manual_review": need_manual,
+        "lowest_confidence_flagged": need_manual,
+        "detail": inner,
+    }
+
+
+def _exact_review_status(level: str) -> str:
+    """与 _legacy_review_status 同语义：级别 -> 单题 review_status。"""
+    if level == "auto_pass":
+        return "high_confidence"
+    if level == "suggested_review":
+        return "reviewed"
+    if level == "manual_required":
+        return "need_review"
+    return "low_confidence"
 
 
 def _empty_subjective_detail(question: dict[str, Any],
