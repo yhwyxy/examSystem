@@ -861,7 +861,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "环境污染主要有几种?(至少答出五种,每种2分,共10分)",
       "answer": "大气污染、水污染、土壤污染、食品污染、放射性污染、噪音污染",
       "id": "q41",
@@ -896,7 +896,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "环境监测的对象有哪五种?(每种2分,共10分)",
       "answer": "大气、水体、土壤、生物、噪声",
       "id": "q42",
@@ -931,7 +931,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "水处理的方法?(至少答出五种,每种2分,共10分)",
       "answer": "(1)沉淀物过滤法;(2)硬水软化法;(3)超过滤法;(4)蒸馏法;(5)紫外线消毒法;(6)生物化学法;(7)正向渗透法(渗透法);(8)物理化学法;(9)自然处理法;(10)去离子法;(11)反渗透法;(12) 声波处理法;(13)离子交换法;(14)逆渗透法",
       "id": "q43",
@@ -966,28 +966,123 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "你对当前我公司的环保形式有哪些了解(在环保上有哪些重要工作)?(至少有2点符合公司环保形式,每点5分,共10分)",
       "answer": "(1)超低排放;(2)清江行动;(3)钢渣清理;(4)除尘改造;(5)棚化改造;(5)清污分流(雨污分流);(6)噪声整理;(7)209号文件;(8)脱硫脱销(烟气脱硫);(9)危废库建设;(10)煤气均压煤气回收改造;(11)皮带转运站通廊封闭;(12)花园式工厂改造等;(13)除尘灰气力输送等。",
       "id": "q44",
       "scoring_points": [
         {
           "id": "q44_p1",
-          "text": "答出参考答案中的公司环保工作之一（如超低排放、清江行动、钢渣清理、除尘改造、棚化改造、清污分流、脱硫脱硝等）",
+          "text": "超低排放",
           "score": 5.0,
-          "required": true
+          "synonyms": [
+            "超低排放改造"
+          ]
         },
         {
           "id": "q44_p2",
-          "text": "答出参考答案中的公司环保工作之二",
+          "text": "清江行动",
           "score": 5.0,
-          "required": true
+          "synonyms": [
+            "清江"
+          ]
+        },
+        {
+          "id": "q44_p3",
+          "text": "钢渣清理",
+          "score": 5.0,
+          "synonyms": [
+            "钢渣"
+          ]
+        },
+        {
+          "id": "q44_p4",
+          "text": "除尘改造",
+          "score": 5.0,
+          "synonyms": [
+            "除尘"
+          ]
+        },
+        {
+          "id": "q44_p5",
+          "text": "棚化改造",
+          "score": 5.0,
+          "synonyms": [
+            "棚化",
+            "料场棚化"
+          ]
+        },
+        {
+          "id": "q44_p6",
+          "text": "清污分流",
+          "score": 5.0,
+          "synonyms": [
+            "雨污分流"
+          ]
+        },
+        {
+          "id": "q44_p7",
+          "text": "噪声整理",
+          "score": 5.0,
+          "synonyms": [
+            "噪声",
+            "噪音治理"
+          ]
+        },
+        {
+          "id": "q44_p8",
+          "text": "209号文件",
+          "score": 5.0,
+          "synonyms": [
+            "209文件"
+          ]
+        },
+        {
+          "id": "q44_p9",
+          "text": "脱硫脱硝",
+          "score": 5.0,
+          "synonyms": [
+            "脱硫",
+            "烟气脱硫",
+            "脱硝"
+          ]
+        },
+        {
+          "id": "q44_p10",
+          "text": "危废库建设",
+          "score": 5.0,
+          "synonyms": [
+            "危废库",
+            "危废"
+          ]
+        },
+        {
+          "id": "q44_p11",
+          "text": "煤气回收改造",
+          "score": 5.0,
+          "synonyms": [
+            "煤气回收",
+            "煤气均压"
+          ]
+        },
+        {
+          "id": "q44_p12",
+          "text": "皮带通廊封闭",
+          "score": 5.0,
+          "synonyms": [
+            "皮带通廊",
+            "通廊封闭"
+          ]
+        },
+        {
+          "id": "q44_p13",
+          "text": "花园式工厂",
+          "score": 5.0,
+          "synonyms": [
+            "花园式工厂改造"
+          ]
         }
-      ],
-      "open_ended": true,
-      "open_ended_kind": "multi_valid",
-      "open_ended_note": "题干要求结合本公司环保实际至少答2点；参考答案是示例清单，不是唯一固定表述。",
-      "require_manual_review": true
+      ]
     }
   ]
 }

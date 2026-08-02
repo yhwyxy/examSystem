@@ -857,7 +857,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "提高自身安全素质应具备哪些要素?",
       "answer": "应掌握安全意识、懂得安全知识、熟知有关安全的规章制度和操作规程、掌握安全技能,遵守和维护公共秩序、培养和提高紧急避险能力",
       "id": "q41",
@@ -897,7 +897,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "什么是三违?",
       "answer": "领导和管理人员的(违章指挥);操作人员的(违规操作)和违反劳动纪律,统称为“三违”行为。",
       "id": "q42",
@@ -912,20 +912,27 @@
           "id": "q42_p2",
           "text": "违规操作",
           "score": 3.3333,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "违章作业",
+            "违章操作"
+          ]
         },
         {
           "id": "q42_p3",
           "text": "违反劳动纪律",
           "score": 3.3334,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "劳动纪律"
+          ]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 20.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "《安全生产法》明确了员工的八大权利,请简要说明。",
       "answer": "知情权,建议权,批评、检举、控告权,拒绝权,紧急避险权,要求赔偿权,获得符合国家标准或者行业标准劳动保护用品的权利,获得安全生产教育和培训的权利。",
       "id": "q43",

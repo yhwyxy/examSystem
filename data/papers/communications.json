@@ -881,7 +881,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "从基本结构上看,一台电脑是由哪五部分组成的,而现在其中的前两部分已经被集成在CPU里了。",
       "answer": "运算器、控制器、存储器、输入设备和输出设备",
       "id": "q41",
@@ -916,7 +916,7 @@
     {
       "type": "short_answer",
       "score": 15.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "请写出ISO/OSI参考模型的七层名称。",
       "answer": "应用层、表示层、会话层、传输层、网络层、数据链路层、物理层",
       "id": "q42",
@@ -961,7 +961,7 @@
     {
       "type": "short_answer",
       "score": 15.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "借助于端口,在防火墙或是交换机上可以做各种各样的限制策略:请写出以下端口所对应的服务或是协议:23、53、80、443、3389。",
       "answer": "23-telnet,53-dns,80-http,443-https,3389-windows远程桌面",
       "id": "q43",
@@ -969,27 +969,52 @@
         {
           "id": "q43_p1",
           "text": "23-telnet",
-          "score": 3.0
+          "score": 3.0,
+          "synonyms": [
+            "23:telnet",
+            "23 telnet",
+            "telnet"
+          ]
         },
         {
           "id": "q43_p2",
           "text": "53-dns",
-          "score": 3.0
+          "score": 3.0,
+          "synonyms": [
+            "53:dns",
+            "53 dns",
+            "dns"
+          ]
         },
         {
           "id": "q43_p3",
           "text": "80-http",
-          "score": 3.0
+          "score": 3.0,
+          "synonyms": [
+            "80:http",
+            "80 http",
+            "http"
+          ]
         },
         {
           "id": "q43_p4",
           "text": "443-https",
-          "score": 3.0
+          "score": 3.0,
+          "synonyms": [
+            "443:https",
+            "443 https",
+            "https"
+          ]
         },
         {
           "id": "q43_p5",
           "text": "3389-windows远程桌面",
-          "score": 3.0
+          "score": 3.0,
+          "synonyms": [
+            "3389:windows远程桌面",
+            "3389 windows远程桌面",
+            "windows远程桌面"
+          ]
         }
       ]
     },

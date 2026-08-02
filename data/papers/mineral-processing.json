@@ -788,7 +788,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "矿石可选性研究的三个阶段:",
       "answer": "1)实验室试验 2)中间试验  3)工业试验。",
       "id": "q41",
@@ -863,7 +863,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "矿物粉碎的目的。",
       "answer": "(1)使物料粒度减小;\n(2)使有用矿物与脉石矿物充分单体解离。",
       "id": "q44",

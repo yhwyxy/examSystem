@@ -451,7 +451,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "面向对象的特征有哪些",
       "id": "q17",
       "answer": "A、抽象：忽略与当前目标无关的方面，以便更充分地关注与当前目标有关的方面。\nB、继承：一种联结类的层次模型，允许和鼓励重用，提供明确表述共性的方法。\nC、封装：把过程和数据包围起来，对数据的访问只能通过已定义的界面。\nD、多态：允许不同类的对象对同一消息作出响应。",
@@ -513,7 +513,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "需求调研有哪些方法",
       "id": "q19",
       "answer": "观察法、体验法、问卷调查法、访谈法、单据分析法、报表分析法等。",

@@ -852,7 +852,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "简述余热锅炉的汽水流程",
       "answer": "给水泵——省煤器——汽包——下降管——水冷壁——汽包——(汽水分离)——过热器——过热器集箱",
       "id": "q41",
@@ -942,7 +942,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "按启动前汽轮机汽缸温度分,汽轮机启动有几种方式?",
       "answer": "冷态启动;温态启动;热态启动;极热态启动。",
       "id": "q43",

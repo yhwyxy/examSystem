@@ -858,7 +858,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "从合金化角度考虑,提高钢的韧度主要有哪些途径?",
       "answer": "(1)加入Ti、V、W、Mo等强碳化物形成元素,细化晶粒;\n(2)提高回火稳定性,加入Ti、V等强碳化物形成元素和Si元素;\n(3)改善基体韧性,主要是加入Ni元素;\n(4)细化碳化物,如加入Cr、V等元素;\n(5)降低或消除钢的回火脆性,主要是Mo、W元素比较有效。",
       "id": "q41",
@@ -987,7 +987,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "试述热变形对金属组织和性能的影响。",
       "answer": "(1)改变铸锭和坯料的组织和性能;\n(2)产生热变形纤维组织(流线);\n(3)可能产生带状组织;\n(4)可能产生热组织与魏氏组织。",
       "id": "q44",

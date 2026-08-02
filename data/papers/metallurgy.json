@@ -813,7 +813,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "氩气通过透气砖吹入钢包,强烈搅拌钢水,其作用和目的是什么?",
       "answer": "1、均匀钢水成分; 2、均匀钢水温度; 3、促使夹杂物碰撞上浮;",
       "id": "q41",
@@ -822,26 +822,37 @@
           "id": "q41_p1",
           "text": "均匀钢水成分",
           "score": 3.3333,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "成分均匀"
+          ]
         },
         {
           "id": "q41_p2",
           "text": "均匀钢水温度",
           "score": 3.3333,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "温度均匀"
+          ]
         },
         {
           "id": "q41_p3",
           "text": "促使夹杂物碰撞上浮",
           "score": 3.3334,
-          "required": true
+          "required": true,
+          "synonyms": [
+            "夹杂物上浮",
+            "夹杂物碰撞长大",
+            "去除夹杂物"
+          ]
         }
       ]
     },
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "结晶器保护渣的作用有哪些?",
       "answer": "绝热保温,防止钢液面结壳;隔绝空气,防止二次氧化; 吸收钢水中夹杂物; 改善润滑及结晶器传热",
       "id": "q42",

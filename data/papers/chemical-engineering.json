@@ -875,7 +875,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "通过哪些途径可以提高化学反应的效果?",
       "answer": "控制反应的温度,压力,反应时间在适宜的范围之内,恰当的催化剂。",
       "id": "q41",
@@ -973,7 +973,7 @@
     {
       "type": "short_answer",
       "score": 10.0,
-      "scoring_mode": "text",
+      "scoring_mode": "enumeration",
       "question": "催化剂在化工产品工业生产上有何意义?",
       "answer": "催化剂在工业生产上可以加快主反应速度、减少副反应。使反应定向进行,缓和反应条件,降低对设备的要求,从而提高设备的生产能力和降低产品成本。",
       "id": "q43",
