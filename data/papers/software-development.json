@@ -588,6 +588,28 @@
           "text": "salary 大于 3000",
           "score": 2.0
         }
+      ],
+      "extra_equivalences": [
+        [
+          "SELECT",
+          "查询"
+        ],
+        [
+          "WHERE",
+          "条件"
+        ],
+        [
+          "emp_id",
+          "员工编号"
+        ],
+        [
+          "emp_name",
+          "员工姓名"
+        ],
+        [
+          "dept_name",
+          "部门名称"
+        ]
       ]
     },
     {
