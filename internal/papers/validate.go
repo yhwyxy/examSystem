@@ -336,6 +336,7 @@ func validateSubjectiveModeAndLanguage(mu *MultiError, q Question, prefix string
 }
 
 // validateAnswerTextOrList: short_answer answer 必填非空 (string 或 list[string]).
+// 开放题: answer="" 且 scoring_points 为空列表时跳过校验 (直接走人工复核).
 func validateAnswerTextOrList(mu *MultiError, q Question, prefix string) {
 	ans, ok := q["answer"]
 	if !ok {
@@ -345,6 +346,10 @@ func validateAnswerTextOrList(mu *MultiError, q Question, prefix string) {
 	switch a := ans.(type) {
 	case string:
 		if a == "" {
+			// 开放题: 无参考答案, 无评分点, 全凭人工复核
+			if isOpenEnded(q) {
+				return
+			}
 			mu.add("missing", prefix+": answer must be non-empty")
 		}
 	case []any:
@@ -354,6 +359,19 @@ func validateAnswerTextOrList(mu *MultiError, q Question, prefix string) {
 	default:
 		mu.add("type", prefix+": answer must be string or list")
 	}
+}
+
+// isOpenEnded 判断是否为开放题 (无评分点的纯人工复核题).
+func isOpenEnded(q Question) bool {
+	raw, ok := q["scoring_points"]
+	if !ok {
+		return false
+	}
+	pts, ok := raw.([]any)
+	if !ok {
+		return false
+	}
+	return len(pts) == 0
 }
 
 // validateSubQuestions: 复合题子题分值之和等于父题分值, 子题字段也合规.
