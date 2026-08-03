@@ -347,11 +347,14 @@ func (s *Service) Regrade(ctx context.Context, in RegradeInput) (*RegradeResult,
 	}
 	_ = tag.RowsAffected() // 仅记 causal, worker 续租时校验自己的 generation 是否被 superseded
 
-	// 3) generation+1 + review_status 改回 'grading', 启动 regrade reflow.
+	// 3) generation+1 + grading_status 回 pending + review_status 改回 'grading', 启动 regrade reflow.
 	//    守门: WHERE grading_generation = $curGen 防 regrade 未决时学生又答卷撕裂数据.
+	//    grading_error 同步清空 (plan Task 10: 重判时 grading_status=pending、grading_error=null).
 	tag, err = tx.Exec(ctx, `
 		UPDATE submissions
 		SET grading_generation = grading_generation + 1,
+		    grading_status = 'pending',
+		    grading_error = NULL,
 		    review_status = 'grading',
 		    reviewed_at = NULL,
 		    reviewer_note = NULL

@@ -1130,14 +1130,16 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 			totScore                                      float64
 			submittedAt                                   time.Time
 			gradingDetail                                 []byte
+			gradingErr                                    string
 		)
 		err = deps.Pool.QueryRow(r.Context(),
 			`SELECT paper_id, run_id, employee_id, name, grading_status,
 				grading_generation, review_status, total_score, submitted_at,
+				coalesce(grading_error, ''),
 				coalesce(grading_detail_json, '[]'::jsonb)
 			 FROM submissions WHERE id = $1`, id).Scan(
 			&paperID, &runID, &empID, &name, &gstatus, &gen, &rstatus, &totScore,
-			&submittedAt, &gradingDetail)
+			&submittedAt, &gradingErr, &gradingDetail)
 		if err != nil {
 			if strings.Contains(err.Error(), "no rows") {
 				writeAdminError(w, http.StatusNotFound, "SUBMISSION_NOT_FOUND",
@@ -1192,6 +1194,7 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 				"employee_id": empID, "name": name,
 				"grading_status": gstatus, "grading_generation": gen,
 				"review_status": rstatus, "total_score": totScore,
+				"grading_error": gradingErr,
 				"submitted_at": submittedAt, "grading_detail": dj,
 			},
 			"review_logs": logs,

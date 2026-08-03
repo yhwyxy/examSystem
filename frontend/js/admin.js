@@ -24,6 +24,10 @@ const STATUS_META = {
 //  - 异常: review_status=manual_fallback 未定义时回 'unknown'.
 function effectiveStatus(sub) {
   if (sub?.grading_status === 'grading') return 'grading';
+  // grading_status='failed' 时即使 review_status 陈旧(仍 grading) 也显式映射为
+  // 待复核, 避免"评分失败"的提交一直显示"评分中" (worker 判死会同步
+  // review_status='need_review', 此处为防御历史数据).
+  if (sub?.grading_status === 'failed') return 'need_review';
   const rs = sub?.review_status;
   if (rs == null) return 'unknown';
   if (rs in STATUS_META) return rs;

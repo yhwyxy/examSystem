@@ -54,6 +54,13 @@ function render() {
   const roundLabel = submission.run_is_legacy ? '历史数据' : (submission.round_no != null ? `第${submission.round_no}轮` : '');
   $('summary').textContent = `${submission.name || ''} / ${submission.employee_id || ''} / ${roundLabel ? roundLabel + ' / ' : ''}总分 ${submission.total_score ?? ''} / ${submission.review_status || ''}`;
 
+  // 失败态优先于"评分中"判断: grading_status='failed' 时显示失败原因,
+  // 提供重新机器判分入口 (页面顶部 regradeBtn 已常驻).
+  if (submission.grading_status === 'failed') {
+    $('detail').innerHTML = `<div class="panel result-panel"><h2>评分失败</h2><p class="muted form-note">该试卷自动评分多次尝试后失败${submission.grading_error ? `，错误原因：${esc(submission.grading_error)}` : ''}。可点击右上角「重新机器判分」重试，或联系管理员人工处理。</p><button class="btn" onclick="location.reload()">刷新页面</button></div>`;
+    return;
+  }
+
   if (submission.review_status === 'grading') {
     $('detail').innerHTML = '<div class="panel result-panel"><h2>评分进行中</h2><p class="muted form-note">该试卷正在后台评分，请稍后刷新页面查看结果。</p><button class="btn" onclick="location.reload()">刷新页面</button></div>';
     return;

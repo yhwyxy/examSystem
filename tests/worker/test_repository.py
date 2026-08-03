@@ -199,7 +199,17 @@ def test_fail_requeue_then_dead(grading_setup):
     j3 = repo.claim_job(c, "w1", 30); assert j3.attempts == 3
     out3 = repo.fail_job(c, j3, error_msg="boom", base_backoff=0)
     assert out3 == "dead", f"third fail expect dead, got {out3}"
-    c.commit(); c.close()
+    c.commit()
+    # job 判死必须同步 submissions -> grading_status='failed' + grading_error +
+    # review_status='need_review', 否则管理端永远显示"评分中".
+    cur = c.cursor()
+    cur.execute("SELECT grading_status, grading_error, review_status "
+                "FROM submissions WHERE id=%s", (j3.submission_id,))
+    gstatus, gerr, rstatus = cur.fetchone()
+    assert gstatus == "failed", f"submission grading_status={gstatus} want failed"
+    assert gerr == "boom", f"grading_error={gerr!r} want 'boom'"
+    assert rstatus == "need_review", f"review_status={rstatus} want need_review"
+    c.close()
 
 
 def test_renew_lease_returns_true_within_window(grading_setup):

@@ -236,6 +236,17 @@ WHERE id = %(job_id)s
 RETURNING id;
 """
 
+# job 判死时同步失败状态到 submissions: 否则 grading_status 永远停在
+# pending/grading, 管理端一直显示"评分中"且无失败提示 (plan Task 11: failed 需
+# 显示 grading_error 摘要, 允许人工兜底复核/重新评分).
+_FAIL_DEAD_SUBMISSION_SQL = """
+UPDATE submissions
+SET grading_status = 'failed',
+    grading_error = %(error_msg)s,
+    review_status = 'need_review'
+WHERE id = %(submission_id)s
+"""
+
 _FAIL_LOST_SET_SQL = """
 UPDATE grading_jobs
 SET last_error = %(error_msg)s,
@@ -263,6 +274,10 @@ def fail_job(conn, job: Job, error_msg: str, base_backoff: int = 2) -> str:
     if attempts >= job.max_attempts:
         conn.execute(_FAIL_DEAD_SQL, {
             "job_id": job.id, "error_msg": error_msg[:2000]
+        })
+        conn.execute(_FAIL_DEAD_SUBMISSION_SQL, {
+            "submission_id": job.submission_id,
+            "error_msg": error_msg[:2000],
         })
         return FAIL_DEAD
     backoff = min(3600, base_backoff * (2 ** (attempts - 1)))
