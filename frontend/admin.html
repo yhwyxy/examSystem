@@ -29,12 +29,11 @@
       </div>
       <nav class="nav-list" aria-label="后台导航">
         <button class="nav-item active" type="button" data-view="overview">总览</button>
-        <button class="nav-item" type="button" data-view="papers">试卷 / 专业</button>
+        <button class="nav-item" type="button" data-view="papers">试卷</button>
         <button class="nav-item" type="button" data-view="publish">考试管理</button>
         <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
-        <a class="nav-item" href="/">考试端</a>
+        <a class="nav-item" href="/exam">考试端</a>
       </nav>
-      <div class="sidebar-note">默认本地配置可直接进入后台；生产环境请启用认证并配置强密码。</div>
     </aside>
 
     <main class="workspace">
@@ -47,7 +46,7 @@
               <p class="muted">成绩统计、人工复核、导出 Excel。</p>
             </div>
             <div class="toolbar">
-              <a class="btn secondary" href="/">考试端</a>
+              <a class="btn secondary" href="/exam">考试端</a>
               <button class="btn" id="exportBtn" type="button">导出 Excel</button>
             </div>
           </header>
@@ -59,9 +58,21 @@
                 <h2>快捷入口</h2>
               </div>
             </div>
-            <div class="toolbar">
-              <button class="btn secondary" type="button" data-view-jump="publish">去考试管理</button>
-              <button class="btn secondary" type="button" data-view-jump="submissions">查看成绩列表</button>
+            <div class="action-grid">
+              <button class="action-card" type="button" data-view-jump="publish">
+                <span class="action-card-body">
+                  <strong>考试管理</strong>
+                  <small>发布考试、生成链接与二维码</small>
+                </span>
+                <span class="action-card-arrow" aria-hidden="true">→</span>
+              </button>
+              <button class="action-card" type="button" data-view-jump="submissions">
+                <span class="action-card-body">
+                  <strong>成绩列表</strong>
+                  <small>搜索、筛选、复核与导出</small>
+                </span>
+                <span class="action-card-arrow" aria-hidden="true">→</span>
+              </button>
             </div>
           </section>
         </section>
@@ -71,7 +82,7 @@
           <header class="topbar">
             <div>
               <p class="eyebrow">PAPERS</p>
-              <h1>试卷 / 专业</h1>
+              <h1>试卷</h1>
               <p class="muted">每个专业一份当前试卷；非考试阶段可自由改题。</p>
             </div>
             <div class="toolbar">

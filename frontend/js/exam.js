@@ -169,7 +169,7 @@ async function loadExam() {
   state.paperId = getPaperIdFromUrl();
   state.runToken = getRunTokenFromUrl();
   if (!state.paperId) {
-    showFatal('请使用管理员发放的专业考试链接（地址中需包含 paper 参数）。');
+    showFatal('当前无可用考试，请联系管理员发布考试链接。');
     throw new Error('缺少 paper 参数');
   }
 
@@ -182,7 +182,7 @@ async function loadExam() {
     });
   } else {
     if (!state.runToken) {
-      showFatal('请使用管理员发放的考试链接（地址中需包含 run 参数，例如 /exam?paper=mech&run=...）。');
+      showFatal('当前无可用考试，请联系管理员发布考试链接。');
       throw new Error('缺少 run 参数');
     }
     res = await fetch(`/api/exam?paper=${encodeURIComponent(state.paperId)}&run=${encodeURIComponent(state.runToken)}`);

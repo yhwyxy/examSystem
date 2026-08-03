@@ -574,7 +574,7 @@ a.nav-item:hover {
 
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 12px;
   margin: 18px 0;
 }
@@ -602,6 +602,71 @@ a.nav-item:hover {
   color: var(--muted);
   font-size: 13px;
   font-weight: 500;
+}
+
+.overview-summary .section-head {
+  margin-bottom: 10px;
+}
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.action-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  min-height: 72px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.action-card:hover {
+  border-color: var(--blue);
+  box-shadow: var(--shadow-hover);
+}
+
+.action-card:active {
+  transform: scale(0.99);
+}
+
+.action-card-body {
+  display: grid;
+  gap: 2px;
+}
+
+.action-card-body strong {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.action-card-body small {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.action-card-arrow {
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  transition: transform 0.15s ease, color 0.15s ease;
+}
+
+.action-card:hover .action-card-arrow {
+  color: var(--blue);
+  transform: translateX(3px);
 }
 
 .publish-layout {
