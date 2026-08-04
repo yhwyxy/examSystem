@@ -32,13 +32,14 @@ def test_scores_points_with_injected_similarity():
 
     assert result.scorer == "TextRerankerScorer"
     assert result.scoring_mode is ScoringMode.TEXT
-    assert result.score == 4.5  # 低于支持阈值的评分点不再贡献残余分
+    # v0.1.5+ 起 reject_when_no_supported 默认 False: UNKNOWN 点贡献 calibrated_sim * score 残余分
+    assert result.score == 5.5  # 0.9*5 (p1 supported) + 0.2*5 (p2 unknown 残余分)
     assert len(result.matched_evidence) == 1
     assert result.matched_evidence[0].point_id == "p1"
     assert result.missed_evidence[0].point_id == "p2"
     assert result.matched_evidence[0].relation is PointRelation.SUPPORTED
     assert result.missed_evidence[0].relation is PointRelation.UNKNOWN
-    assert result.missed_evidence[0].score == 0.0
+    assert result.missed_evidence[0].score == 1.0
     assert result.force_manual_review is False
     assert result.metadata["model"] == "injected"
 

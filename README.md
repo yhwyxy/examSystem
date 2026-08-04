@@ -31,6 +31,102 @@ DATABASE_URL='postgres://...' python -m scoring_worker
 - 员工考试端：`http://localhost:8000/exam?paper=专业编码&run=轮次token`（由管理端发布后生成）
 - 管理后台：http://localhost:8000/admin（试卷录入 / 考试管理）
 
+## Windows 10 源码部署（非 Docker）
+
+### 1. 软件清单（按顺序安装）
+
+- `Git` — 拉取仓库；`uv sync` 拉取 `subjective-scoring`（GitHub tag）也需要它
+- `Go 1.25+` — `go.mod` 写死 `go 1.25.0`，装低了会直接报错
+- `PostgreSQL 18` — EDB 官方安装包，自带 `psql` / `pg_isready`，需加入 PATH
+- `Python 3.12.x` — **必须 3.12**，`scoring_worker` 限定 `>=3.12,<3.13`，3.13 不支持
+- `uv` — 依赖管理；老版本没有 `uv pip download` / `uv sync --find-links`，装完先 `uv self update`
+- `PowerShell 7 (pwsh)` — 所有 `scripts/windows/*.ps1` 均按 pwsh 编写（无 winget 时从
+  GitHub Releases 下载 `PowerShell-*-win-x64.msi`）
+
+不需要 `Node.js`（前端是纯静态文件，由 Go 托管），不需要 Docker。
+
+### 2. 一次性初始化（建库 + 迁移）
+
+```powershell
+# 建库 exam_system 与角色 exam_app / exam_migrator（可重入）
+pwsh scripts\windows\setup-dev.ps1
+# 或手动: psql -U postgres -d postgres -f scripts\pg-bootstrap.sql
+
+# 执行迁移建表
+go run ./cmd/exam-server migrate --config config.dev.yaml
+```
+
+`config.dev.yaml` 默认连本机 PostgreSQL 的 **5432**（docker compose 才映射 5433），换机部署按实际端口改。
+
+### 3. 依赖安装
+
+联网环境（推荐）：
+
+```powershell
+uv sync --extra scoring --extra dev --extra embedding
+```
+
+完全离线（`packages/` 离线 wheel）：
+
+```powershell
+# 1) 在联网机器补齐 Windows 条件依赖 + 测试依赖（见下方"常见报错"）
+python -m pip download colorama tzdata pytest -d .\packages
+
+# 2) 离线同步（--no-sources 会忽略 git 源、从 packages/ 解析，并重写 uv.lock）
+uv sync --extra scoring --extra embedding --offline --no-index --no-sources --find-links .\packages --no-dev
+```
+
+生产部署 worker 用官方离线脚本（pip 模式，不碰 uv.lock）：
+
+```powershell
+pwsh scripts\windows\install-worker.ps1
+```
+
+### 4. 手动启动（两个进程，两个窗口）
+
+窗口 A — Go API（仓库根目录）：
+
+```powershell
+go run ./cmd/exam-server serve --config config.dev.yaml --bind :8000 --static frontend
+```
+
+验证：`Invoke-RestMethod http://127.0.0.1:8000/api/health` 返回 ok；管理后台
+http://127.0.0.1:8000/admin（dev 密码 `admin123`）。
+
+窗口 B — 评分 worker（一条命令，环境变量已内置）：
+
+```powershell
+pwsh scripts\windows\start-worker-dev.ps1
+```
+
+macOS/Linux 对应 `bash scripts/start-worker-dev.sh`。启动日志出现 `[dev-worker-1]`
+即环境变量生效。手动方式等价于：
+
+```powershell
+$env:DATABASE_URL = "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable"
+$env:WORKER_ID = "dev-worker-1"
+$env:MULTIPLE_CHOICE_PARTIAL = "true"
+$env:RERANK_USE_REMOTE = "false"
+.\.venv\Scripts\python.exe -m scoring_worker
+```
+
+注意：worker **不读取 `.env`**，环境变量必须在启动前设好。改过 `data/papers/*.json`
+后先跑 `python scripts\sync_run_snapshots.py` 再启动 worker，否则评分会因
+snapshot hash mismatch 被跳过。
+
+### 5. 常见报错对照
+
+| 报错 | 原因 / 处理 |
+|---|---|
+| `fe_sendauth: no password supplied` | 没设 `DATABASE_URL`，走了默认 DSN；用 `start-worker-dev.ps1` 或手动 `$env:DATABASE_URL` |
+| `No solution found: colorama / tzdata / pytest` | `packages/` 缺 Windows 条件依赖（`colorama`←qrcode、`tzdata`←psycopg）或 dev 组（`pytest`）；`python -m pip download colorama tzdata pytest -d .\packages` 补齐 |
+| `unrecognized subcommand 'download'` / `unexpected argument '--find-links'` | uv 版本太老；`uv self update` 后重试 |
+| 启动日志显示 `[worker-default]` | 环境变量没设；用启动脚本 |
+| 用 Python 3.13 建的 venv | 项目限定 3.12；`rm -rf .venv && uv venv --python 3.12 && uv sync --extra scoring --extra dev --extra embedding` 重建 |
+| `pg_isready`/`psql` 报命令不存在 | PostgreSQL 的 bin 目录未加入 PATH |
+
+生产部署（计划任务 + 18080 端口 + 离线 worker）另见 [docs/deployment-go-pg.md](docs/deployment-go-pg.md)。
+
 ## Python 环境（评分 worker 与测试）
 
 项目使用 `uv` 管理依赖，虚拟环境位于 `.venv/`；`scoring_worker/` 为独立 uv 工程。
@@ -39,11 +135,11 @@ DATABASE_URL='postgres://...' python -m scoring_worker
 uv sync --extra scoring --extra dev --extra embedding
 ```
 
-主观题评分为独立库，`pyproject.toml` 钉选 GitHub tag（当前 `v0.1.7`）确保构建可复现：
+主观题评分为独立库，`pyproject.toml` 钉选 GitHub tag（当前 `v0.1.11`）确保构建可复现：
 
 ```toml
 [tool.uv.sources]
-subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.7" }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.11" }
 ```
 
 本地修改评分库时，可用相邻目录的 editable 安装临时覆盖固定版本：

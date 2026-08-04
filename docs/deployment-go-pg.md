@@ -7,8 +7,9 @@
 
 1. PostgreSQL 18 已起, 库 exam_system 已建, 角色 exam_app (DML) / exam_migrator (DDL+DML).
 2. migrations/0001_initial.sql 已由 exam_migrator 执行 (无 GRANT, 需手动 `GRANT` 全 DML 给 exam_app).
-3. 产 dist 包: `pwsh scripts/windows/package.ps1` → `dist/windows/exam-system/`.
-4. 一次性创建 ScheduledTask (命令见下文"启动").
+3. 产 dist 包: `pwsh scripts/windows/package.ps1` → `dist/windows/exam-system/` (dist 内含 packages/ 离线 wheel).
+4. 离线安装 worker 依赖: `pwsh scripts/windows/install-worker.ps1` (需要本地语义模型加 `-WithLocalModel`; 见下文"worker 依赖离线安装").
+5. 一次性创建 ScheduledTask (命令见下文"启动").
 
 ## 目录布局 (不携带 Data/Model)
 
@@ -17,10 +18,11 @@
   - `config.production.yaml`    从 config.production.example.yaml 复制并填值
   - `frontend/`                  Go serve 静态资源
   - `scoring_worker/`            Python 评分 worker 包
-  - `scripts/windows/`           start.ps1 / stop.ps1 / package.ps1
+  - `packages/`                  Python 离线 wheel (subjective-scoring + 依赖, cp312 win; 已 gitignore, 随 dist 携带)
+  - `scripts/windows/`           install-worker.ps1 / start.ps1 / stop.ps1 / package.ps1
   - `docs/`                      本文档等
   - `manifest.sha256`            完整性核对清单
-- `scripts/windows/`           start.ps1 / stop.ps1 / package.ps1
+- `scripts/windows/`           install-worker.ps1 / start.ps1 / stop.ps1 / package.ps1
 - `scripts/lint_papers.py`     题库静态检查 (L1-L6)
 - `scripts/sync_run_snapshots.py` 试卷快照同步
 - `docs/`                      本文档等
@@ -45,6 +47,39 @@ python scripts/sync_run_snapshots.py
 - DataRoot (独立持久目录, **不在包内**): `D:\exam-data\` (PG 数据 / uploads / backups)
 - ModelRoot (独立持久目录, **不在包内**): `D:\exam-models\bge-reranker-v2-m3\`
   - 跨版本持久, 升级不覆盖 (升级只替换部署根的程序文件)
+
+## worker 依赖离线安装 (packages/, 不访问 GitHub/PyPI)
+
+部署机可能无法访问 GitHub, 因此 worker 依赖全部以 wheel 形式随 dist 携带在 `packages/`
+(已 gitignore, 由 package.ps1 拷入 dist, 传输时随包一起拷贝):
+
+```powershell
+# 在部署根执行; 创建 C:\exam-venv 并完全离线安装 (--no-index 杜绝任何远程访问)
+pwsh scripts/windows/install-worker.ps1
+# 需要本地语义模型 (sentence-transformers + torch, ~2GB) 时:
+pwsh scripts/windows/install-worker.ps1 -WithLocalModel
+```
+
+内容与约束:
+
+- `packages/` 含 subjective-scoring **v0.1.11** (wheel + sdist) 及其全部依赖
+  (pydantic / ftfy / sqlglot / tree-sitter* / httpx) + psycopg[binary], 均为 Windows cp312 wheel.
+- 安装命令等价于 `pip install --no-index --find-links packages <依赖清单>`, 全程离线.
+- Python 必须 3.12 (`>=3.12,<3.13`), 不要用 3.13.
+
+升级 scoring 库版本的流程 (在联网开发机):
+
+1. 修改 `../subjective-scoring`, 提交并打 tag (如 `v0.1.12`).
+2. 同步 examSystem 引用: `scoring_worker/pyproject.toml` + 根 `pyproject.toml` 的 `[tool.uv.sources]` tag → 新版本, 然后 `uv lock` (两个工程都要).
+3. 构建 wheel: `uv build --directory ../subjective-scoring` → 把 wheel/sdist 拷入 `packages/`, 删除旧版文件.
+4. 验证离线解析闭环 (需 Python 3.12 兼容平台参数):
+   ```bash
+   pip install --dry-run --no-index --find-links packages --platform win_amd64 \
+       --python-version 3.12 --only-binary=:all: --target /tmp/v \
+       "psycopg[binary]>=3.2,<4" "pyyaml>=6.0,<7" "python-dotenv>=1.0,<2" \
+       "subjective-scoring[text,sql,code,remote]" "sentence-transformers>=3.0" "torch>=2.2,<3"
+   ```
+5. 重打包 dist 并在部署机重新执行 install-worker.ps1.
 
 ## 升级 (无 install.ps1, 手动 zip + 哈希校验)
 
@@ -72,7 +107,7 @@ Register-ScheduledTask -TaskName "ExamAPI" -Action $api -Trigger $trig `
     -RunLevel Highest -Force
 
 # Worker task (运行 scoring_worker 轮询主循环)
-$py = "C:\exam-venv\Scripts\python.exe"   # 生产 Python 3.13 venv
+$py = "C:\exam-venv\Scripts\python.exe"   # 生产 Python 3.12 venv (pyproject 限定 >=3.12,<3.13)
 $worker = New-ScheduledTaskAction -Execute $py `
     -Argument "-m scoring_worker" -WorkingDirectory "D:\exam-system"
 Register-ScheduledTask -TaskName "ExamWorker" -Action $worker -Trigger $trig `

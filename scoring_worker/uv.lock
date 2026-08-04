@@ -160,8 +160,8 @@ requires-dist = [
     { name = "psycopg", extras = ["binary"], specifier = ">=3.2,<4" },
     { name = "python-dotenv", specifier = ">=1.0,<2" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
-    { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=3.0,<4" },
-    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.7" },
+    { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=3.0" },
+    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11" },
     { name = "torch", marker = "extra == 'local'", specifier = ">=2.2,<3" },
 ]
 provides-extras = ["local"]
@@ -838,8 +838,8 @@ wheels = [
 
 [[package]]
 name = "subjective-scoring"
-version = "0.1.7"
-source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.7#ff5dc02c499559f7d4530a4dd5d6621278febc4d" }
+version = "0.1.11"
+source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11#da09a737ed3d3a69f6e136a2b5fa2d469338bab6" }
 dependencies = [
     { name = "pydantic" },
 ]

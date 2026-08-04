@@ -26,9 +26,14 @@ def test_python_sources_do_not_import_legacy_backend():
 
 
 def test_subjective_scoring_uses_pinned_github_source():
-    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    source = config["tool"]["uv"]["sources"]["subjective-scoring"]
-    assert source == {
+    """subjective-scoring 必须钉 GitHub tag (可复现构建), 且根工程与 scoring_worker 钉选一致."""
+    expected = {
         "git": "https://github.com/yhwyxy/subjective-scoring",
-        "tag": "v0.1.7",
+        "tag": "v0.1.11",
     }
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["tool"]["uv"]["sources"]["subjective-scoring"] == expected
+    worker_config = tomllib.loads(
+        (ROOT / "scoring_worker" / "pyproject.toml").read_text(encoding="utf-8")
+    )
+    assert worker_config["tool"]["uv"]["sources"]["subjective-scoring"] == expected

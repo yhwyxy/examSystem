@@ -1,4 +1,4 @@
-# start-dev.ps1: Windows 本地开发环境启动
+﻿# start-dev.ps1: Windows 本地开发环境启动
 # 启动 Go API 服务（可选启动评分 Worker）
 [CmdletBinding()]
 param(

@@ -1,4 +1,4 @@
-# start.ps1 (Task 12 Step 4): 启动 Windows staging (New-ScheduledTask, 不用 New-Service).
+﻿# start.ps1 (Task 12 Step 4): 启动 Windows staging (New-ScheduledTask, 不用 New-Service).
 # 顺序: 先启 API 任务并轮询 /api/health 30s 等健康, 再启 Worker 任务.
 [CmdletBinding()]
 param(

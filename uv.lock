@@ -192,8 +192,8 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "qrcode", extras = ["pil"], specifier = ">=7.4" },
     { name = "sentence-transformers", marker = "extra == 'embedding'", specifier = ">=3.0" },
-    { name = "subjective-scoring", extras = ["remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.8" },
-    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], marker = "extra == 'scoring'", git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.8" },
+    { name = "subjective-scoring", extras = ["remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11" },
+    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], marker = "extra == 'scoring'", git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11" },
     { name = "torch", marker = "extra == 'embedding'", specifier = ">=2.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.30" },
 ]
@@ -1345,8 +1345,8 @@ wheels = [
 
 [[package]]
 name = "subjective-scoring"
-version = "0.1.8"
-source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.8#ea6c5c9df435e91d1ba91a2a420162889b16a019" }
+version = "0.1.11"
+source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11#da09a737ed3d3a69f6e136a2b5fa2d469338bab6" }
 dependencies = [
     { name = "pydantic" },
 ]

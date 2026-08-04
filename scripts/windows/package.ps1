@@ -1,4 +1,4 @@
-# package.ps1 (Task 12 Step 2): 生成 dist/windows/exam-system 生产发布包.
+﻿# package.ps1 (Task 12 Step 2): 生成 dist/windows/exam-system 生产发布包.
 # 仅白名单复制 exam-server.exe / config.production.example.yaml / frontend /
 # scoring_worker / scripts/windows/* / docs/*.md; 防止 backend/ data/ 等
 # Python 老栈混入. 末段 manifest.sha256 校验.
@@ -29,7 +29,7 @@ Copy-Item (Join-Path $SourceRoot "config.production.example.yaml") $OutDir
 # frontend 静态资源 (Go serve 必备)
 $frontendSrc = Join-Path $SourceRoot "frontend"
 if (Test-Path $frontendSrc) {
-    Copy-Item $frontendSrc (Join-Path $OutDir "frontend") -Recurse -Filter:$false
+    Copy-Item $frontendSrc (Join-Path $OutDir "frontend") -Recurse -Force
 } else {
     Write-Warning "frontend 不存在, dist 不打包前端. 检查 build 流程"
 }
@@ -39,6 +39,15 @@ if (Test-Path $swSrc) {
     Copy-Item $swSrc (Join-Path $OutDir "scoring_worker") -Recurse
 } else {
     Write-Warning "scoring_worker 不存在"
+}
+# packages (Python 离线 wheel: subjective-scoring + 依赖, Windows cp312; 已 gitignore, 随 dist 携带)
+# 部署机用 install-worker.ps1 从 packages/ 完全离线安装, 不访问 GitHub/PyPI
+$pkgsSrc = Join-Path $SourceRoot "packages"
+if (Test-Path $pkgsSrc) {
+    Copy-Item $pkgsSrc (Join-Path $OutDir "packages") -Recurse
+    Write-Host "==> 已复制 packages/ 离线 wheel 目录"
+} else {
+    Write-Warning "packages 不存在, dist 不含离线 wheel (worker 安装将需联网)"
 }
 # scripts/windows (start/stop + package 本身; install/uninstall 已按用户决断删除)
 $scriptsDest = Join-Path $OutDir "scripts/windows"

@@ -1,4 +1,4 @@
-# setup-dev.ps1: Windows 本地开发环境初始化
+﻿# setup-dev.ps1: Windows 本地开发环境初始化
 # 首次使用时运行一次，创建数据库用户、库和表结构
 [CmdletBinding()]
 param(

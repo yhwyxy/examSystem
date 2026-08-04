@@ -1,4 +1,4 @@
-# stop.ps1 (Task 12 Step 4): 停止 Windows staging.
+﻿# stop.ps1 (Task 12 Step 4): 停止 Windows staging.
 # 顺序: 先停 Worker 再停 API (避免 Worker 在 API 失联时仍在写 PG / claim job 触发 fencing 异常).
 [CmdletBinding()]
 param(
