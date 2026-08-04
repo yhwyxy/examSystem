@@ -32,7 +32,7 @@
         <button class="nav-item" type="button" data-view="papers">试卷</button>
         <button class="nav-item" type="button" data-view="publish">考试管理</button>
         <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
-        <a class="nav-item" href="/exam">考试端</a>
+        <button class="nav-item" type="button" data-tryout-open>考试端</button>
       </nav>
     </aside>
 
@@ -46,7 +46,7 @@
               <p class="muted">成绩统计、人工复核、导出 Excel。</p>
             </div>
             <div class="toolbar">
-              <a class="btn secondary" href="/exam">考试端</a>
+              <button class="btn secondary" type="button" data-tryout-open>考试端</button>
               <button class="btn" id="exportBtn" type="button">导出 Excel</button>
             </div>
           </header>
@@ -335,6 +335,20 @@
         </section>
       </div>
     </main>
+  </div>
+
+  <div class="modal-mask is-hidden" id="tryoutModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="tryoutModalTitle">
+      <div class="section-head">
+        <div>
+          <p class="eyebrow">TRYOUT</p>
+          <h2 id="tryoutModalTitle">考试端试答</h2>
+        </div>
+        <button class="btn secondary" id="tryoutModalClose" type="button">关闭</button>
+      </div>
+      <p class="muted">以考生视角试答（不计入成绩），用于发布前检查试卷显示与答题流程。选择专业后将在新窗口打开。</p>
+      <div id="tryoutPaperList" class="tryout-paper-list"></div>
+    </div>
   </div>
 
   <div class="toast" id="toast"></div>

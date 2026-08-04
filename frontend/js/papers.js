@@ -223,7 +223,18 @@
     $('editTotalScore').value = total;
   }
 
+  // 表单面板平时挂在题目列表容器外，避免 renderQuestionList 的 innerHTML 重绘把它清掉。
+  // 打开时会被移到所编辑题目下方，关闭/重绘前移回原位。
+  function detachQuestionForm() {
+    const panel = $('questionFormPanel');
+    const list = $('questionList');
+    if (panel && list && list.contains(panel)) {
+      list.after(panel);
+    }
+  }
+
   function renderQuestionList() {
+    detachQuestionForm();
     const box = $('questionList');
     if (!editing || !box) return;
     if (!editing.questions.length) {
@@ -250,14 +261,28 @@
   }
 
   function hideQuestionForm() {
-    $('questionFormPanel').classList.add('is-hidden');
+    const panel = $('questionFormPanel');
+    if (panel) panel.classList.add('is-hidden');
     editingQuestionIndex = -1;
+    detachQuestionForm();
   }
 
   function showQuestionForm(index) {
     if (!editing?.editable && index < 0) return;
     editingQuestionIndex = index;
-    $('questionFormPanel').classList.remove('is-hidden');
+    const panel = $('questionFormPanel');
+    const list = $('questionList');
+    // 表单紧挨着正在编辑的题目下方展开；新增题目则放到列表末尾。
+    const anchor = index >= 0 && list
+      ? list.querySelectorAll('.question-editor-item')[index]
+      : null;
+    if (anchor) {
+      anchor.after(panel);
+    } else if (list) {
+      list.appendChild(panel);
+    }
+    panel.classList.remove('is-hidden');
+    panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     $('questionFormTitle').textContent = index < 0 ? '新增题目' : '编辑题目';
     const q = index < 0 ? {
       type: 'single_choice', score: 5, question: '', options: [
@@ -311,8 +336,8 @@
         ? (Array.isArray(ans) && ans.map(String).includes(String(o.key)))
         : String(ans) === String(o.key);
       return `<div class="option-row">
-        <input class="opt-key" data-i="${i}" value="${esc(o.key)}" style="width:3rem">
-        <input class="opt-text" data-i="${i}" value="${esc(o.text)}" style="flex:1">
+        <input class="opt-key" type="text" data-i="${i}" value="${esc(o.key)}" style="width:3rem">
+        <input class="opt-text" type="text" data-i="${i}" value="${esc(o.text)}" style="flex:1">
         <label><input type="${multi ? 'checkbox' : 'radio'}" name="optCorrect" data-i="${i}" ${checked ? 'checked' : ''}> 正确</label>
         <button class="btn danger opt-del" type="button" data-i="${i}">删</button>
       </div>`;
@@ -341,7 +366,7 @@
     const list = $('qPointsList');
     list.innerHTML = (points.length ? points : []).map((p, i) => `
       <div class="option-row point-row">
-        <input class="pt-text" data-i="${i}" value="${esc(p.text || '')}" placeholder="评分点" style="flex:1">
+        <input class="pt-text" type="text" data-i="${i}" value="${esc(p.text || '')}" placeholder="评分点" style="flex:1">
         <input class="pt-score" data-i="${i}" type="number" min="0" step="0.5" value="${esc(p.score ?? 0)}" style="width:5rem">
         <label><input class="pt-req" type="checkbox" data-i="${i}" ${p.required ? 'checked' : ''}> 必答</label>
         <button class="btn danger pt-del" type="button" data-i="${i}">删</button>
@@ -370,7 +395,7 @@
       return `
       <div class="sub-q-row panel nested-panel" data-i="${i}">
         <div class="form-grid">
-          <label>子题 ID <input class="sq-id" value="${esc(s.id || `s${i+1}`)}"></label>
+          <label>子题 ID <input class="sq-id" type="text" value="${esc(s.id || `s${i+1}`)}"></label>
           <label>分值 <input class="sq-score" type="number" min="0.5" step="0.5" value="${esc(s.score ?? 1)}"></label>
           <label>评分模式
             <select class="sq-mode">
@@ -1012,6 +1037,23 @@
     if (resetRoundsBtn) {
       resetRoundsBtn.addEventListener('click', () => resetRounds().catch(e => toast(e.message)));
     }
+
+    document.querySelectorAll('[data-tryout-open]').forEach(btn => {
+      btn.addEventListener('click', openTryoutModal);
+    });
+    const tryoutClose = $('tryoutModalClose');
+    if (tryoutClose) {
+      tryoutClose.addEventListener('click', () => $('tryoutModal')?.classList.add('is-hidden'));
+    }
+    const tryoutList = $('tryoutPaperList');
+    if (tryoutList) {
+      tryoutList.addEventListener('click', e => {
+        const btn = e.target.closest('.tryout-paper');
+        if (!btn) return;
+        $('tryoutModal')?.classList.add('is-hidden');
+        window.open(`/exam?paper=${encodeURIComponent(btn.dataset.slug)}&tryout=1`, '_blank');
+      });
+    }
   }
 
   async function resetRounds() {
@@ -1049,11 +1091,26 @@
     await loadExams().catch(() => {});
   }
 
+  // ---- 考试端试答工作台 ----
+  function openTryoutModal() {
+    const modal = $('tryoutModal');
+    const list = $('tryoutPaperList');
+    if (!modal) return;
+    if (list) {
+      const items = papersCache.map(p =>
+        `<button class="btn secondary tryout-paper" type="button" data-slug="${esc(p.slug)}">${esc(p.name)}（${esc(p.slug)}）</button>`
+      ).join('');
+      list.innerHTML = items || '<p class="muted">暂无专业试卷，请先在「试卷」页新建。</p>';
+    }
+    modal.classList.remove('is-hidden');
+  }
+
   window.PapersAdmin = {
     loadPapersList,
     loadPublishFor,
     loadExams,
     fillPaperSelects,
+    openTryoutModal,
     getPapers: () => papersCache,
   };
 

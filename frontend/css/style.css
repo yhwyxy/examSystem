@@ -1128,6 +1128,17 @@ tbody tr:hover {
   .btn {
     width: 100%;
   }
+
+  /* 题目列表行：四个操作按钮始终在同一行 */
+  .question-editor-item .toolbar {
+    flex-wrap: nowrap;
+    align-items: center;
+  }
+  .question-editor-item .toolbar > *,
+  .question-editor-item .toolbar .btn {
+    width: auto;
+    flex: 0 0 auto;
+  }
 }
 
 
@@ -1145,7 +1156,78 @@ tbody tr:hover {
   background: var(--bg-soft);
   box-shadow: none;
 }
+/* 题干区允许收缩换行；工具栏不换行、保持整行右对齐 */
+.question-editor-item > div:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+.question-editor-item .toolbar {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+/* 考试端试答弹窗 */
+.modal-mask {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 20px;
+}
+/* 管理后台两栏布局（桌面端）：遮罩从侧边栏右侧开始，弹窗在工作区内居中 */
+@media (min-width: 861px) {
+  body.admin-page .modal-mask {
+    left: var(--sidebar-width);
+  }
+}
+.modal {
+  width: min(560px, 100%);
+  max-height: 80vh;
+  overflow: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-hover);
+  padding: 20px 22px;
+}
+.tryout-paper-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+.tryout-paper {
+  justify-content: flex-start;
+  text-align: left;
+}
 .option-row { display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.4rem; flex-wrap: wrap; }
+/* 选项/评分点行的“正确/必答”标签：覆盖全局 label{display:grid}，让单选/复选钮与文字保持同一行 */
+.option-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.option-row input[type="radio"],
+.option-row input[type="checkbox"] {
+  width: auto;
+  min-height: 0;
+  margin: 0;
+  flex: 0 0 auto;
+}
+/* 行内“删”按钮收窄，避免大按钮挤压右侧布局 */
+.option-row .btn.danger {
+  min-height: 0;
+  padding: 0.35rem 0.8rem;
+  line-height: 1.2;
+}
 .nested-panel {
   margin-top: 1rem;
   background: var(--bg-soft);

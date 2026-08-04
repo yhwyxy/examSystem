@@ -4,11 +4,13 @@ const DRAFT_LOOP_MS = 5000;
 
 const urlParams = new URLSearchParams(window.location.search);
 const isPreview = urlParams.get('preview') === 'true';
+const isTryout = urlParams.get('tryout') === '1';
 
 const state = {
   exam: null,
   paperId: null,
   runToken: null,
+  tryout: false,
   startedAt: null,
   deadlineAt: null,
   durationSeconds: 0,
@@ -174,7 +176,7 @@ async function loadExam() {
   }
 
   let res;
-  if (isPreview) {
+  if (isPreview || isTryout) {
     res = await fetch(`/api/admin/papers/${encodeURIComponent(state.paperId)}/preview`, {
       headers: {
         'Authorization': `Bearer ${localStorage.getItem('token') || localStorage.getItem('admin_token') || ''}`
@@ -207,13 +209,15 @@ async function loadExam() {
   $('desc').textContent = descParts.join(' · ');
   state.durationSeconds = (state.exam.config?.duration_minutes || state.exam.duration_minutes || 60) * 60;
 
-  if (!isPreview && (state.exam.closed || state.exam.run_status === 'closed')) {
+  if (!isPreview && !isTryout && (state.exam.closed || state.exam.run_status === 'closed')) {
     showFatal(state.exam.message || '本轮考试已结束');
     return;
   }
 
   if (isPreview) {
     setupPreviewMode();
+  } else if (isTryout) {
+    setupTryoutMode();
   }
 }
 
@@ -409,6 +413,99 @@ function setupPreviewMode() {
     submitBtn.textContent = '预览模式（不可提交）';
     submitBtn.disabled = true;
   }
+}
+
+// 试答模式：管理员以考生视角体验完整流程（答题/倒计时/草稿/交卷），不计入正式成绩。
+function setupTryoutMode() {
+  state.tryout = true;
+  const login = $('login');
+  if (login) login.style.display = 'block';
+
+  const banner = document.createElement('div');
+  banner.id = 'tryoutBanner';
+  banner.className = 'preview-banner';
+  banner.innerHTML = '<span>🧪 试答模式 - 管理员体验，不计入正式成绩</span>';
+  document.body.insertBefore(banner, document.body.firstChild);
+
+  const startBtn = $('startBtn');
+  if (startBtn) startBtn.textContent = '开始试答';
+  const note = login?.querySelector('.form-note');
+  if (note) note.textContent = '试答模式：姓名/工号随意填写，作答仅保存在本机，不计入成绩。';
+
+  // 恢复上次未完成的本地试答草稿
+  const draft = loadTryoutDraft();
+  if (draft) {
+    if (draft.name) $('name').value = draft.name;
+    if (draft.employeeId) $('employee_id').value = draft.employeeId;
+    if (draft.department) $('department').value = draft.department;
+    toast('检测到未完成的试答草稿，开始后将自动恢复');
+  }
+}
+
+function tryoutDraftKey() {
+  return `examTryout:${state.paperId}`;
+}
+
+function loadTryoutDraft() {
+  try {
+    const raw = localStorage.getItem(tryoutDraftKey());
+    return raw ? JSON.parse(raw) : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearTryoutDraft() {
+  try {
+    localStorage.removeItem(tryoutDraftKey());
+  } catch (_) {}
+}
+
+function saveTryoutDraft() {
+  const answers = collectAnswers();
+  state.draftRevision += 1;
+  try {
+    localStorage.setItem(tryoutDraftKey(), JSON.stringify({
+      answers,
+      revision: state.draftRevision,
+      startedAt: state.startedAt,
+      deadlineAt: state.deadlineAt,
+      name: ($('name')?.value || '').trim(),
+      employeeId: ($('employee_id')?.value || '').trim(),
+      department: ($('department')?.value || '').trim(),
+    }));
+  } catch (_) {}
+  state.dirty = false;
+  setDraftStatus(`已保存 ${new Date().toLocaleTimeString()}（本地试答草稿）`);
+}
+
+function startTryoutDraftLoop() {
+  if (state.draftLoopId) clearInterval(state.draftLoopId);
+  state.draftLoopId = setInterval(() => {
+    if (state.locked) return;
+    if (state.dirty) saveTryoutDraft();
+  }, DRAFT_LOOP_MS);
+}
+
+function startTryout() {
+  const name = $('name').value.trim();
+  const employeeId = $('employee_id').value.trim();
+  if (!name || !employeeId) {
+    toast('请填写姓名和工号');
+    return;
+  }
+  const draft = loadTryoutDraft();
+  if (draft && draft.deadlineAt && draft.deadlineAt > Date.now()) {
+    state.deadlineAt = draft.deadlineAt;
+    state.startedAt = draft.startedAt || Date.now();
+    state.draftRevision = draft.revision || 0;
+  } else {
+    clearTryoutDraft();
+    state.deadlineAt = Date.now() + state.durationSeconds * 1000;
+    state.startedAt = Date.now();
+    state.draftRevision = 0;
+  }
+  enterExamUI(draft ? draft.answers : {});
 }
 
 // 预览模式：切换答案显示
@@ -712,6 +809,10 @@ function bindAnswerChangeListeners() {
 }
 
 async function submitExam(autoSubmitReason = null) {
+  if (state.tryout) {
+    await tryoutSubmit();
+    return;
+  }
   if (isPreview) {
     alert('当前为预览模式，试卷不可提交。');
     return;
@@ -773,6 +874,41 @@ async function submitExam(autoSubmitReason = null) {
   }
 }
 
+async function tryoutSubmit() {
+  if (state.locked || state.submitting) return;
+  state.submitting = true;
+  $('submitBtn').disabled = true;
+  await saveTryoutDraft();
+  showTryoutComplete();
+}
+
+function showTryoutComplete() {
+  if (state.timerId) clearInterval(state.timerId);
+  stopDraftLoop();
+  clearTryoutDraft();
+  state.locked = true;
+
+  const answers = collectAnswers();
+  const total = state.exam.questions.length;
+  const answered = Object.values(answers).filter(a =>
+    a != null && a !== ''
+    && !(Array.isArray(a) && a.length === 0)
+    && !(typeof a === 'object' && Object.keys(a).length === 0)
+  ).length;
+
+  $('login').style.display = 'none';
+  $('examForm').style.display = 'none';
+  $('successPanel').style.display = 'block';
+  const rc = $('resultContent');
+  rc.textContent = '';
+  const h2 = document.createElement('h2');
+  h2.textContent = '试答完成';
+  const p = document.createElement('p');
+  p.className = 'muted';
+  p.textContent = `试答不计入正式成绩。已作答 ${answered}/${total} 题。`;
+  rc.append(h2, p);
+}
+
 function clearAwayTimer() {
   if (state.awayTimeoutId !== null) {
     window.clearTimeout(state.awayTimeoutId);
@@ -821,14 +957,22 @@ function enterExamUI(answers) {
   if (answers) applyAnswersToForm(answers);
   bindAnswerChangeListeners();
   startTimerFromDeadline();
-  setupAntiSwitchAutoSubmit();
-  startDraftLoop();
+  if (state.tryout) {
+    startTryoutDraftLoop();
+  } else {
+    setupAntiSwitchAutoSubmit();
+    startDraftLoop();
+  }
   setDraftStatus(state.draftRevision ? '已保存' : '未保存');
 }
 
 async function startExam() {
   if (isPreview) {
     await loadExam();
+    return;
+  }
+  if (state.tryout) {
+    startTryout();
     return;
   }
 
@@ -929,9 +1073,17 @@ $('examForm').addEventListener('submit', (event) => {
 });
 
 window.addEventListener('pagehide', () => {
+  if (state.tryout) {
+    if (state.dirty) saveTryoutDraft();
+    return;
+  }
   if (state.dirty && state.sessionId) saveDraftNow({ beacon: true });
 });
 window.addEventListener('beforeunload', () => {
+  if (state.tryout) {
+    if (state.dirty) saveTryoutDraft();
+    return;
+  }
   if (state.dirty && state.sessionId) saveDraftNow({ beacon: true });
 });
 
@@ -939,6 +1091,11 @@ if (isPreview) {
   startExam().catch(err => {
     console.error('预览模式启动失败:', err);
     showFatal('预览模式启动失败: ' + err.message);
+  });
+} else if (isTryout) {
+  loadExam().catch(err => {
+    console.error('试答模式启动失败:', err);
+    showFatal('试答模式启动失败: ' + err.message);
   });
 } else {
   loadExam()
