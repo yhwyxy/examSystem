@@ -42,6 +42,9 @@ answer.js
 # Exam run snapshots & public tokens (local runtime)
 data/exam_runs/
 
+# 本地 DB dump (含真实作答/员工 PII, 仅作备份, 不提交)
+exam_system.sql
+
 # Local model caches / vendored wheels
 models/
 packages/
