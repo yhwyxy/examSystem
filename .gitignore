@@ -22,6 +22,7 @@ env/
 .aionrs/
 .codex/
 .worktrees/
+.claude
 
 # Local logs / runtime
 *.log
@@ -42,6 +43,13 @@ data/exam_runs/
 # Local model caches / vendored wheels
 models/
 packages/
+benchmarks/
+logs/
+
+# 本地工作文档 (不提交)
+docs/
+评分系统迭代流程.md
+主观题评分误差分析.md
 
 # task6: 临时构建产物 (go build ./cmd/exam-server -> 当前 binary)
 /exam-server
