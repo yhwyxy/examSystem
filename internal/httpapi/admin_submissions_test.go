@@ -113,10 +113,12 @@ func setupSubmData(t *testing.T, pool *pgxpool.Pool) int64 {
 
 	var subID int64
 	err = tx.QueryRow(ctx, `INSERT INTO submissions
-		(name, employee_id, paper_id, run_id, answers_json, grading_detail_json,
+		(name, employee_id, paper_id, paper_name, run_id, department,
+		 answers_json, grading_detail_json,
 		 objective_score, subjective_score_machine, subjective_score_final, total_score,
 		 review_status, grading_status, grading_generation, submitted_at)
-		VALUES ('tester', 'emp-1', 'smoke-1', 'run-1', '[]'::jsonb, '[]'::jsonb,
+		VALUES ('tester', 'emp-1', 'smoke-1', '专业1', 'run-1', '部门1',
+		 '[]'::jsonb, '[]'::jsonb,
 		 4, 2, 3, 7, 'reviewed', 'done', 1, NOW())
 		RETURNING id`).Scan(&subID)
 	if err != nil {
@@ -293,14 +295,15 @@ func TestAdminSubm_Export(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
-	// detail 为空 -> 无题列; 表头 = 专业/工号/姓名/总分/时间.
-	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "总分", "时间"}) {
+	// detail 为空 -> 无题列; 表头 = 专业/工号/姓名/部门/总分/时间.
+	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "部门", "总分", "时间"}) {
 		t.Fatalf("header=%q", rows[0])
 	}
-	if rows[1][0] != "" || rows[1][1] != "emp-1" || rows[1][2] != "tester" || rows[1][3] != "7" {
+	if rows[1][0] != "专业1" || rows[1][1] != "emp-1" || rows[1][2] != "tester" ||
+		rows[1][3] != "部门1" || rows[1][4] != "7" {
 		t.Fatalf("row=%q", rows[1])
 	}
-	if rows[1][4] == "" {
+	if rows[1][5] == "" {
 		t.Fatalf("submitted_at empty")
 	}
 }
@@ -346,10 +349,12 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		t.Fatalf("seed exam_sessions sess-2: %v", err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO submissions
-		(name, employee_id, paper_id, run_id, answers_json, grading_detail_json,
+		(name, employee_id, paper_id, paper_name, run_id, department,
+		 answers_json, grading_detail_json,
 		 objective_score, subjective_score_machine, subjective_score_final, total_score,
 		 review_status, grading_status, grading_generation, submitted_at)
-		VALUES ('bob', 'emp-2', 'smoke-2', 'run-2', '[]'::jsonb,
+		VALUES ('bob', 'emp-2', 'smoke-2', '专业2', 'run-2', '部门2',
+		 '[]'::jsonb,
 		 '[{"question_id":"q1","type":"single_choice","student_answer":"B","max_score":4,"score":4,"final_score":4}]'::jsonb,
 		 5, 1, 2, 6, 'reviewed', 'done', 1, NOW())`); err != nil {
 		t.Fatalf("seed submissions run-2: %v", err)
@@ -382,8 +387,8 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		return rows
 	}
 
-	// 表头: 专业/工号/姓名 + 4 个题列 (q1,q2,q3:q3a,q3:q3b) + 总分/时间.
-	wantHeader := []string{"专业", "工号", "姓名",
+	// 表头: 专业/工号/姓名/部门 + 4 个题列 (q1,q2,q3:q3a,q3:q3b) + 总分/时间.
+	wantHeader := []string{"专业", "工号", "姓名", "部门",
 		"1. 作答内容 - 得分", "2. 作答内容 - 得分",
 		"3. 作答内容 - 得分", "4. 作答内容 - 得分", "总分", "时间"}
 	rows := exportRows("paper_id=smoke-1")
@@ -393,42 +398,42 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 	if !slices.Equal(rows[0], wantHeader) {
 		t.Fatalf("smoke-1 header=%q want %q", rows[0], wantHeader)
 	}
-	checkRow(t, rows[1], []string{"", "emp-1", "tester",
-		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
-		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "smoke-1")
+	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+		"A（4/4）", "RESTful 设计原则（5.5/6）",
+		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "smoke-1")
 
 	rows = exportRows("paper_id=smoke-2")
 	if len(rows) != 2 {
 		t.Fatalf("smoke-2 rows=%d want 2 (header+1)", len(rows))
 	}
 	// 过滤后只有 bob 行 -> 列集合仅含 bob 自己的 q1.
-	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名",
+	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "部门",
 		"1. 作答内容 - 得分", "总分", "时间"}) {
 		t.Fatalf("smoke-2 header=%q", rows[0])
 	}
-	checkRow(t, rows[1], []string{"", "emp-2", "bob", "B（得分：4/4）", "6", ""}, "smoke-2")
+	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "smoke-2")
 
 	rows = exportRows("employee_id=emp-1")
 	if len(rows) != 2 {
 		t.Fatalf("employee_id rows=%d want 2 (header+1)", len(rows))
 	}
-	checkRow(t, rows[1], []string{"", "emp-1", "tester",
-		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
-		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "employee_id")
+	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+		"A（4/4）", "RESTful 设计原则（5.5/6）",
+		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "employee_id")
 
 	rows = exportRows("keyword=bob")
 	if len(rows) != 2 {
 		t.Fatalf("keyword rows=%d want 2 (header+1)", len(rows))
 	}
-	checkRow(t, rows[1], []string{"", "emp-2", "bob", "B（得分：4/4）", "6", ""}, "keyword")
+	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "keyword")
 
 	rows = exportRows("ids=" + fmtID(subID))
 	if len(rows) != 2 {
 		t.Fatalf("ids rows=%d want 2 (header+1)", len(rows))
 	}
-	checkRow(t, rows[1], []string{"", "emp-1", "tester",
-		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
-		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "ids")
+	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+		"A（4/4）", "RESTful 设计原则（5.5/6）",
+		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "ids")
 
 	rows = exportRows("")
 	if len(rows) != 3 {
@@ -438,10 +443,11 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 	if !slices.Equal(rows[0], wantHeader) {
 		t.Fatalf("no-filter header=%q want %q", rows[0], wantHeader)
 	}
-	checkRow(t, rows[1], []string{"", "emp-2", "bob", "B（得分：4/4）", "", "", "", "6", ""}, "no-filter bob")
-	checkRow(t, rows[2], []string{"", "emp-1", "tester",
-		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
-		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "no-filter tester")
+	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2",
+		"B（4/4）", "", "", "", "6", ""}, "no-filter bob")
+	checkRow(t, rows[2], []string{"专业1", "emp-1", "tester", "部门1",
+		"A（4/4）", "RESTful 设计原则（5.5/6）",
+		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "no-filter tester")
 }
 
 // checkRow 逐列断言导出行; 时间列 (最后列) 仅断言非空.

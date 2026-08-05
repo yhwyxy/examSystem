@@ -1306,7 +1306,8 @@ func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
-// 表头: 专业/工号/姓名 + 每题"n. 作答内容 - 得分"列 + 总分/时间. 每题列按
+// 表头: 专业(paper_name)/工号/姓名/部门 + 每题"n. 作答内容 - 得分"列 +
+// 总分/时间. 每题列按
 // grading_detail_json 顺序 (composite 展平为子题列), 列集合由实际数据首次出现
 // 顺序 union 得到, 故先做轻量列发现, 再流式写行. 上限 export.DefaultRowsLimit
 // (100000); 过滤: ids (逗号分隔的提交 id, 优先) / paper_id / employee_id /
@@ -1320,16 +1321,16 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				"export columns: "+err.Error())
 			return
 		}
-		// Excel 硬上限 16384 列; 预留 5 个固定列.
-		if len(colQIDs) > 16384-5 {
+		// Excel 硬上限 16384 列; 预留 6 个固定列 (专业/工号/姓名/部门/总分/时间).
+		if len(colQIDs) > 16384-6 {
 			writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TOO_MANY_COLUMNS",
-				fmt.Sprintf("columns=%d exceed xlsx limit", len(colQIDs)+5))
+				fmt.Sprintf("columns=%d exceed xlsx limit", len(colQIDs)+6))
 			return
 		}
 
 		where, args := exportSubmissionsQuery(q)
 		sb := strings.Builder{}
-		sb.WriteString(`SELECT employee_id, name, department, total_score, submitted_at,
+		sb.WriteString(`SELECT paper_name, employee_id, name, department, total_score, submitted_at,
 			coalesce(grading_detail_json, '[]'::jsonb) `)
 		sb.WriteString(where)
 		rows, err := deps.Pool.Query(r.Context(), sb.String(), args...)
@@ -1340,7 +1341,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		defer rows.Close()
 
-		header := []string{"专业", "工号", "姓名"}
+		header := []string{"专业", "工号", "姓名", "部门"}
 		for i := range colQIDs {
 			header = append(header, fmt.Sprintf("%d. 作答内容 - 得分", i+1))
 		}
@@ -1353,13 +1354,14 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		for rows.Next() {
 			var (
+				paperName   *string
 				empID, name string
 				department  *string
 				score       float64
 				submittedAt time.Time
 				detailRaw   []byte
 			)
-			if err := rows.Scan(&empID, &name, &department, &score, &submittedAt,
+			if err := rows.Scan(&paperName, &empID, &name, &department, &score, &submittedAt,
 				&detailRaw); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", err.Error())
 				return
@@ -1369,7 +1371,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			for _, c := range cells {
 				byQID[c.qid] = c.value
 			}
-			row := export.Row{ptrOrEmpty(department), empID, name}
+			row := export.Row{ptrOrEmpty(paperName), empID, name, ptrOrEmpty(department)}
 			for _, qid := range colQIDs {
 				row = append(row, byQID[qid])
 			}
@@ -1479,7 +1481,7 @@ type exportCell struct {
 }
 
 // parseExportCells 解析 grading_detail_json 为有序单元格; composite 展平为子题.
-// 单元格文本 = "作答内容（得分：final/max）".
+// 单元格文本 = "作答内容（final/max）".
 func parseExportCells(raw []byte) []exportCell {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil
@@ -1513,7 +1515,7 @@ func parseExportCells(raw []byte) []exportCell {
 	return out
 }
 
-// exportCellText 组装单元格文本 "作答内容（得分：x/y）".
+// exportCellText 组装单元格文本 "作答内容（x/y）".
 func exportCellText(m map[string]any) string {
 	answer := answerText(m["student_answer"])
 	if answer == "" {
@@ -1528,9 +1530,9 @@ func exportCellText(m map[string]any) string {
 	case score == "":
 		return answer
 	case max == "":
-		return fmt.Sprintf("%s（得分：%s）", answer, score)
+		return fmt.Sprintf("%s（%s）", answer, score)
 	default:
-		return fmt.Sprintf("%s（得分：%s/%s）", answer, score, max)
+		return fmt.Sprintf("%s（%s/%s）", answer, score, max)
 	}
 }
 
