@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import json
 import logging
 import signal
 import sys
@@ -16,6 +17,41 @@ from .grader_bridge import build_scoring_request
 from .config import Config
 
 logger = logging.getLogger("scoring_worker")
+
+# 评分方式设置: 从 DB app_settings['scoring'] 读取 (Go admin 设置栏写入).
+# 表/行不存在 -> None (走环境变量默认), 与旧部署兼容.
+_SCORING_SETTING_SQL = """
+SELECT value FROM app_settings WHERE key = 'scoring' LIMIT 1
+"""
+
+
+def _load_scoring_setting(conn) -> dict | None:
+    """读 DB 评分设置 (app_settings['scoring']). 表不存在 / 无行 / 解析失败 -> None."""
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_SCORING_SETTING_SQL)
+            row = cur.fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    try:
+        val = row[0]
+        if isinstance(val, str):
+            val = json.loads(val)
+        return val if isinstance(val, dict) else None
+    except Exception:
+        return None
+
+
+def _scoring_fingerprint(cfg: dict | None) -> str | None:
+    """评分设置的规范化指纹; None (env 默认) 或 dict 序列化."""
+    if not cfg:
+        return None
+    try:
+        return json.dumps(cfg, sort_keys=True)
+    except Exception:
+        return None
 
 
 def _setup_logging(level: str) -> None:
@@ -123,7 +159,6 @@ def main() -> int:
 
     cfg = Config.from_env()
     _setup_logging(cfg.log_level)
-    ssvc = _build_score_service()
     cache = SnapshotCache()
     stop = threading.Event()
 
@@ -136,13 +171,37 @@ def main() -> int:
     logger.info("worker [%s] starting (poll=%.1fs lease=%ds heartbeat=%ds)",
                 cfg.worker_id, cfg.poll_interval_seconds, cfg.lease_seconds,
                 cfg.heartbeat_seconds)
+    # 评分服务随 DB app_settings['scoring'] 变化热切换 (admin 设置栏保存后对
+    # 后续评分生效, 无需重启 worker). 首轮从环境变量构造 (与旧部署行为一致).
+    svc = _build_score_service()
+    svc_fp: str | None = None
     try:
         while not stop.is_set():
             try:
                 import psycopg
                 with psycopg.connect(cfg.database_url) as conn:
                     conn.autocommit = False
-                    processed = run_one_job(conn, cfg, cache, ssvc)
+                    db_cfg = _load_scoring_setting(conn)
+                    conn.commit()  # 结束只读事务; run_one_job 自行开新事务
+                    fp = _scoring_fingerprint(db_cfg)
+                    if fp != svc_fp:
+                        try:
+                            from .grader_bridge import (
+                                get_subjective_service_for_config, reset_service,
+                            )
+                            reset_service()
+                            svc = (get_subjective_service_for_config(db_cfg)
+                                   if db_cfg else _build_score_service())
+                            svc_fp = fp
+                            logger.info("scoring 服务已按设置切换: %s",
+                                        (db_cfg or {}).get("method", "env 默认"))
+                        except Exception:
+                            # 设置不完整/不可用: 沿用旧服务, 记一次错 (避免每
+                            # 1s 刷屏; 重新保存合法设置会再次触发切换).
+                            logger.exception("评分设置切换失败, 沿用旧服务; "
+                                             "请检查 app_settings['scoring']")
+                            svc_fp = fp
+                    processed = run_one_job(conn, cfg, cache, svc)
                     if not processed:
                         time.sleep(cfg.poll_interval_seconds)
             except Exception:  # 重生; 不允许 worker 死

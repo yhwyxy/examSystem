@@ -34,6 +34,9 @@
         <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
         <button class="nav-item" type="button" data-tryout-open>考试端</button>
       </nav>
+      <div class="sidebar-footer">
+        <button class="nav-item" type="button" data-view="settings">设置</button>
+      </div>
     </aside>
 
     <main class="workspace">
@@ -331,6 +334,81 @@
               </table>
             </div>
             <div id="pagination" class="pagination"></div>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-settings" data-view="settings">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">SETTINGS</p>
+              <h1>设置</h1>
+              <p class="muted">管理端密码与评分方式配置。</p>
+            </div>
+          </header>
+
+          <section class="panel">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">PASSWORD</p>
+                <h2>更改管理员密码</h2>
+                <p class="muted">修改后所有已登录会话将失效，需用新密码重新登录。</p>
+              </div>
+            </div>
+            <div class="form-grid settings-form-grid">
+              <label>当前密码
+                <input type="password" id="settingsOldPassword" autocomplete="current-password">
+              </label>
+              <label>新密码
+                <input type="password" id="settingsNewPassword" autocomplete="new-password" placeholder="至少 6 位">
+              </label>
+            </div>
+            <div class="toolbar" style="margin-top:1rem">
+              <button class="btn" id="settingsSavePasswordBtn" type="button">更新密码</button>
+              <span id="settingsPasswordHint" class="muted settings-hint"></span>
+            </div>
+          </section>
+
+          <section class="panel" style="margin-top:1.2rem">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">SCORING</p>
+                <h2>切换评分方式</h2>
+                <p class="muted">选择主观题评分引擎；保存后对后续评分生效，无需重启服务。</p>
+              </div>
+            </div>
+            <label class="full-label">评分方式
+              <select id="settingsScoringMethod">
+                <option value="local">本地语义模型（bge-reranker）</option>
+                <option value="remote_reranker">远程 reranker API</option>
+                <option value="llm">大模型 API（LLM 判分）</option>
+              </select>
+            </label>
+            <div class="form-grid settings-form-grid" id="settingsRerankBlock" style="display:none">
+              <label>Reranker API 地址
+                <input id="settingsRerankUrl" type="text" placeholder="https://.../v1">
+              </label>
+              <label>Reranker API Key
+                <input id="settingsRerankKey" type="password" placeholder="留空表示已配置（仅回显掩码）">
+              </label>
+              <label>Reranker 模型名
+                <input id="settingsRerankModel" type="text" placeholder="模型名称">
+              </label>
+            </div>
+            <div class="form-grid settings-form-grid" id="settingsLLMBlock" style="display:none">
+              <label>LLM API 地址
+                <input id="settingsLLMUrl" type="text" placeholder="https://.../v1 或完整 /chat/completions">
+              </label>
+              <label>LLM API Key
+                <input id="settingsLLMKey" type="password" placeholder="留空表示已配置（仅回显掩码）">
+              </label>
+              <label>LLM 模型名
+                <input id="settingsLLMModel" type="text" placeholder="模型名称">
+              </label>
+            </div>
+            <div class="toolbar" style="margin-top:1rem">
+              <button class="btn" id="settingsSaveScoringBtn" type="button">保存评分方式</button>
+              <span id="settingsScoringHint" class="muted settings-hint"></span>
+            </div>
           </section>
         </section>
       </div>

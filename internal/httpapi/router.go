@@ -14,6 +14,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
+	"github.com/yhwyxy/examSystem/internal/settings"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 
 	"github.com/go-chi/chi/v5"
@@ -53,6 +54,10 @@ type Dependencies struct {
 	// RateLimiter 是热点路由限流器 (login/submit/start/draft/status).
 	// nil (单测常态) 时全部直通.
 	RateLimiter *ratelimit.Limiter
+
+	// Settings 是管理端设置存储 (app_settings 表): admin.password bcrypt hash +
+	// 评分方式选择. nil 时 settings 路由返 503.
+	Settings *settings.Store
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。

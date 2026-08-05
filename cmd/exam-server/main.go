@@ -31,6 +31,7 @@ import (
 	"syscall"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -46,6 +47,7 @@ import (
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
+	"github.com/yhwyxy/examSystem/internal/settings"
 	"github.com/yhwyxy/examSystem/internal/submissions"
 )
 
@@ -185,6 +187,7 @@ func cmdServe(args []string) error {
 		cfg.Exam.GracePeriodSeconds)
 
 	// Task 9: auth + papers + 注入 admin 路由. enable_auth=false -> RequireAdmin 放行.
+	// 密码校验优先级: settings DB bcrypt hash > config.yaml 明文 (secretFn 兜底).
 	authStore := auth.NewStore(cfg.Admin.EnableAuth,
 		func() (string, error) {
 			if cfg.Admin.Password == nil {
@@ -192,6 +195,24 @@ func cmdServe(args []string) error {
 			}
 			return *cfg.Admin.Password, nil
 		})
+	// 管理端设置存储 (app_settings 表): 密码 + 评分方式. DB 可用时注入密码 provider.
+	settingsStore := settings.NewStore(pool)
+	authStore.SetPasswordProvider(auth.PasswordProvider{
+		Check: func(ctx context.Context, password string) (bool, error) {
+			// DB bcrypt hash 优先; 未设置时回退 secretFn (config 明文, 兼容首改场景).
+			doc, err := settingsStore.LoadPasswordHash(ctx)
+			if err != nil {
+				return false, err
+			}
+			if doc != nil && doc.Hash != "" {
+				return bcrypt.CompareHashAndPassword([]byte(doc.Hash), []byte(password)) == nil, nil
+			}
+			return authStore.VerifyLegacyPassword(password)
+		},
+		Set: func(ctx context.Context, newPassword string) error {
+			return settingsStore.SavePasswordHash(ctx, newPassword)
+		},
+	})
 	papersStore, err := papers.NewStore(filepath.Join(dataRoot, "papers"))
 	if err != nil {
 		return fmt.Errorf("open papers store: %w", err)
@@ -243,6 +264,7 @@ func cmdServe(args []string) error {
 		Review:             reviewSvc,
 		Sessions:           sessionsSvc,
 		RateLimiter:        limiter,
+		Settings:           settingsStore,
 	})
 
 	srv := &http.Server{

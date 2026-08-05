@@ -1,6 +1,6 @@
 const API = '/api/admin';
 const PAGE_SIZE = 50;
-const ADMIN_VIEWS = ['overview', 'papers', 'publish', 'submissions'];
+const ADMIN_VIEWS = ['overview', 'papers', 'publish', 'submissions', 'settings'];
 
 let authToken = localStorage.getItem('admin_token') || '';
 let currentPage = 1;
@@ -116,6 +116,10 @@ function showView(view, options = {}) {
     if (window.PapersAdmin) {
       window.PapersAdmin.loadPapersList().catch(e => toast(e.message));
     }
+  } else if (view === 'settings') {
+    if (window.SettingsAdmin) {
+      window.SettingsAdmin.loadSettings().catch(e => toast(e.message));
+    }
   }
 }
 
@@ -153,6 +157,10 @@ function showMainContent() {
     }
   } else {
     tasks.push(loadExamLink());
+  }
+  // settings 视图同样需要加载设置数据 (showView {refresh:false} 跳过了)
+  if ((currentView || 'overview') === 'settings' && window.SettingsAdmin) {
+    tasks.push(window.SettingsAdmin.loadSettings());
   }
   Promise.all(tasks).catch(e => toast(e.message));
 }
@@ -492,3 +500,120 @@ checkAuth();
 window.adminToast = toast;
 window.adminAuthFetch = authFetch;
 window.showView = showView;
+
+// ---------------------------------------------------------------------------
+// SettingsAdmin: 设置栏 (更改管理员密码 + 切换评分方式)
+// ---------------------------------------------------------------------------
+const SettingsAdmin = {
+  current: null, // 最近一次 GET /api/admin/settings 返回
+
+  async loadSettings() {
+    const resp = await authFetch(`${API}/settings`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiErrorMessage(data, '设置加载失败'));
+    this.current = data;
+    this.renderPasswordStatus(data.password_configured);
+    this.renderScoring(data.scoring || {});
+  },
+
+  renderPasswordStatus(configured) {
+    const hint = $('settingsPasswordHint');
+    if (hint) hint.textContent = configured ? '' : '尚未设置独立密码（当前使用 config 配置的明文密码）。';
+  },
+
+  renderScoring(s) {
+    $('settingsScoringMethod').value = s.method || 'local';
+    $('settingsRerankUrl').value = s.rerank_api_url || '';
+    $('settingsRerankKey').value = '';
+    $('settingsRerankKey').placeholder = s.rerank_api_key_set
+      ? `已配置：${s.rerank_api_key_masked || '****'}`
+      : '输入 API Key';
+    $('settingsRerankModel').value = s.rerank_model || '';
+    $('settingsLLMUrl').value = s.llm_api_url || '';
+    $('settingsLLMKey').value = '';
+    $('settingsLLMKey').placeholder = s.llm_api_key_set
+      ? `已配置：${s.llm_api_key_masked || '****'}`
+      : '输入 API Key';
+    $('settingsLLMModel').value = s.llm_model || '';
+    this.toggleMethodBlocks(s.method || 'local');
+  },
+
+  toggleMethodBlocks(method) {
+    $('settingsRerankBlock').style.display = method === 'remote_reranker' ? '' : 'none';
+    $('settingsLLMBlock').style.display = method === 'llm' ? '' : 'none';
+  },
+
+  async savePassword() {
+    const oldPassword = $('settingsOldPassword').value;
+    const newPassword = $('settingsNewPassword').value;
+    const hint = $('settingsPasswordHint');
+    if (!oldPassword || !newPassword) {
+      toast('请填写当前密码与新密码');
+      return;
+    }
+    try {
+      const resp = await authFetch(`${API}/settings/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        toast(apiErrorMessage(data, '密码修改失败'));
+        return;
+      }
+      if (hint) hint.textContent = '';
+      $('settingsOldPassword').value = '';
+      $('settingsNewPassword').value = '';
+      toast(data.message || '密码已更新');
+      // 旧 token 已失效 -> 跳回登录页
+      localStorage.removeItem('admin_token');
+      authToken = '';
+      showLoginPanel();
+    } catch (e) {
+      toast(e.message || '密码修改失败');
+    }
+  },
+
+  async saveScoring() {
+    const method = $('settingsScoringMethod').value;
+    const body = {
+      method,
+      rerank_api_url: $('settingsRerankUrl').value.trim(),
+      rerank_api_key: $('settingsRerankKey').value.trim(),
+      rerank_model: $('settingsRerankModel').value.trim(),
+      llm_api_url: $('settingsLLMUrl').value.trim(),
+      llm_api_key: $('settingsLLMKey').value.trim(),
+      llm_model: $('settingsLLMModel').value.trim(),
+    };
+    try {
+      const resp = await authFetch(`${API}/settings/scoring`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        toast(apiErrorMessage(data, '保存失败'));
+        return;
+      }
+      this.renderScoring(data.scoring || body);
+      toast('评分方式已保存');
+    } catch (e) {
+      toast(e.message || '保存失败');
+    }
+  },
+};
+
+function bindSettingsEvents() {
+  const methodSel = $('settingsScoringMethod');
+  if (!methodSel) return;
+  methodSel.addEventListener('change', () => {
+    SettingsAdmin.toggleMethodBlocks(methodSel.value);
+  });
+  $('settingsSavePasswordBtn').addEventListener('click', () => SettingsAdmin.savePassword());
+  $('settingsSaveScoringBtn').addEventListener('click', () => SettingsAdmin.saveScoring());
+}
+
+bindSettingsEvents();
+window.SettingsAdmin = SettingsAdmin;

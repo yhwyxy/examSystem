@@ -264,6 +264,31 @@ def test_admin_sidebar_switches_views_not_scroll_anchors():
     assert '.view-panel' in css
     assert 'href="#overview"' not in html
 
+
+def test_admin_settings_panel_has_password_and_scoring():
+    html = read_frontend_file("frontend/admin.html")
+    js = read_frontend_file("frontend/js/admin.js")
+
+    # 侧边栏设置入口
+    assert 'data-view="settings"' in html
+    assert 'id="view-settings"' in html
+    # 功能 1: 改密码
+    assert 'settingsSavePasswordBtn' in html
+    assert 'settingsOldPassword' in html
+    assert 'settingsNewPassword' in html
+    assert 'settings/password' in js
+    assert 'async savePassword()' in js
+    # 功能 2: 切换评分方式
+    assert 'settingsScoringMethod' in html
+    assert 'settingsRerankBlock' in html
+    assert 'settingsLLMBlock' in html
+    assert 'settings/scoring' in js
+    assert 'async saveScoring()' in js
+    assert "method === 'remote_reranker'" in js or "settingsRerankBlock" in js
+    # 只回显掩码, 不回明文 key
+    assert 'rerank_api_key_masked' in js
+    assert 'llm_api_key_masked' in js
+
 def test_admin_shell_is_fixed_two_pane_layout():
     css = read_frontend_file("frontend/css/style.css")
     js = read_frontend_file("frontend/js/admin.js")

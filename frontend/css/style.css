@@ -458,6 +458,21 @@ a.nav-item:hover {
   line-height: 1.45;
 }
 
+.sidebar-footer {
+  margin-top: 24px;
+  padding-top: 14px;
+  border-top: 1px solid var(--sidebar-line);
+}
+
+.settings-hint {
+  margin-left: 12px;
+  font-size: 12px;
+}
+
+.settings-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .workspace {
   min-width: 0;
   padding: 32px 28px;

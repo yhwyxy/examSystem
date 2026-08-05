@@ -92,6 +92,10 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 		}
 		// Task 10 admin submissions 子树 (list/detail/export/review/delete).
 		MountAdminSubmissions(admin, deps)
+		// 管理端设置: 密码修改 + 评分方式切换.
+		admin.Get("/settings", getSettingsHandler(deps))
+		admin.Post("/settings/password", changePasswordHandler(deps))
+		admin.Post("/settings/scoring", saveScoringHandler(deps))
 	})
 }
 
@@ -111,7 +115,7 @@ func adminLoginHandler(deps Dependencies) http.HandlerFunc {
 				"auth store not configured")
 			return
 		}
-		tok, err := deps.Auth.Login(body.Password)
+		tok, err := deps.Auth.Login(r.Context(), body.Password)
 		if err != nil {
 			writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED",
 				"invalid credentials")

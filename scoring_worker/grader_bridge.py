@@ -67,17 +67,17 @@ def get_subjective_service() -> Any:
     with _service_lock:
         if _service_singleton is not None:
             return _service_singleton
-        from subjective_scoring import (  # type: ignore
-            CohereRerankerPairScorer, SubjectiveScoringService,
-        )
         rc = validate_remote_reranker_config()
         if rc is not None:
+            from subjective_scoring import (  # type: ignore
+                CohereRerankerPairScorer, SubjectiveScoringService,
+            )
             reranker = CohereRerankerPairScorer(
                 url=rc["RERANK_API_URL"], api_key=rc["RERANK_API_KEY"],
                 model=rc["RERANK_MODEL"],
             )
             try:
-                _service_singleton = SubjectiveScoringService(
+                svc = SubjectiveScoringService(
                     allow_model_load=False,
                     text_pair_scorer=reranker, code_pair_scorer=reranker,
                 )
@@ -85,19 +85,106 @@ def get_subjective_service() -> Any:
                 reranker.close()
                 raise
             _remote_reranker = reranker
-            return _service_singleton
-        model_name = os.environ.get("RERANKER_MODEL", "").strip()
-        if model_name:
-            model_path = Path(model_name)
-            if not model_path.is_absolute():
-                model_path = (_project_root / model_name).resolve()
-            if model_path.exists():
-                model_name = str(model_path)
-        _service_singleton = SubjectiveScoringService(
-            allow_model_load=True,
-            text_model=model_name or None, code_model=model_name or None,
+            _service_singleton = svc
+            return svc
+        svc = build_scoring_service(None)  # env 默认 (local)
+        _service_singleton = svc
+        return svc
+
+
+def build_scoring_service(scoring_cfg: dict | None = None) -> Any:
+    """按评分配置构造评分服务 (DB app_settings['scoring'] / 环境变量).
+
+    scoring_cfg: {"method": "local"|"remote_reranker"|"llm", 及各 API 字段}.
+      字段缺省时回退对应环境变量 (RERANK_API_URL/KEY/MODEL, LLM_API_URL/KEY/MODEL,
+      RERANKER_MODEL); scoring_cfg=None 完全走环境变量 (原 get_subjective_service 语义).
+
+    - method=remote_reranker: Cohere 兼容远程 reranker (需 url/api_key/model).
+    - method=llm:            大模型判分 (OpenAI 兼容 chat/completions), 失败自动
+                             回退经典引擎 (judge_fallback=True).
+    - 其余:                  本地语义模型 (RERANKER_MODEL / 默认 bge).
+    """
+    from subjective_scoring import (  # type: ignore
+        CohereRerankerPairScorer, LLMJudgeConfig, SubjectiveScoringService,
+    )
+    cfg = dict(scoring_cfg or {})
+    method = str(cfg.get("method") or "local").strip().lower()
+
+    if method == "remote_reranker":
+        url = str(cfg.get("rerank_api_url") or os.environ.get("RERANK_API_URL", "")).strip()
+        key = str(cfg.get("rerank_api_key") or os.environ.get("RERANK_API_KEY", "")).strip()
+        model = str(cfg.get("rerank_model") or os.environ.get("RERANK_MODEL", "")).strip()
+        missing = [n for n, v in (("url", url), ("api_key", key), ("model", model)) if not v]
+        if missing:
+            raise RuntimeError("远程 reranker 配置不完整, 缺: " + ", ".join(missing))
+        reranker = CohereRerankerPairScorer(url=url, api_key=key, model=model)
+        try:
+            return SubjectiveScoringService(
+                allow_model_load=False,
+                text_pair_scorer=reranker, code_pair_scorer=reranker,
+            )
+        except Exception:
+            reranker.close()
+            raise
+
+    if method == "llm":
+        url = str(cfg.get("llm_api_url") or os.environ.get("LLM_API_URL", "")).strip()
+        key = str(cfg.get("llm_api_key") or os.environ.get("LLM_API_KEY", "")).strip()
+        model = str(cfg.get("llm_model") or os.environ.get("LLM_MODEL", "")).strip()
+        missing = [n for n, v in (("url", url), ("api_key", key), ("model", model)) if not v]
+        if missing:
+            raise RuntimeError("大模型 API 配置不完整, 缺: " + ", ".join(missing))
+        judge = LLMJudgeConfig(url=url, api_key=key, model=model)
+        return SubjectiveScoringService(
+            allow_model_load=False, llm_judge=judge, judge_fallback=True,
         )
-        return _service_singleton
+
+    # local (默认): 本地语义模型
+    model_name = str(cfg.get("rerank_model") or os.environ.get("RERANKER_MODEL", "")).strip()
+    if model_name:
+        model_path = Path(model_name)
+        if not model_path.is_absolute():
+            model_path = (_project_root / model_name).resolve()
+        if model_path.exists():
+            model_name = str(model_path)
+    return SubjectiveScoringService(
+        allow_model_load=True,
+        text_model=model_name or None, code_model=model_name or None,
+    )
+
+
+def get_subjective_service_for_config(scoring_cfg: dict | None) -> Any:
+    """按 DB 评分配置构造服务 (不走单例; poll loop 检测到配置变化时重建)."""
+    return build_scoring_service(scoring_cfg)
+
+
+def _close_service_scorers(svc: Any) -> None:
+    """关闭服务持有的远程客户端 (LLM judge httpx / reranker), 切换方式时释放."""
+    try:
+        for scorer in (getattr(svc, "_scorers", {}) or {}).values():
+            close = getattr(scorer, "close", None)
+            if close is None:
+                continue
+            try:
+                close()
+            except Exception:
+                logger.debug("scorer close failed", exc_info=True)
+    except Exception:
+        logger.debug("close scorers failed", exc_info=True)
+
+
+def reset_service() -> None:
+    """清除服务单例 (评分方式切换时由 poll loop 调用), 释放远程连接."""
+    global _remote_reranker, _service_singleton
+    if _service_singleton is not None:
+        _close_service_scorers(_service_singleton)
+    if _remote_reranker is not None:
+        try:
+            _remote_reranker.close()
+        except Exception:
+            logger.exception("remote reranker close")
+    _remote_reranker = None
+    _service_singleton = None
 
 
 def parse_scoring_rubric(
@@ -695,12 +782,8 @@ def _empty_subjective_detail(question: dict[str, Any],
 
 
 def close_service() -> None:
-    """Worker exit 时 close remote reranker (local 由 GC 回收)."""
+    """Worker exit 时释放评分服务 (remote reranker / LLM client)."""
     global _remote_reranker, _service_singleton
-    if _remote_reranker is not None:
-        try:
-            _remote_reranker.close()
-        except Exception:
-            logger.exception("remote reranker close")
+    reset_service()
     _remote_reranker = None
     _service_singleton = None
