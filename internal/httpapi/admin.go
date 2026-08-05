@@ -899,6 +899,7 @@ WHERE r.paper_id = $1
 //	GET    /api/admin/submissions            list (query: run_id, employee_id, status, order_by, limit)
 //	GET    /api/admin/submissions/{id}       detail (含 review_logs 列表)
 //	GET    /api/admin/submissions/export     xlsx 导出 (query: paper_id 可选过滤; 上限 DefaultRowsLimit)
+//	                                        表头: 专业/工号/姓名 + 每题"作答内容 - 得分" + 总分/时间
 //	POST   /api/admin/submissions/{id}/review   apply 改分 (Body: question_id / sub_qid / new_score / note)
 //	DELETE /api/admin/submissions            批量删 (Body: ids=[1,2,3])
 func MountAdminSubmissions(admin chi.Router, deps Dependencies) {
@@ -1195,7 +1196,7 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 				"grading_status": gstatus, "grading_generation": gen,
 				"review_status": rstatus, "total_score": totScore,
 				"grading_error": gradingErr,
-				"submitted_at": submittedAt, "grading_detail": dj,
+				"submitted_at":  submittedAt, "grading_detail": dj,
 			},
 			"review_logs": logs,
 		})
@@ -1304,19 +1305,35 @@ func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
-// 走 export.XLSXWriter (excelize 真库), 上限 export.DefaultRowsLimit (100000).
-// 支持 paper_id 过滤 (与 listSubmissionsHandler 同模式); 不传则全量导出.
+// 表头: 专业/工号/姓名 + 每题"n. 作答内容 - 得分"列 + 总分/时间. 每题列按
+// grading_detail_json 顺序 (composite 展平为子题列), 列集合由实际数据首次出现
+// 顺序 union 得到, 故先做轻量列发现, 再流式写行. 上限 export.DefaultRowsLimit
+// (100000); 支持 paper_id 过滤 (与 listSubmissionsHandler 同模式).
 func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		paperID := strings.TrimSpace(r.URL.Query().Get("paper_id"))
+		colQIDs, err := discoverExportColumns(r.Context(), deps, paperID)
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
+				"export columns: "+err.Error())
+			return
+		}
+		// Excel 硬上限 16384 列; 预留 5 个固定列.
+		if len(colQIDs) > 16384-5 {
+			writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TOO_MANY_COLUMNS",
+				fmt.Sprintf("columns=%d exceed xlsx limit", len(colQIDs)+5))
+			return
+		}
+
 		var (
 			sb    strings.Builder
 			args  []any
 			phIdx = 1
 		)
-		sb.WriteString(`SELECT id, run_id, employee_id, name, grading_status, review_status,
-			grading_generation, total_score, submitted_at
+		sb.WriteString(`SELECT employee_id, name, department, total_score, submitted_at,
+			coalesce(grading_detail_json, '[]'::jsonb)
 		 FROM submissions`)
-		if paperID := strings.TrimSpace(r.URL.Query().Get("paper_id")); paperID != "" {
+		if paperID != "" {
 			sb.WriteString(" WHERE paper_id = $" + strconv.Itoa(phIdx))
 			args = append(args, paperID)
 			phIdx++
@@ -1331,30 +1348,42 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		defer rows.Close()
+
+		header := []string{"专业", "工号", "姓名"}
+		for i := range colQIDs {
+			header = append(header, fmt.Sprintf("%d. 作答内容 - 得分", i+1))
+		}
+		header = append(header, "总分", "时间")
+
 		xw := export.NewXLSXWriter()
-		if err := xw.WriteHeader([]string{
-			"id", "run_id", "employee_id", "name", "grading_status",
-			"review_status", "grading_generation", "total_score", "submitted_at",
-		}); err != nil {
+		if err := xw.WriteHeader(header); err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
 			return
 		}
 		for rows.Next() {
 			var (
-				id, gen            int64
-				runID, empID, name string
-				gstatus, rstatus   string
-				score              float64
-				submittedAt        time.Time
+				empID, name string
+				department  *string
+				score       float64
+				submittedAt time.Time
+				detailRaw   []byte
 			)
-			if err := rows.Scan(&id, &runID, &empID, &name, &gstatus, &rstatus,
-				&gen, &score, &submittedAt); err != nil {
+			if err := rows.Scan(&empID, &name, &department, &score, &submittedAt,
+				&detailRaw); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", err.Error())
 				return
 			}
-			if err := xw.WriteRow(export.Row{
-				id, runID, empID, name, gstatus, rstatus, gen, score, submittedAt,
-			}); err != nil {
+			cells := parseExportCells(detailRaw)
+			byQID := make(map[string]string, len(cells))
+			for _, c := range cells {
+				byQID[c.qid] = c.value
+			}
+			row := export.Row{ptrOrEmpty(department), empID, name}
+			for _, qid := range colQIDs {
+				row = append(row, byQID[qid])
+			}
+			row = append(row, score, submittedAt)
+			if err := xw.WriteRow(row); err != nil {
 				if err == export.ErrTooManyRows {
 					writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TRUNCATED",
 						"exceeded DefaultRowsLimit="+strconv.Itoa(export.DefaultRowsLimit))
@@ -1373,6 +1402,155 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			_ = err
 		}
 	}
+}
+
+// discoverExportColumns 轻量读每行 grading_detail_json, 按首次出现顺序 union
+// 出"作答内容 - 得分"列的 qid 序列 (composite 子题展平为 parent:sub).
+func discoverExportColumns(ctx context.Context, deps Dependencies, paperID string) ([]string, error) {
+	var (
+		sb    strings.Builder
+		args  []any
+		phIdx = 1
+	)
+	sb.WriteString(`SELECT coalesce(grading_detail_json, '[]'::jsonb) FROM submissions`)
+	if paperID != "" {
+		sb.WriteString(" WHERE paper_id = $" + strconv.Itoa(phIdx))
+		args = append(args, paperID)
+		phIdx++
+	}
+	sb.WriteString(" ORDER BY submitted_at DESC LIMIT $" + strconv.Itoa(phIdx))
+	args = append(args, export.DefaultRowsLimit)
+
+	rows, err := deps.Pool.Query(ctx, sb.String(), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var (
+		cols []string
+		seen = make(map[string]bool)
+	)
+	for rows.Next() {
+		var raw []byte
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		for _, c := range parseExportCells(raw) {
+			if !seen[c.qid] {
+				seen[c.qid] = true
+				cols = append(cols, c.qid)
+			}
+		}
+	}
+	return cols, rows.Err()
+}
+
+// exportCell 是一道题 (或 composite 子题) 的导出单元格.
+type exportCell struct {
+	qid   string
+	value string
+}
+
+// parseExportCells 解析 grading_detail_json 为有序单元格; composite 展平为子题.
+// 单元格文本 = "作答内容（得分：final/max）".
+func parseExportCells(raw []byte) []exportCell {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var detail []map[string]any
+	if err := json.Unmarshal(raw, &detail); err != nil {
+		return nil
+	}
+	var out []exportCell
+	for _, d := range detail {
+		qid, _ := d["question_id"].(string)
+		if qid == "" {
+			continue
+		}
+		if subs, ok := d["sub_results"].([]any); ok && len(subs) > 0 {
+			for _, s := range subs {
+				sm, ok := s.(map[string]any)
+				if !ok {
+					continue
+				}
+				sid, _ := sm["sub_question_id"].(string)
+				out = append(out, exportCell{
+					qid:   qid + ":" + sid,
+					value: exportCellText(sm),
+				})
+			}
+			continue
+		}
+		out = append(out, exportCell{qid: qid, value: exportCellText(d)})
+	}
+	return out
+}
+
+// exportCellText 组装单元格文本 "作答内容（得分：x/y）".
+func exportCellText(m map[string]any) string {
+	answer := answerText(m["student_answer"])
+	if answer == "" {
+		answer = "未作答"
+	}
+	score := numText(m["final_score"])
+	if score == "" {
+		score = numText(m["score"])
+	}
+	max := numText(m["max_score"])
+	switch {
+	case score == "":
+		return answer
+	case max == "":
+		return fmt.Sprintf("%s（得分：%s）", answer, score)
+	default:
+		return fmt.Sprintf("%s（得分：%s/%s）", answer, score, max)
+	}
+}
+
+// answerText 把 student_answer (string/[]/bool/数值) 转导出文本.
+func answerText(v any) string {
+	switch t := v.(type) {
+	case nil:
+		return ""
+	case string:
+		return t
+	case bool:
+		return strconv.FormatBool(t)
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case []any:
+		parts := make([]string, 0, len(t))
+		for _, e := range t {
+			parts = append(parts, answerText(e))
+		}
+		return strings.Join(parts, ",")
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(b)
+	}
+}
+
+// numText 把 JSON number/string 转文本.
+func numText(v any) string {
+	switch t := v.(type) {
+	case float64:
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case string:
+		return t
+	}
+	return ""
+}
+
+// ptrOrEmpty 把 *string 兜底为空串 (department 可空).
+func ptrOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // atoiClamp 安全解析 int 并 clamp 边界. fallback=defVal / 下界=lo / 上界=hi.
