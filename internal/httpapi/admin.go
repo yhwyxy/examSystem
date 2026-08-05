@@ -898,7 +898,7 @@ WHERE r.paper_id = $1
 //
 //	GET    /api/admin/submissions            list (query: run_id, employee_id, status, order_by, limit)
 //	GET    /api/admin/submissions/{id}       detail (含 review_logs 列表)
-//	GET    /api/admin/submissions/export     xlsx 导出 (export.XLSXWriter, 上限 DefaultRowsLimit)
+//	GET    /api/admin/submissions/export     xlsx 导出 (query: paper_id 可选过滤; 上限 DefaultRowsLimit)
 //	POST   /api/admin/submissions/{id}/review   apply 改分 (Body: question_id / sub_qid / new_score / note)
 //	DELETE /api/admin/submissions            批量删 (Body: ids=[1,2,3])
 func MountAdminSubmissions(admin chi.Router, deps Dependencies) {
@@ -1305,14 +1305,26 @@ func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
 // 走 export.XLSXWriter (excelize 真库), 上限 export.DefaultRowsLimit (100000).
-// 不接 query filter; 全量导出 (filter 由 Task 12 admin UI 实现).
+// 支持 paper_id 过滤 (与 listSubmissionsHandler 同模式); 不传则全量导出.
 func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		rows, err := deps.Pool.Query(r.Context(),
-			`SELECT id, run_id, employee_id, name, grading_status, review_status,
-				grading_generation, total_score, submitted_at
-			 FROM submissions ORDER BY submitted_at DESC LIMIT $1`,
-			export.DefaultRowsLimit)
+		var (
+			sb    strings.Builder
+			args  []any
+			phIdx = 1
+		)
+		sb.WriteString(`SELECT id, run_id, employee_id, name, grading_status, review_status,
+			grading_generation, total_score, submitted_at
+		 FROM submissions`)
+		if paperID := strings.TrimSpace(r.URL.Query().Get("paper_id")); paperID != "" {
+			sb.WriteString(" WHERE paper_id = $" + strconv.Itoa(phIdx))
+			args = append(args, paperID)
+			phIdx++
+		}
+		sb.WriteString(" ORDER BY submitted_at DESC LIMIT $" + strconv.Itoa(phIdx))
+		args = append(args, export.DefaultRowsLimit)
+
+		rows, err := deps.Pool.Query(r.Context(), sb.String(), args...)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
 				"export: "+err.Error())

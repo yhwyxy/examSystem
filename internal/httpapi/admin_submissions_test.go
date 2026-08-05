@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/yhwyxy/examSystem/internal/review"
+	"github.com/xuri/excelize/v2"
 )
 
 // testSubmPool 全包集成测用连 exam_system 库, 缺 env t.Skip 同 review 包策略 (C1 方案).
@@ -279,5 +281,90 @@ func TestAdminSubm_Export(t *testing.T) {
 	}
 	if !strings.HasPrefix(string(body), "PK\x03\x04") {
 		t.Fatalf("body not ZIP magic (xlsx expected): first 4 bytes=%q", body[:4])
+	}
+}
+
+// TestAdminSubm_Export_FilterPaper: 两条不同 paper_id 提交, ?paper_id= 只导出匹配行.
+func TestAdminSubm_Export_FilterPaper(t *testing.T) {
+	pool := testSubmPool(t)
+	r := newSubmRouter(t, pool, nil)
+	setupSubmData(t, pool) // 种子行: paper_id='smoke-1', name='tester'
+	defer setupSubmData(t, pool)
+
+	// 追加第二条: paper_id='smoke-2', name='bob'.
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `INSERT INTO exam_runs
+		(id, paper_id, round_no, status, duration_minutes, public_token_hash,
+		 snapshot_path, snapshot_hash, opened_at, closed_at, created_at)
+		VALUES ('run-2', 'smoke-2', 1, 'closed', 60, 'pub-tok-2',
+		 '/tmp/s2.json', 'snap2', NOW(), NOW(), NOW())`); err != nil {
+		t.Fatalf("seed exam_runs run-2: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO exam_sessions
+		(id, run_id, employee_id, name, session_token_hash,
+		 started_at, deadline_at, status, created_at, updated_at)
+		VALUES ('sess-2', 'run-2', 'emp-2', 'bob', 'tok2',
+		 NOW(), NOW() + interval '1 hour', 'submitted', NOW(), NOW())`); err != nil {
+		t.Fatalf("seed exam_sessions sess-2: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO submissions
+		(name, employee_id, paper_id, run_id, answers_json, grading_detail_json,
+		 objective_score, subjective_score_machine, subjective_score_final, total_score,
+		 review_status, grading_status, grading_generation, submitted_at)
+		VALUES ('bob', 'emp-2', 'smoke-2', 'run-2', '[]'::jsonb, '[]'::jsonb,
+		 5, 1, 2, 6, 'reviewed', 'done', 1, NOW())`); err != nil {
+		t.Fatalf("seed submissions run-2: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	exportRows := func(paperID string) [][]string {
+		t.Helper()
+		u := "/admin/submissions/export"
+		if paperID != "" {
+			u += "?paper_id=" + paperID
+		}
+		req := httptest.NewRequest(http.MethodGet, u, nil)
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+		}
+		f, err := excelize.OpenReader(bytes.NewReader(rr.Body.Bytes()))
+		if err != nil {
+			t.Fatalf("open xlsx: %v", err)
+		}
+		defer func() { _ = f.Close() }()
+		rows, err := f.GetRows("Submissions")
+		if err != nil {
+			t.Fatalf("get rows: %v", err)
+		}
+		return rows
+	}
+
+	// 列: id, run_id, employee_id, name, ... -> name 是第 4 列 (index 3).
+	rows := exportRows("smoke-1")
+	if len(rows) != 2 {
+		t.Fatalf("smoke-1 rows=%d want 2 (header+1)", len(rows))
+	}
+	if rows[1][3] != "tester" {
+		t.Fatalf("smoke-1 row name=%q want tester", rows[1][3])
+	}
+	rows = exportRows("smoke-2")
+	if len(rows) != 2 {
+		t.Fatalf("smoke-2 rows=%d want 2 (header+1)", len(rows))
+	}
+	if rows[1][3] != "bob" {
+		t.Fatalf("smoke-2 row name=%q want bob", rows[1][3])
+	}
+	rows = exportRows("")
+	if len(rows) != 3 {
+		t.Fatalf("no-filter rows=%d want 3 (header+2)", len(rows))
 	}
 }
