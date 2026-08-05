@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -1308,11 +1309,12 @@ func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 // 表头: 专业/工号/姓名 + 每题"n. 作答内容 - 得分"列 + 总分/时间. 每题列按
 // grading_detail_json 顺序 (composite 展平为子题列), 列集合由实际数据首次出现
 // 顺序 union 得到, 故先做轻量列发现, 再流式写行. 上限 export.DefaultRowsLimit
-// (100000); 支持 paper_id 过滤 (与 listSubmissionsHandler 同模式).
+// (100000); 过滤: ids (逗号分隔的提交 id, 优先) / paper_id / employee_id /
+// keyword (姓名或工号模糊), 与 listSubmissionsHandler 同模式.
 func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		paperID := strings.TrimSpace(r.URL.Query().Get("paper_id"))
-		colQIDs, err := discoverExportColumns(r.Context(), deps, paperID)
+		q := r.URL.Query()
+		colQIDs, err := discoverExportColumns(r.Context(), deps, q)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
 				"export columns: "+err.Error())
@@ -1325,22 +1327,11 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 
-		var (
-			sb    strings.Builder
-			args  []any
-			phIdx = 1
-		)
+		where, args := exportSubmissionsQuery(q)
+		sb := strings.Builder{}
 		sb.WriteString(`SELECT employee_id, name, department, total_score, submitted_at,
-			coalesce(grading_detail_json, '[]'::jsonb)
-		 FROM submissions`)
-		if paperID != "" {
-			sb.WriteString(" WHERE paper_id = $" + strconv.Itoa(phIdx))
-			args = append(args, paperID)
-			phIdx++
-		}
-		sb.WriteString(" ORDER BY submitted_at DESC LIMIT $" + strconv.Itoa(phIdx))
-		args = append(args, export.DefaultRowsLimit)
-
+			coalesce(grading_detail_json, '[]'::jsonb) `)
+		sb.WriteString(where)
 		rows, err := deps.Pool.Query(r.Context(), sb.String(), args...)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
@@ -1404,22 +1395,57 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// discoverExportColumns 轻量读每行 grading_detail_json, 按首次出现顺序 union
-// 出"作答内容 - 得分"列的 qid 序列 (composite 子题展平为 parent:sub).
-func discoverExportColumns(ctx context.Context, deps Dependencies, paperID string) ([]string, error) {
+// exportSubmissionsQuery 构建 export 查询的 WHERE/ORDER/LIMIT 片段 (列发现与
+// 数据查询共用同一过滤, 保证列集合与行一致). 支持 ids (逗号分隔提交 id) /
+// paper_id / employee_id 精确过滤 + keyword (姓名或工号) 模糊过滤.
+func exportSubmissionsQuery(q url.Values) (string, []any) {
 	var (
 		sb    strings.Builder
 		args  []any
 		phIdx = 1
 	)
-	sb.WriteString(`SELECT coalesce(grading_detail_json, '[]'::jsonb) FROM submissions`)
-	if paperID != "" {
-		sb.WriteString(" WHERE paper_id = $" + strconv.Itoa(phIdx))
-		args = append(args, paperID)
+	sb.WriteString(" FROM submissions WHERE 1=1")
+	addFilter := func(col, val string) {
+		if val == "" {
+			return
+		}
+		sb.WriteString(" AND " + col + " = $" + strconv.Itoa(phIdx))
+		args = append(args, val)
+		phIdx++
+	}
+	if ids := strings.TrimSpace(q.Get("ids")); ids != "" {
+		var idNums []int64
+		for _, p := range strings.Split(ids, ",") {
+			if n, err := strconv.ParseInt(strings.TrimSpace(p), 10, 64); err == nil {
+				idNums = append(idNums, n)
+			}
+		}
+		if len(idNums) > 0 {
+			sb.WriteString(" AND id = ANY($" + strconv.Itoa(phIdx) + "::bigint[])")
+			args = append(args, idNums)
+			phIdx++
+		}
+	}
+	addFilter("paper_id", strings.TrimSpace(q.Get("paper_id")))
+	addFilter("employee_id", strings.TrimSpace(q.Get("employee_id")))
+	if kw := strings.TrimSpace(q.Get("keyword")); kw != "" {
+		sb.WriteString(" AND (name ILIKE $" + strconv.Itoa(phIdx) +
+			" OR employee_id ILIKE $" + strconv.Itoa(phIdx) + ")")
+		args = append(args, "%"+kw+"%")
 		phIdx++
 	}
 	sb.WriteString(" ORDER BY submitted_at DESC LIMIT $" + strconv.Itoa(phIdx))
 	args = append(args, export.DefaultRowsLimit)
+	return sb.String(), args
+}
+
+// discoverExportColumns 轻量读每行 grading_detail_json, 按首次出现顺序 union
+// 出"作答内容 - 得分"列的 qid 序列 (composite 子题展平为 parent:sub).
+func discoverExportColumns(ctx context.Context, deps Dependencies, q url.Values) ([]string, error) {
+	where, args := exportSubmissionsQuery(q)
+	sb := strings.Builder{}
+	sb.WriteString("SELECT coalesce(grading_detail_json, '[]'::jsonb)")
+	sb.WriteString(where)
 
 	rows, err := deps.Pool.Query(ctx, sb.String(), args...)
 	if err != nil {

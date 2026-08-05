@@ -361,8 +361,16 @@ function copyLink() {
 async function exportData() {
   try {
     const params = new URLSearchParams();
-    const paperFilter = $('filterPaper');
-    if (paperFilter && paperFilter.value) params.set('paper_id', paperFilter.value);
+    const selected = [...document.querySelectorAll('.row-check:checked')].map(cb => cb.value);
+    const keyword = ($('keyword')?.value || '').trim();
+    if (selected.length > 0) {
+      // 勾选了行 -> 按勾选的提交 id 导出, 优先于搜索/试卷过滤.
+      params.set('ids', selected.join(','));
+    } else {
+      const paperFilter = $('filterPaper');
+      if (paperFilter && paperFilter.value) params.set('paper_id', paperFilter.value);
+      if (keyword) params.set('keyword', keyword);
+    }
     const q = params.toString();
     const resp = await authFetch(`${API}/submissions/export${q ? '?' + q : ''}`);
     if (!resp.ok) {
@@ -374,7 +382,10 @@ async function exportData() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = '考试成绩.xlsx';
+    let filename = '考试成绩.xlsx';
+    if (selected.length > 0) filename = `考试成绩_已选${selected.length}人.xlsx`;
+    else if (keyword) filename = `考试成绩_${keyword}.xlsx`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);

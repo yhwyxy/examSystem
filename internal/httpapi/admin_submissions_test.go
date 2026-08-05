@@ -358,11 +358,11 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		t.Fatalf("commit: %v", err)
 	}
 
-	exportRows := func(paperID string) [][]string {
+	exportRows := func(query string) [][]string {
 		t.Helper()
 		u := "/admin/submissions/export"
-		if paperID != "" {
-			u += "?paper_id=" + paperID
+		if query != "" {
+			u += "?" + query
 		}
 		req := httptest.NewRequest(http.MethodGet, u, nil)
 		rr := httptest.NewRecorder()
@@ -386,7 +386,7 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 	wantHeader := []string{"专业", "工号", "姓名",
 		"1. 作答内容 - 得分", "2. 作答内容 - 得分",
 		"3. 作答内容 - 得分", "4. 作答内容 - 得分", "总分", "时间"}
-	rows := exportRows("smoke-1")
+	rows := exportRows("paper_id=smoke-1")
 	if len(rows) != 2 {
 		t.Fatalf("smoke-1 rows=%d want 2 (header+1)", len(rows))
 	}
@@ -397,7 +397,7 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
 		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "smoke-1")
 
-	rows = exportRows("smoke-2")
+	rows = exportRows("paper_id=smoke-2")
 	if len(rows) != 2 {
 		t.Fatalf("smoke-2 rows=%d want 2 (header+1)", len(rows))
 	}
@@ -407,6 +407,28 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		t.Fatalf("smoke-2 header=%q", rows[0])
 	}
 	checkRow(t, rows[1], []string{"", "emp-2", "bob", "B（得分：4/4）", "6", ""}, "smoke-2")
+
+	rows = exportRows("employee_id=emp-1")
+	if len(rows) != 2 {
+		t.Fatalf("employee_id rows=%d want 2 (header+1)", len(rows))
+	}
+	checkRow(t, rows[1], []string{"", "emp-1", "tester",
+		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
+		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "employee_id")
+
+	rows = exportRows("keyword=bob")
+	if len(rows) != 2 {
+		t.Fatalf("keyword rows=%d want 2 (header+1)", len(rows))
+	}
+	checkRow(t, rows[1], []string{"", "emp-2", "bob", "B（得分：4/4）", "6", ""}, "keyword")
+
+	rows = exportRows("ids=" + fmtID(subID))
+	if len(rows) != 2 {
+		t.Fatalf("ids rows=%d want 2 (header+1)", len(rows))
+	}
+	checkRow(t, rows[1], []string{"", "emp-1", "tester",
+		"A（得分：4/4）", "RESTful 设计原则（得分：5.5/6）",
+		"子题作答1（得分：4/4）", "子题作答2（得分：5/6）", "7", ""}, "ids")
 
 	rows = exportRows("")
 	if len(rows) != 3 {
