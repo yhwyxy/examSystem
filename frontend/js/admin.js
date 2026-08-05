@@ -262,7 +262,7 @@ function formatRound(r) {
 
 function renderRows(rows) {
   $('tbody').innerHTML = rows.map(r => `<tr>
-    <td><input type="checkbox" class="row-check" value="${esc(r.id)}" aria-label="选择记录 ${esc(r.id)}"></td>
+    <td><input type="checkbox" class="row-check" value="${esc(r.id)}" data-name="${esc(r.name)}" data-emp="${esc(r.employee_id)}" aria-label="选择记录 ${esc(r.id)}"></td>
     <td>${esc(r.id)}</td>
     <td>${esc(r.name)}</td>
     <td>${esc(r.employee_id)}</td>
@@ -382,9 +382,18 @@ async function exportData() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    let filename = '考试成绩.xlsx';
-    if (selected.length > 0) filename = `考试成绩_已选${selected.length}人.xlsx`;
-    else if (keyword) filename = `考试成绩_${keyword}.xlsx`;
+    let filename = '总考试成绩表.xlsx';
+    if (selected.length === 1) {
+      // 单人导出: 用勾选行的姓名与工号命名.
+      const cb = document.querySelector('.row-check:checked');
+      const name = (cb && cb.dataset.name) || '';
+      const emp = (cb && cb.dataset.emp) || '';
+      filename = `考试成绩-${name}-${emp}.xlsx`;
+    } else if (selected.length > 1) {
+      filename = `考试成绩_已选${selected.length}人.xlsx`;
+    } else if (keyword) {
+      filename = `考试成绩_${keyword}.xlsx`;
+    }
     a.download = filename;
     document.body.appendChild(a);
     a.click();

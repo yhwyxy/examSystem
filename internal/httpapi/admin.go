@@ -1503,10 +1503,25 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				return
 			}
 		}
+		// 文件名: 默认导出全部 -> 总考试成绩表.xlsx; 单提交 id -> 考试成绩-姓名-工号.xlsx.
+		// 前端 a.download 会覆盖此头, 这里仅作直链访问兜底.
+		fileName := "总考试成绩表.xlsx"
+		if ids := strings.TrimSpace(q.Get("ids")); ids != "" {
+			if parts := strings.Split(ids, ","); len(parts) == 1 {
+				if id, err := strconv.ParseInt(strings.TrimSpace(parts[0]), 10, 64); err == nil {
+					var empName, empID string
+					if err := deps.Pool.QueryRow(r.Context(),
+						`SELECT name, employee_id FROM submissions WHERE id = $1`, id).
+						Scan(&empName, &empID); err == nil && empName != "" {
+						fileName = fmt.Sprintf("考试成绩-%s-%s.xlsx", empName, empID)
+					}
+				}
+			}
+		}
 		w.Header().Set("Content-Type",
 			"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 		w.Header().Set("Content-Disposition",
-			`attachment; filename="submissions.xlsx"`)
+			fmt.Sprintf(`attachment; filename*=UTF-8''%s`, url.PathEscape(fileName)))
 		if _, err := xw.Flush(w); err != nil {
 			// ResponseBody 已部分提交, 不能再 WriteJSON; 只记 log.
 			_ = err
