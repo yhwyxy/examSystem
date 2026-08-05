@@ -414,7 +414,9 @@ func TestAdminSubm_Export_TruncateScore(t *testing.T) {
 	subID := setupSubmData(t, pool)
 	defer setupSubmData(t, pool)
 
-	detail := `[{"question_id":"q1","type":"single_choice","student_answer":"A","max_score":2,"score":0.666667,"final_score":0.666667}]`
+	// q2 的 1.13 用于锁定浮点修正: 无 1e-9 修正时 1.13*100 会被误截成 1.12.
+	detail := `[{"question_id":"q1","type":"single_choice","student_answer":"A","max_score":2,"score":0.666667,"final_score":0.666667},` +
+		`{"question_id":"q2","type":"single_choice","student_answer":"B","max_score":1,"score":1.13,"final_score":1.13}]`
 	if _, err := pool.Exec(context.Background(),
 		`UPDATE submissions SET total_score = 75.233333,
 		 objective_score = 4.666667, subjective_score_final = 70.566666,
@@ -465,7 +467,7 @@ func TestAdminSubm_Export_TruncateScore(t *testing.T) {
 		t.Fatalf("get rows: %v", err)
 	}
 	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
-		"A（0.66/2）", "75.23", ""}, "truncate")
+		"A（0.66/2）", "B（1.13/1）", "75.23", ""}, "truncate")
 }
 
 // TestAdminSubm_Export_FilterPaper: 两条不同 paper_id 提交, ?paper_id= 只导出匹配行.

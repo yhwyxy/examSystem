@@ -18,6 +18,15 @@ function toast(msg) {
   setTimeout(() => el.style.display = 'none', 2200);
 }
 
+// 分数显示: 保留两位小数, 多余位数直接舍弃 (非四舍五入).
+// 先乘 100 截断再除回; 加 1e-9 修正浮点表示误差 (如 0.29*100=28.999... 会误截成 0.28).
+function fmtScore(v) {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  if (!Number.isFinite(n)) return String(v);
+  return String(Math.trunc(n * 100 + 1e-9) / 100);
+}
+
 function badge(s) {
   const meta = {
     reviewed: { className: 'badge-reviewed', label: '已复核' },
@@ -52,7 +61,7 @@ async function authFetch(url, options = {}) {
 
 function render() {
   const roundLabel = submission.run_is_legacy ? '历史数据' : (submission.round_no != null ? `第${submission.round_no}轮` : '');
-  $('summary').textContent = `${submission.name || ''} / ${submission.employee_id || ''} / ${roundLabel ? roundLabel + ' / ' : ''}总分 ${submission.total_score ?? ''} / ${submission.review_status || ''}`;
+  $('summary').textContent = `${submission.name || ''} / ${submission.employee_id || ''} / ${roundLabel ? roundLabel + ' / ' : ''}总分 ${fmtScore(submission.total_score)} / ${submission.review_status || ''}`;
 
   // 失败态优先于"评分中"判断: grading_status='failed' 时显示失败原因,
   // 提供重新机器判分入口 (页面顶部 regradeBtn 已常驻).
@@ -80,12 +89,12 @@ function render() {
           : '';
         return `<div class="sub-result card nested">
           <h4>${subIdx + 1}、${esc(s.question || '')}</h4>
-          <p class="muted">满分 ${esc(s.max_score)}，机器分 ${esc(s.score)}，最终分 <b>${esc(s.final_score ?? s.score)}</b> ${language} ${badge(s.review_status)}</p>
+          <p class="muted">满分 ${fmtScore(s.max_score)}，机器分 ${fmtScore(s.score)}，最终分 <b>${fmtScore(s.final_score ?? s.score)}</b> ${language} ${badge(s.review_status)}</p>
           <div class="answer-box"><b>学生：</b><br>${esc(s.student_answer ?? '')}</div>
           <div class="answer-box"><b>参考：</b><br>${esc(s.reference_answer ?? '')}</div>
           ${s.reason ? `<p><b>理由：</b>${esc(s.reason)}</p>` : ''}
           <div class="toolbar">
-            <input class="score-input" type="number" value="${esc(s.final_score ?? s.score)}">
+            <input class="score-input" type="number" value="${esc(fmtScore(s.final_score ?? s.score))}">
             <input class="note-input" type="text" placeholder="子题复核备注">
             <button class="btn review-btn" data-qid="${esc(questionId)}" data-sid="${esc(sid)}">保存子题复核</button>
           </div>
@@ -94,7 +103,7 @@ function render() {
 
       return `<div class="card">
         <div class="header"><h3>${esc(questionId)}. ${esc(d.question)}</h3>${badge(d.review_status || d.grading_status)}</div>
-        <p class="muted">复合题 · 满分：${esc(d.max_score)}，机器分：${esc(d.score)}，最终分：<b>${esc(d.final_score ?? d.score)}</b></p>
+        <p class="muted">复合题 · 满分：${fmtScore(d.max_score)}，机器分：${fmtScore(d.score)}，最终分：<b>${fmtScore(d.final_score ?? d.score)}</b></p>
         ${d.reason ? `<p><b>汇总：</b>${esc(d.reason)}</p>` : ''}
         ${subHtml}
       </div>`;
@@ -113,11 +122,11 @@ function render() {
 
     return `<div class="card">
       <div class="header"><h3>${esc(questionId)}. ${esc(d.question)}</h3>${badge(d.review_status || d.grading_status)}</div>
-      <p class="muted">类型：${esc(d.type)}，满分：${esc(d.max_score)}，机器分：${esc(d.score)}，最终分：<b>${esc(d.final_score ?? d.score)}</b>，方法：${esc(d.grading_method || '')}</p>
+      <p class="muted">类型：${esc(d.type)}，满分：${fmtScore(d.max_score)}，机器分：${fmtScore(d.score)}，最终分：<b>${fmtScore(d.final_score ?? d.score)}</b>，方法：${esc(d.grading_method || '')}</p>
       <div class="answer-box"><b>学生答案：</b><br>${esc(studentAnswer)}</div>
       <div class="answer-box"><b>参考答案：</b><br>${esc(referenceAnswer)}</div>
       ${d.reason ? `<p><b>判分理由：</b>${esc(d.reason)}</p>` : ''}
-      ${subjective ? `<div class="toolbar"><input class="score-input" type="number" value="${esc(d.final_score ?? d.score)}"><input class="note-input" type="text" placeholder="复核备注"><button class="btn review-btn" data-qid="${esc(questionId)}">保存复核</button></div>` : ''}
+      ${subjective ? `<div class="toolbar"><input class="score-input" type="number" value="${esc(fmtScore(d.final_score ?? d.score))}"><input class="note-input" type="text" placeholder="复核备注"><button class="btn review-btn" data-qid="${esc(questionId)}">保存复核</button></div>` : ''}
     </div>`;
   }).join('');
 }

@@ -1625,9 +1625,10 @@ func numText(v any) string {
 	return ""
 }
 
-// trunc2 保留两位小数, 多余位数直接舍弃 (非四舍五入).
+// trunc2 保留两位小数, 多余位数直接舍弃 (非四舍五入). 先乘 100 截断再除回;
+// 加 1e-9 修正浮点表示误差 (如 0.29*100=28.999... 会误截成 0.28).
 func trunc2(f float64) float64 {
-	return math.Trunc(f*100) / 100
+	return math.Trunc(f*100+1e-9) / 100
 }
 
 // ptrOrEmpty 把 *string 兜底为空串 (department 可空).
