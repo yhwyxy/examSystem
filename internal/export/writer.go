@@ -39,9 +39,10 @@ const DefaultRowsLimit = 100000
 type XLSXWriter struct {
 	f          *excelize.File
 	sheet      string
-	rowOffset  int
-	limit      int // 最大行数; 0 = DefaultRowsLimit
-	written    int // 已写数据行数 (不含 header)
+	rowOffset  int            // 当前 sheet 的行游标 (rowOffsets[sheet] 的快照)
+	rowOffsets map[string]int // 每个 sheet 已写行数 (header/title/blank/data 全计)
+	limit      int            // 最大行数; 0 = DefaultRowsLimit
+	written    int            // 已写数据行数 (不含 header)
 	overflowed bool
 }
 
@@ -50,7 +51,8 @@ func NewXLSXWriter() *XLSXWriter {
 	f := excelize.NewFile()
 	sheet := f.GetSheetName(0) // 默认 "Sheet1"
 	f.SetSheetName(sheet, "Submissions")
-	return &XLSXWriter{f: f, sheet: "Submissions", limit: DefaultRowsLimit}
+	return &XLSXWriter{f: f, sheet: "Submissions", limit: DefaultRowsLimit,
+		rowOffsets: map[string]int{"Submissions": 0}}
 }
 
 // WriteHeader 写表头到当前行 (首块从第 1 行开始). 可重复调用: 分块导出时
@@ -66,6 +68,7 @@ func (w *XLSXWriter) WriteHeader(cols []string) error {
 		}
 	}
 	w.rowOffset++
+	w.rowOffsets[w.sheet] = w.rowOffset
 	return nil
 }
 
@@ -94,6 +97,7 @@ func (w *XLSXWriter) WriteSectionTitle(text string, span int) error {
 		return err
 	}
 	w.rowOffset++
+	w.rowOffsets[w.sheet] = w.rowOffset
 	return nil
 }
 
@@ -104,6 +108,45 @@ func (w *XLSXWriter) WriteBlank() error {
 		return err
 	}
 	w.rowOffset++
+	w.rowOffsets[w.sheet] = w.rowOffset
+	return nil
+}
+
+// RenameSheet 重命名 sheet; 当前写入目标 (w.sheet) 同步更新.
+func (w *XLSXWriter) RenameSheet(oldName, newName string) error {
+	if err := w.f.SetSheetName(oldName, newName); err != nil {
+		return err
+	}
+	w.rowOffsets[newName] = w.rowOffsets[oldName]
+	delete(w.rowOffsets, oldName)
+	if w.sheet == oldName {
+		w.sheet = newName
+	}
+	return nil
+}
+
+// NewSheet 新建 sheet 并切换为当前写入目标 (行号归零). 已存在时直接切换.
+func (w *XLSXWriter) NewSheet(name string) error {
+	if _, err := w.f.NewSheet(name); err != nil {
+		return err
+	}
+	w.rowOffsets[name] = 0
+	w.sheet = name
+	w.rowOffset = 0
+	return nil
+}
+
+// SelectSheet 切换当前写入目标 sheet.
+func (w *XLSXWriter) SelectSheet(name string) error {
+	idx, err := w.f.GetSheetIndex(name)
+	if err != nil {
+		return err
+	}
+	if idx < 0 {
+		return fmt.Errorf("sheet %q not found", name)
+	}
+	w.sheet = name
+	w.rowOffset = w.rowOffsets[name]
 	return nil
 }
 
@@ -122,6 +165,7 @@ func (w *XLSXWriter) WriteRow(row Row) error {
 		return err
 	}
 	w.rowOffset++
+	w.rowOffsets[w.sheet] = w.rowOffset
 	w.written++
 	return nil
 }

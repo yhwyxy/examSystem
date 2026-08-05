@@ -1352,14 +1352,14 @@ func (r *paperNameResolver) resolve(paperID, stored string) string {
 }
 
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
-// 输出为单 sheet 按专业分块: 每个专业一块, 块首为合并的专业标题行, 第二行
-// 为该专业的题头 (专业/工号/姓名/部门 + 每题 "n. 作答内容 - 得分" + 总分/时间),
-// 之后为该专业的数据行; 块间空一行. 每题列按该专业 grading_detail_json 顺序
-// (composite 展平为子题列), 每个专业独立列集合, 不跨专业 union, 避免多试卷
-// 题号不唯一导致的错位/空列. 仅导出存在成绩 (submissions 行) 的专业. 上限
-// export.DefaultRowsLimit (100000); 过滤: ids (逗号分隔提交 id, 优先) /
-// paper_id / employee_id / keyword (姓名或工号模糊), 与 listSubmissionsHandler
-// 同模式.
+// 输出为多 sheet: 首 sheet "总表" 按专业分块 (每个专业一块, 块首为合并的
+// 专业标题行, 第二行为该专业题头, 之后为该专业数据行, 块间空一行); 其后每个
+// 专业各一个分表 sheet (表名用专业展示名, 含该专业题头与数据行). 每题列按该
+// 专业 grading_detail_json 顺序 (composite 展平为子题列), 每个专业独立列集合,
+// 不跨专业 union, 避免多试卷题号不唯一导致的错位/空列. 仅导出存在成绩
+// (submissions 行) 的专业. 上限 export.DefaultRowsLimit (100000); 过滤:
+// ids (逗号分隔提交 id, 优先) / paper_id / employee_id / keyword (姓名或工号
+// 模糊), 与 listSubmissionsHandler 同模式.
 func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -1397,8 +1397,14 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		// paper_id (SQL COALESCE 已兜底).
 		resolver := newPaperNameResolver(deps)
 		xw := export.NewXLSXWriter()
+		if err := xw.RenameSheet("Submissions", "总表"); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "XLSX_SHEET_FAILED", err.Error())
+			return
+		}
 		currentPaper := ""
 		wroteAny := false
+		detailSheet := make(map[string]string) // paperID -> 分表名 (去重后)
+		takenSheet := map[string]bool{"总表": true}
 		for rows.Next() {
 			var (
 				paperID     string
@@ -1414,6 +1420,9 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", err.Error())
 				return
 			}
+			display := resolver.resolve(paperID, paperName)
+			cols := paperCols[paperID]
+			header := exportBlockHeader(cols)
 			if paperID != currentPaper {
 				// 新专业块: 空行分隔 (首个块前不加) + 标题行 + 本专业题头.
 				if wroteAny {
@@ -1422,16 +1431,10 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 						return
 					}
 				}
-				cols := paperCols[paperID]
-				if err := xw.WriteSectionTitle(resolver.resolve(paperID, paperName), 6+len(cols)); err != nil {
+				if err := xw.WriteSectionTitle(display, 6+len(cols)); err != nil {
 					writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
 					return
 				}
-				header := []string{"专业", "工号", "姓名", "部门"}
-				for i := range cols {
-					header = append(header, fmt.Sprintf("%d. 作答内容 - 得分", i+1))
-				}
-				header = append(header, "总分", "时间")
 				if err := xw.WriteHeader(header); err != nil {
 					writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
 					return
@@ -1444,9 +1447,8 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			for _, c := range cells {
 				byQID[c.qid] = c.value
 			}
-			row := export.Row{resolver.resolve(paperID, paperName), empID, name,
-				ptrOrEmpty(department)}
-			for _, qid := range paperCols[paperID] {
+			row := export.Row{display, empID, name, ptrOrEmpty(department)}
+			for _, qid := range cols {
 				row = append(row, byQID[qid])
 			}
 			row = append(row, trunc2(score), submittedAt)
@@ -1457,6 +1459,36 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 					return
 				}
 				writeAdminError(w, http.StatusInternalServerError, "XLSX_ROW_FAILED", err.Error())
+				return
+			}
+			// 分表: 每专业一个 sheet (首次建表并写题头, 后续直接切换写入).
+			sheetName := detailSheet[paperID]
+			if sheetName == "" {
+				sheetName = uniqueSheetName(display, paperID, takenSheet)
+				detailSheet[paperID] = sheetName
+				if err := xw.NewSheet(sheetName); err != nil {
+					writeAdminError(w, http.StatusInternalServerError, "XLSX_SHEET_FAILED", err.Error())
+					return
+				}
+				if err := xw.WriteHeader(header); err != nil {
+					writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
+					return
+				}
+			} else if err := xw.SelectSheet(sheetName); err != nil {
+				writeAdminError(w, http.StatusInternalServerError, "XLSX_SHEET_FAILED", err.Error())
+				return
+			}
+			if err := xw.WriteRow(row); err != nil {
+				if err == export.ErrTooManyRows {
+					writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TRUNCATED",
+						"exceeded DefaultRowsLimit="+strconv.Itoa(export.DefaultRowsLimit))
+					return
+				}
+				writeAdminError(w, http.StatusInternalServerError, "XLSX_ROW_FAILED", err.Error())
+				return
+			}
+			if err := xw.SelectSheet("总表"); err != nil {
+				writeAdminError(w, http.StatusInternalServerError, "XLSX_SHEET_FAILED", err.Error())
 				return
 			}
 		}
@@ -1568,6 +1600,50 @@ func discoverExportColumnsByPaper(ctx context.Context, deps Dependencies, q url.
 		}
 	}
 	return colsByPaper, order, rows.Err()
+}
+
+// exportBlockHeader 按专业题列构建分块/分表共用的表头.
+func exportBlockHeader(cols []string) []string {
+	header := []string{"专业", "工号", "姓名", "部门"}
+	for i := range cols {
+		header = append(header, fmt.Sprintf("%d. 作答内容 - 得分", i+1))
+	}
+	return append(header, "总分", "时间")
+}
+
+// uniqueSheetName 生成 Excel 分表 sheet 名: 优先专业展示名 (清洗非法字符并截断
+// 31 字符), 与已占用名字冲突时追加 paper_id 消歧, 保证每个专业独立 sheet.
+func uniqueSheetName(display, paperID string, taken map[string]bool) string {
+	base := display
+	if base == "" {
+		base = paperID
+	}
+	base = strings.Map(func(r rune) rune {
+		switch r {
+		case '\\', '/', '?', '*', '[', ']', ':':
+			return '-'
+		}
+		return r
+	}, base)
+	name := truncateRunes(base, 31)
+	if taken[name] {
+		suffix := "(" + paperID + ")"
+		name = truncateRunes(base, 31-len([]rune(suffix))) + suffix
+	}
+	for taken[name] {
+		name += "_"
+	}
+	taken[name] = true
+	return name
+}
+
+// truncateRunes 按字符数截断 (Excel sheet 名上限 31 字符).
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
 }
 
 // exportCell 是一道题 (或 composite 子题) 的导出单元格.

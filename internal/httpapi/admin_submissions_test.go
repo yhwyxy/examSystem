@@ -299,7 +299,7 @@ func TestAdminSubm_Export(t *testing.T) {
 		t.Fatalf("open xlsx: %v", err)
 	}
 	defer func() { _ = f.Close() }()
-	rows, err := f.GetRows("Submissions")
+	rows, err := f.GetRows("总表")
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
@@ -345,7 +345,7 @@ func TestAdminSubm_Export_PaperNameFallback(t *testing.T) {
 		t.Fatalf("open xlsx: %v", err)
 	}
 	defer func() { _ = f.Close() }()
-	rows, err := f.GetRows("Submissions")
+	rows, err := f.GetRows("总表")
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
@@ -404,7 +404,7 @@ func TestAdminSubm_ChinesePaperName(t *testing.T) {
 		t.Fatalf("open xlsx: %v", err)
 	}
 	defer func() { _ = f.Close() }()
-	rows, err := f.GetRows("Submissions")
+	rows, err := f.GetRows("总表")
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
@@ -468,7 +468,7 @@ func TestAdminSubm_Export_TruncateScore(t *testing.T) {
 		t.Fatalf("open xlsx: %v", err)
 	}
 	defer func() { _ = f.Close() }()
-	rows, err := f.GetRows("Submissions")
+	rows, err := f.GetRows("总表")
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
@@ -548,7 +548,7 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 			t.Fatalf("open xlsx: %v", err)
 		}
 		defer func() { _ = f.Close() }()
-		rows, err := f.GetRows("Submissions")
+		rows, err := f.GetRows("总表")
 		if err != nil {
 			t.Fatalf("get rows: %v", err)
 		}
@@ -629,6 +629,119 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		t.Fatalf("no-filter block2 title/header=%q %q", rows[4], rows[5])
 	}
 	checkRow(t, rows[6], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "no-filter bob")
+}
+
+// TestAdminSubm_Export_PerPaperSheets: 多 sheet 导出, "总表" + 每专业一个分表.
+func TestAdminSubm_Export_PerPaperSheets(t *testing.T) {
+	pool := testSubmPool(t)
+	r := newSubmRouter(t, pool, nil)
+	subID := setupSubmData(t, pool)
+	defer setupSubmData(t, pool)
+
+	testerDetail := `[{"question_id":"q1","type":"single_choice","student_answer":"A","max_score":4,"score":4,"final_score":4},` +
+		`{"question_id":"q2","type":"short_answer","student_answer":"RESTful 设计原则","max_score":6,"score":5,"final_score":5.5},` +
+		`{"question_id":"q3","type":"composite","is_composite":true,"max_score":10,"score":9,"final_score":9,"sub_results":[` +
+		`{"sub_question_id":"q3a","student_answer":"子题作答1","max_score":4,"score":4,"final_score":4},` +
+		`{"sub_question_id":"q3b","student_answer":"子题作答2","max_score":6,"score":5,"final_score":5}]}]`
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE submissions SET grading_detail_json = $1::jsonb WHERE id = $2`,
+		testerDetail, subID); err != nil {
+		t.Fatalf("set tester detail: %v", err)
+	}
+	ctx := context.Background()
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `INSERT INTO exam_runs
+		(id, paper_id, round_no, status, duration_minutes, public_token_hash,
+		 snapshot_path, snapshot_hash, opened_at, closed_at, created_at)
+		VALUES ('run-2', 'smoke-2', 1, 'closed', 60, 'pub-tok-2',
+		 '/tmp/s2.json', 'snap2', NOW(), NOW(), NOW())`); err != nil {
+		t.Fatalf("seed exam_runs run-2: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO exam_sessions
+		(id, run_id, employee_id, name, session_token_hash,
+		 started_at, deadline_at, status, created_at, updated_at)
+		VALUES ('sess-2', 'run-2', 'emp-2', 'bob', 'tok2',
+		 NOW(), NOW() + interval '1 hour', 'submitted', NOW(), NOW())`); err != nil {
+		t.Fatalf("seed exam_sessions sess-2: %v", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO submissions
+		(name, employee_id, paper_id, paper_name, run_id, department,
+		 answers_json, grading_detail_json,
+		 objective_score, subjective_score_machine, subjective_score_final, total_score,
+		 review_status, grading_status, grading_generation, submitted_at)
+		VALUES ('bob', 'emp-2', 'smoke-2', '专业2', 'run-2', '部门2',
+		 '[]'::jsonb,
+		 '[{"question_id":"q1","type":"single_choice","student_answer":"B","max_score":4,"score":4,"final_score":4}]'::jsonb,
+		 5, 1, 2, 6, 'reviewed', 'done', 1, NOW())`); err != nil {
+		t.Fatalf("seed submissions run-2: %v", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions/export", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(rr.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	// sheet 顺序: 总表在前, 分表按 paper_id 顺序 (smoke-1 在 smoke-2 前).
+	if got := f.GetSheetList(); !slices.Equal(got, []string{"总表", "专业1", "专业2"}) {
+		t.Fatalf("sheets=%q want [总表 专业1 专业2]", got)
+	}
+
+	// 总表: 仍是分块格式.
+	rows, err := f.GetRows("总表")
+	if err != nil {
+		t.Fatalf("get 总表 rows: %v", err)
+	}
+	if len(rows) != 7 {
+		t.Fatalf("总表 rows=%d want 7 (2 blocks)", len(rows))
+	}
+	if rows[0][0] != "专业1" || rows[4][0] != "专业2" {
+		t.Fatalf("总表 blocks=%q %q want 专业1/专业2", rows[0], rows[4])
+	}
+
+	// 分表 专业1: 题头 + tester 行 (4 题列).
+	rows, err = f.GetRows("专业1")
+	if err != nil {
+		t.Fatalf("get 专业1 rows: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("专业1 rows=%d want 2 (header+1)", len(rows))
+	}
+	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "部门",
+		"1. 作答内容 - 得分", "2. 作答内容 - 得分",
+		"3. 作答内容 - 得分", "4. 作答内容 - 得分", "总分", "时间"}) {
+		t.Fatalf("专业1 header=%q", rows[0])
+	}
+	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+		"A（4/4）", "RESTful 设计原则（5.5/6）",
+		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "专业1")
+
+	// 分表 专业2: 题头 + bob 行 (1 题列).
+	rows, err = f.GetRows("专业2")
+	if err != nil {
+		t.Fatalf("get 专业2 rows: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("专业2 rows=%d want 2 (header+1)", len(rows))
+	}
+	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "部门",
+		"1. 作答内容 - 得分", "总分", "时间"}) {
+		t.Fatalf("专业2 header=%q", rows[0])
+	}
+	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "专业2")
 }
 
 // checkRow 逐列断言导出行; 时间列 (最后列) 仅断言非空.
