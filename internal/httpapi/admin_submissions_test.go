@@ -308,6 +308,38 @@ func TestAdminSubm_Export(t *testing.T) {
 	}
 }
 
+// TestAdminSubm_Export_PaperNameFallback: paper_name 为 NULL (主提交路径写入)
+// 时, 专业列回退 paper_id, 与列表页 paper_name || paper_id 一致.
+func TestAdminSubm_Export_PaperNameFallback(t *testing.T) {
+	pool := testSubmPool(t)
+	r := newSubmRouter(t, pool, nil)
+	setupSubmData(t, pool)
+	defer setupSubmData(t, pool)
+
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE submissions SET paper_name = NULL`); err != nil {
+		t.Fatalf("null paper_name: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions/export", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(rr.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	rows, err := f.GetRows("Submissions")
+	if err != nil {
+		t.Fatalf("get rows: %v", err)
+	}
+	if rows[1][0] != "smoke-1" { // paper_id 兜底
+		t.Fatalf("专业=%q want smoke-1", rows[1][0])
+	}
+}
+
 // TestAdminSubm_Export_FilterPaper: 两条不同 paper_id 提交, ?paper_id= 只导出匹配行.
 func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 	pool := testSubmPool(t)

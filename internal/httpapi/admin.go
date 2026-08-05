@@ -1306,8 +1306,8 @@ func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 }
 
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
-// 表头: 专业(paper_name)/工号/姓名/部门 + 每题"n. 作答内容 - 得分"列 +
-// 总分/时间. 每题列按
+// 表头: 专业(paper_name, NULL 时回退 paper_id)/工号/姓名/部门 + 每题
+// "n. 作答内容 - 得分"列 + 总分/时间. 每题列按
 // grading_detail_json 顺序 (composite 展平为子题列), 列集合由实际数据首次出现
 // 顺序 union 得到, 故先做轻量列发现, 再流式写行. 上限 export.DefaultRowsLimit
 // (100000); 过滤: ids (逗号分隔的提交 id, 优先) / paper_id / employee_id /
@@ -1330,7 +1330,8 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 
 		where, args := exportSubmissionsQuery(q)
 		sb := strings.Builder{}
-		sb.WriteString(`SELECT paper_name, employee_id, name, department, total_score, submitted_at,
+		sb.WriteString(`SELECT coalesce(paper_name, paper_id), employee_id, name,
+			department, total_score, submitted_at,
 			coalesce(grading_detail_json, '[]'::jsonb) `)
 		sb.WriteString(where)
 		rows, err := deps.Pool.Query(r.Context(), sb.String(), args...)
@@ -1354,7 +1355,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		for rows.Next() {
 			var (
-				paperName   *string
+				paperName   string
 				empID, name string
 				department  *string
 				score       float64
@@ -1371,7 +1372,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			for _, c := range cells {
 				byQID[c.qid] = c.value
 			}
-			row := export.Row{ptrOrEmpty(paperName), empID, name, ptrOrEmpty(department)}
+			row := export.Row{paperName, empID, name, ptrOrEmpty(department)}
 			for _, qid := range colQIDs {
 				row = append(row, byQID[qid])
 			}
