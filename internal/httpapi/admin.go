@@ -633,6 +633,11 @@ func listExamsHandler(deps Dependencies) http.HandlerFunc {
 				})
 			}
 		}
+		// 专业显示名: 优先 papers store 中试卷文档的中文 name, 回退 slug.
+		resolver := newPaperNameResolver(deps)
+		for i := range overviews {
+			overviews[i].Name = resolver.resolve(overviews[i].PaperID, overviews[i].Name)
+		}
 		WriteJSON(w, http.StatusOK, overviews)
 	}
 }
@@ -1037,6 +1042,13 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			}
 			items = append(items, it)
 		}
+		// 专业显示名: 优先 papers store 中文 name, 回退已有 paper_name /
+		// paper_id (前端 paper_name || paper_id 兜底, 保持非空).
+		resolver := newPaperNameResolver(deps)
+		for i := range items {
+			name := resolver.resolve(items[i].PaperID, ptrOrEmpty(items[i].PaperName))
+			items[i].PaperName = &name
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{"submissions": items})
 	}
 }
@@ -1305,6 +1317,35 @@ func deleteSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
+// paperNameResolver 缓存 paper_id -> 专业展示名, 避免每行/每请求重复读试卷 JSON.
+// 展示名来源: papers store 中试卷文档顶层 name (中文名) > 已有 paper_name >
+// paper_id 兜底. deps.Papers 为 nil (单测/未配置) 时直接回退 stored, 保持原行为.
+type paperNameResolver struct {
+	deps  Dependencies
+	cache map[string]string
+}
+
+func newPaperNameResolver(deps Dependencies) *paperNameResolver {
+	return &paperNameResolver{deps: deps, cache: make(map[string]string)}
+}
+
+// resolve 返回 paperID 的专业展示名; stored 为已有显示值 (paper_name 或 slug).
+func (r *paperNameResolver) resolve(paperID, stored string) string {
+	if name, ok := r.cache[paperID]; ok {
+		return name
+	}
+	name := stored
+	if r.deps.Papers != nil {
+		if doc, err := r.deps.Papers.LoadEditable(paperID); err == nil {
+			if n, ok := doc["name"].(string); ok && n != "" {
+				name = n
+			}
+		}
+	}
+	r.cache[paperID] = name
+	return name
+}
+
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
 // 表头: 专业(paper_name, NULL 时回退 paper_id)/工号/姓名/部门 + 每题
 // "n. 作答内容 - 得分"列 + 总分/时间. 每题列按
@@ -1330,7 +1371,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 
 		where, args := exportSubmissionsQuery(q)
 		sb := strings.Builder{}
-		sb.WriteString(`SELECT coalesce(paper_name, paper_id), employee_id, name,
+		sb.WriteString(`SELECT paper_id, coalesce(paper_name, paper_id), employee_id, name,
 			department, total_score, submitted_at,
 			coalesce(grading_detail_json, '[]'::jsonb) `)
 		sb.WriteString(where)
@@ -1348,6 +1389,9 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		header = append(header, "总分", "时间")
 
+		// 专业显示名: 优先 papers store 中文 name, 回退已有 paper_name /
+		// paper_id (SQL COALESCE 已兜底).
+		resolver := newPaperNameResolver(deps)
 		xw := export.NewXLSXWriter()
 		if err := xw.WriteHeader(header); err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
@@ -1355,6 +1399,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		for rows.Next() {
 			var (
+				paperID     string
 				paperName   string
 				empID, name string
 				department  *string
@@ -1362,7 +1407,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				submittedAt time.Time
 				detailRaw   []byte
 			)
-			if err := rows.Scan(&paperName, &empID, &name, &department, &score, &submittedAt,
+			if err := rows.Scan(&paperID, &paperName, &empID, &name, &department, &score, &submittedAt,
 				&detailRaw); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", err.Error())
 				return
@@ -1372,7 +1417,8 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			for _, c := range cells {
 				byQID[c.qid] = c.value
 			}
-			row := export.Row{paperName, empID, name, ptrOrEmpty(department)}
+			row := export.Row{resolver.resolve(paperID, paperName), empID, name,
+				ptrOrEmpty(department)}
 			for _, qid := range colQIDs {
 				row = append(row, byQID[qid])
 			}

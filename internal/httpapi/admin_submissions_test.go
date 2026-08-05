@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/xuri/excelize/v2"
+	"github.com/yhwyxy/examSystem/internal/papers"
 	"github.com/yhwyxy/examSystem/internal/review"
 )
 
@@ -62,8 +64,14 @@ func testSubmPool(t *testing.T) *pgxpool.Pool {
 // newSubmRouter 用真 pool 构造 admin 路由子树, 兼容顶层 /stats /regrade (path C 修正).
 func newSubmRouter(t *testing.T, pool *pgxpool.Pool, reviewSvc *review.Service) http.Handler {
 	t.Helper()
+	return newSubmRouterWith(t, pool, reviewSvc, nil)
+}
+
+func newSubmRouterWith(t *testing.T, pool *pgxpool.Pool, reviewSvc *review.Service,
+	papersStore *papers.Store) http.Handler {
+	t.Helper()
 	r := chi.NewRouter()
-	deps := Dependencies{Pool: pool, Review: reviewSvc}
+	deps := Dependencies{Pool: pool, Review: reviewSvc, Papers: papersStore}
 	// Mount admin 子树 (顶层 stats/regrade + MountAdminSubmissions list/detail/export/review/delete)
 	r.Route("/admin", func(adm chi.Router) {
 		if pool == nil {
@@ -337,6 +345,65 @@ func TestAdminSubm_Export_PaperNameFallback(t *testing.T) {
 	}
 	if rows[1][0] != "smoke-1" { // paper_id 兜底
 		t.Fatalf("专业=%q want smoke-1", rows[1][0])
+	}
+}
+
+// TestAdminSubm_ChinesePaperName: papers store 提供中文名时, 列表/导出的专业列
+// 显示中文名, 优先于 submissions.paper_name 与 paper_id.
+func TestAdminSubm_ChinesePaperName(t *testing.T) {
+	pool := testSubmPool(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "smoke-1.json"),
+		[]byte(`{"name":"机械专业","questions":[]}`), 0o644); err != nil {
+		t.Fatalf("write paper doc: %v", err)
+	}
+	store, err := papers.NewStore(dir)
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	r := newSubmRouterWith(t, pool, nil, store)
+	setupSubmData(t, pool)
+	defer setupSubmData(t, pool)
+
+	// 列表: paper_name 应为中文名.
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Submissions []struct {
+			PaperName *string `json:"paper_name"`
+			PaperID   string  `json:"paper_id"`
+		} `json:"submissions"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if len(resp.Submissions) != 1 || resp.Submissions[0].PaperName == nil ||
+		*resp.Submissions[0].PaperName != "机械专业" {
+		t.Fatalf("list paper_name=%v want 机械专业", resp.Submissions[0].PaperName)
+	}
+
+	// 导出: 专业列应为中文名.
+	req = httptest.NewRequest(http.MethodGet, "/admin/submissions/export", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(rr.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	rows, err := f.GetRows("Submissions")
+	if err != nil {
+		t.Fatalf("get rows: %v", err)
+	}
+	if rows[1][0] != "机械专业" {
+		t.Fatalf("export 专业=%q want 机械专业", rows[1][0])
 	}
 }
 
