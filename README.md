@@ -135,11 +135,11 @@ snapshot hash mismatch 被跳过。
 uv sync --extra scoring --extra dev --extra embedding
 ```
 
-主观题评分为独立库，`pyproject.toml` 钉选 GitHub tag（当前 `v0.1.11`）确保构建可复现：
+主观题评分为独立库，`pyproject.toml` 钉选 GitHub tag（当前 `v0.1.13`）确保构建可复现：
 
 ```toml
 [tool.uv.sources]
-subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.11" }
+subjective-scoring = { git = "https://github.com/yhwyxy/subjective-scoring", tag = "v0.1.13" }
 ```
 
 本地修改评分库时，可用相邻目录的 editable 安装临时覆盖固定版本：
@@ -196,6 +196,8 @@ pytest -q          # scoring_worker 单测 + subjective-scoring 契约
 
 ## Docker 部署
 
+开发/单机快速起 Go 服务:
+
 ```bash
 docker compose up -d          # 构建 Go 镜像并启动
 docker compose logs -f
@@ -205,7 +207,22 @@ docker compose down
 挂载说明：
 - `config.yaml`（只读）：宿主修改后需 `docker compose restart` 生效
 - `data/`（可写）：试卷 JSON 与 run 快照
-- PostgreSQL 与 scoring_worker 需另行部署（见 docs/deployment-go-pg.md）
+- 本地开发库: `docker compose -f docker-compose.postgres.yml up -d` (映射宿主 5433)
+
+**生产容器化部署**（Linux 服务器, 三容器: postgres + exam + worker, 独立伸缩）:
+
+```bash
+cp .env.production.example .env
+cp config.production.example.yaml config.production.yaml
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml up -d postgres
+docker compose -f docker-compose.prod.yml run --rm exam migrate --config /app/config.yaml
+docker compose -f docker-compose.prod.yml up -d
+```
+
+完整步骤、反代 TLS、备份升级与扩容见
+[docs/deployment-docker.md](docs/deployment-docker.md)。
+（Windows 计划任务方案见 [docs/deployment-go-pg.md](docs/deployment-go-pg.md)。）
 
 ## 安全配置
 

@@ -34,6 +34,8 @@ env/
 .env
 .env.*
 !.env.example
+# 生产配置 (含管理端密码等, 从 example 复制后填写, 不提交)
+config.production.yaml
 
 answer.js
 

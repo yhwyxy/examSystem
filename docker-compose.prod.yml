@@ -1,0 +1,108 @@
+# docker-compose.prod.yml - 生产容器化部署 (Linux 服务器)
+#
+# 三服务: postgres(独立) / exam(Go API) / worker(Python 评分, 可独立伸缩)
+# 详细步骤见 docs/deployment-docker.md
+#
+# 快速开始:
+#   cp .env.production.example .env
+#   cp config.production.example.yaml config.production.yaml
+#   docker compose -f docker-compose.prod.yml build
+#   docker compose -f docker-compose.prod.yml up -d postgres
+#   docker compose -f docker-compose.prod.yml run --rm exam migrate --config /app/config.yaml
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# 约定:
+#   - 密钥只经 .env 注入 (PG_PASSWORD / EXAM_DATABASE_URL / EXAM_ADMIN_PASSWORD), 不进镜像
+#   - exam 默认只绑 127.0.0.1:8000, 由反代 (Caddy/nginx) 提供 TLS 和域名
+#   - worker 默认 1 实例; 扩容: docker compose -f docker-compose.prod.yml up -d --scale worker=3
+#     (worker 单进程单线程轮询, 并行度 = 实例数; 每实例 WORKER_ID 需不同)
+#   - 迁移是复用 exam 镜像的一次性任务, 不常驻
+
+name: examsystem-prod
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${PG_USER:-exam_app}
+      POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD 必填 (生产强密码)}
+      POSTGRES_DB: ${PG_DB:-exam_system}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-exam_app} -d ${PG_DB:-exam_system}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    shm_size: 256mb
+    # 默认不映射宿主端口 (仅内网可达); 需要外部 psql 时取消注释
+    # ports:
+    #   - "127.0.0.1:5433:5432"
+
+  exam:
+    build: .
+    image: examsystem:latest
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${EXAM_BIND_ADDR:-127.0.0.1}:8000:8000"
+    volumes:
+      - ${EXAM_CONFIG_FILE:-./config.production.yaml}:/app/config.yaml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    environment:
+      # 最高优先级, 覆盖 config.yaml 的 database.url
+      EXAM_DATABASE_URL: ${EXAM_DATABASE_URL:?EXAM_DATABASE_URL 必填}
+      EXAM_ADMIN_PASSWORD: ${EXAM_ADMIN_PASSWORD:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "2", "-O", "/dev/null", "http://127.0.0.1:8000/api/health"]
+      interval: 10s
+      timeout: 3s
+      start_period: 30s
+      retries: 3
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+      args:
+        WORKER_EXTRAS: ${WORKER_EXTRAS:-}
+    image: examsystem-worker:latest
+    restart: unless-stopped
+    init: true
+    volumes:
+      # 快照 data/exam_runs 与 Go 侧同一卷; 路径与 DB 中 snapshot_path 一致
+      - ./data:/app/data:ro
+      - ${RERANKER_MODEL_DIR:-./models}:/models:ro
+    environment:
+      # worker 读 DATABASE_URL (注意与 Go 服务的 EXAM_DATABASE_URL 变量名不同)
+      DATABASE_URL: ${EXAM_DATABASE_URL}
+      WORKER_ID: ${WORKER_ID:-worker-1}
+      MULTIPLE_CHOICE_PARTIAL: ${MULTIPLE_CHOICE_PARTIAL:-true}
+      RERANK_USE_REMOTE: ${RERANK_USE_REMOTE:-false}
+      RERANK_API_URL: ${RERANK_API_URL:-}
+      RERANK_API_KEY: ${RERANK_API_KEY:-}
+      RERANK_MODEL: ${RERANK_MODEL:-}
+      RERANKER_MODEL: ${RERANKER_MODEL:-/models/bge-reranker-v2-m3}
+      HF_HOME: ${HF_HOME:-/models/hf-cache}
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-1.0}
+      LEASE_SECONDS: ${LEASE_SECONDS:-60}
+      HEARTBEAT_SECONDS: ${HEARTBEAT_SECONDS:-15}
+      MAX_SCORE: ${MAX_SCORE:-100.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: ${WORKER_MEM_LIMIT:-4g}
+          cpus: "${WORKER_CPUS:-2.0}"
+
+volumes:
+  pg_data:

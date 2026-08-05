@@ -161,7 +161,7 @@ requires-dist = [
     { name = "python-dotenv", specifier = ">=1.0,<2" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=3.0" },
-    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11" },
+    { name = "subjective-scoring", extras = ["text", "sql", "code", "remote"], git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.13" },
     { name = "torch", marker = "extra == 'local'", specifier = ">=2.2,<3" },
 ]
 provides-extras = ["local"]
@@ -838,8 +838,8 @@ wheels = [
 
 [[package]]
 name = "subjective-scoring"
-version = "0.1.11"
-source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.11#da09a737ed3d3a69f6e136a2b5fa2d469338bab6" }
+version = "0.1.13"
+source = { git = "https://github.com/yhwyxy/subjective-scoring?tag=v0.1.13#e72da084767d5e30365df520296f7a661e18fbd2" }
 dependencies = [
     { name = "pydantic" },
 ]

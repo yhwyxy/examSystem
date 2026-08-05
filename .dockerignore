@@ -1,0 +1,39 @@
+# VCS / 编辑器 / 本地工具 (不进构建上下文)
+.git
+.gitignore
+.idea
+.vscode
+.claude
+.aionrs
+.codex
+.opencode
+.DS_Store
+
+# 环境与依赖
+.env
+.env.*
+!.env.example
+.venv
+venv
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# 运行时数据 / 模型 / 离线包 (不进镜像)
+data
+logs
+models
+packages
+benchmarks
+loadtest
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# 本地文档与产物
+docs
+*.md
+exam-server

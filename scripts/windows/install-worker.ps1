@@ -1,5 +1,5 @@
 ﻿# install-worker.ps1: Windows 部署机离线安装 scoring_worker 依赖.
-# 全部 wheel 自带于 packages/ (subjective-scoring v0.1.11 + 依赖 + psycopg), 
+# 全部 wheel 自带于 packages/ (subjective-scoring v0.1.13 + 依赖 + psycopg),
 # 全程 --no-index --find-links 本地解析, 不访问 GitHub / PyPI.
 [CmdletBinding()]
 param(

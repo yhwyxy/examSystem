@@ -29,7 +29,7 @@ def test_subjective_scoring_uses_pinned_github_source():
     """subjective-scoring 必须钉 GitHub tag (可复现构建), 且根工程与 scoring_worker 钉选一致."""
     expected = {
         "git": "https://github.com/yhwyxy/subjective-scoring",
-        "tag": "v0.1.11",
+        "tag": "v0.1.13",
     }
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert config["tool"]["uv"]["sources"]["subjective-scoring"] == expected

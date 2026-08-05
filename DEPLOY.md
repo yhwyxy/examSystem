@@ -6,6 +6,7 @@
 
 ## Go + PostgreSQL 栈
 
+- Docker 容器化 (Linux, 推荐): [docs/deployment-docker.md](docs/deployment-docker.md)
 - 完整部署流程: [docs/deployment-go-pg.md](docs/deployment-go-pg.md)
 - 部署后健康自检: `scoring_worker --preflight` + `curl /api/health`
 

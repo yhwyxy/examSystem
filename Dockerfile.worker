@@ -1,0 +1,45 @@
+# scoring_worker 运行时镜像 (Python 3.12).
+#
+# 基础依赖与 scoring_worker/pyproject.toml 的 [project] dependencies 对齐;
+# subjective-scoring 从 GitHub tag 拉取, 构建需联网。
+#
+# 本地语义模型模式 (RERANK_USE_REMOTE=false + RERANKER_MODEL) 需加装 torch 等
+# (镜像 ~2GB), 构建时注入 WORKER_EXTRAS:
+#   docker compose build --build-arg WORKER_EXTRAS="sentence-transformers>=3.0 torch>=2.2,<3" worker
+# 远程 reranker 模式 (RERANK_USE_REMOTE=true) 无需, 镜像保持轻量。
+#
+# 运行时约定:
+#   - WORKDIR=/app, data/exam_runs 快照卷挂到 /app/data (与 Go 侧同一 data 卷,
+#     因为 DB 里 snapshot_path 是相对 "data/exam_runs/..." 存的)
+#   - 本地模型目录挂到 /models (RERANKER_MODEL=/models/<model-root>)
+#   - worker 只读环境变量, 不读 config.yaml / .env
+
+FROM python:3.12-slim AS build
+
+# git: pip 安装 git+https://github.com/yhwyxy/subjective-scoring@v0.1.13 需要
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY scoring_worker/ ./scoring_worker/
+
+# 基础依赖 (独立层, 利用 Docker 缓存)
+RUN pip install --no-cache-dir --prefix=/opt/worker-deps \
+      "psycopg[binary]>=3.2,<4" \
+      "pyyaml>=6.0,<7" \
+      "python-dotenv>=1.0,<2" \
+      "subjective-scoring[text,sql,code,remote] @ git+https://github.com/yhwyxy/subjective-scoring@v0.1.13"
+
+# 可选: 本地模型依赖 (与 pyproject 的 [project.optional-dependencies] local 对齐)
+ARG WORKER_EXTRAS=
+RUN if [ -n "$WORKER_EXTRAS" ]; then pip install --no-cache-dir --prefix=/opt/worker-deps $WORKER_EXTRAS; fi
+
+FROM python:3.12-slim
+
+WORKDIR /app
+
+COPY --from=build /opt/worker-deps /usr/local
+COPY scoring_worker/ ./scoring_worker/
+
+# worker 自带 SIGTERM graceful shutdown; init 兜底回收子进程
+CMD ["python", "-m", "scoring_worker"]
