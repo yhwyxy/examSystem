@@ -407,6 +407,67 @@ func TestAdminSubm_ChinesePaperName(t *testing.T) {
 	}
 }
 
+// TestAdminSubm_Export_TruncateScore: 分数保留两位小数, 多余位直接舍弃 (非四舍五入).
+func TestAdminSubm_Export_TruncateScore(t *testing.T) {
+	pool := testSubmPool(t)
+	r := newSubmRouter(t, pool, nil)
+	subID := setupSubmData(t, pool)
+	defer setupSubmData(t, pool)
+
+	detail := `[{"question_id":"q1","type":"single_choice","student_answer":"A","max_score":2,"score":0.666667,"final_score":0.666667}]`
+	if _, err := pool.Exec(context.Background(),
+		`UPDATE submissions SET total_score = 75.233333,
+		 objective_score = 4.666667, subjective_score_final = 70.566666,
+		 grading_detail_json = $1::jsonb WHERE id = $2`,
+		detail, subID); err != nil {
+		t.Fatalf("set scores: %v", err)
+	}
+
+	// 列表 API: 分数只保留两位小数.
+	req := httptest.NewRequest(http.MethodGet, "/admin/submissions", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("list status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Submissions []struct {
+			Objective       float64 `json:"objective_score"`
+			SubjectiveFinal float64 `json:"subjective_score_final"`
+			Total           float64 `json:"total_score"`
+		} `json:"submissions"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Submissions) != 1 {
+		t.Fatalf("len=%d want 1", len(resp.Submissions))
+	}
+	it := resp.Submissions[0]
+	if it.Objective != 4.66 || it.SubjectiveFinal != 70.56 || it.Total != 75.23 {
+		t.Fatalf("list scores=%+v want objective=4.66 subjective=70.56 total=75.23", it)
+	}
+
+	// 导出: 题分 0.66/2, 总分 75.23.
+	req = httptest.NewRequest(http.MethodGet, "/admin/submissions/export", nil)
+	rr = httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("export status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(rr.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("open xlsx: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+	rows, err := f.GetRows("Submissions")
+	if err != nil {
+		t.Fatalf("get rows: %v", err)
+	}
+	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+		"A（0.66/2）", "75.23", ""}, "truncate")
+}
+
 // TestAdminSubm_Export_FilterPaper: 两条不同 paper_id 提交, ?paper_id= 只导出匹配行.
 func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 	pool := testSubmPool(t)

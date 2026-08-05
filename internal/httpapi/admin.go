@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -1048,6 +1049,10 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		for i := range items {
 			name := resolver.resolve(items[i].PaperID, ptrOrEmpty(items[i].PaperName))
 			items[i].PaperName = &name
+			// 展示分数: 保留两位小数, 多余位直接舍弃.
+			items[i].ObjectiveScore = trunc2(items[i].ObjectiveScore)
+			items[i].SubjectiveScoreFinal = trunc2(items[i].SubjectiveScoreFinal)
+			items[i].TotalScore = trunc2(items[i].TotalScore)
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{"submissions": items})
 	}
@@ -1115,9 +1120,9 @@ func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{
 			"submitted_count":      submittedCount,
-			"avg_score":            avgScore,
-			"max_score":            maxScore,
-			"min_score":            minScore,
+			"avg_score":            trunc2(avgScore),
+			"max_score":            trunc2(maxScore),
+			"min_score":            trunc2(minScore),
 			"pending_review":       pendingReview,
 			"low_confidence_count": lowConfidenceCount,
 			"counts":               counts,
@@ -1422,7 +1427,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			for _, qid := range colQIDs {
 				row = append(row, byQID[qid])
 			}
-			row = append(row, score, submittedAt)
+			row = append(row, trunc2(score), submittedAt)
 			if err := xw.WriteRow(row); err != nil {
 				if err == export.ErrTooManyRows {
 					writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TRUNCATED",
@@ -1613,11 +1618,16 @@ func answerText(v any) string {
 func numText(v any) string {
 	switch t := v.(type) {
 	case float64:
-		return strconv.FormatFloat(t, 'f', -1, 64)
+		return strconv.FormatFloat(trunc2(t), 'f', -1, 64)
 	case string:
 		return t
 	}
 	return ""
+}
+
+// trunc2 保留两位小数, 多余位数直接舍弃 (非四舍五入).
+func trunc2(f float64) float64 {
+	return math.Trunc(f*100) / 100
 }
 
 // ptrOrEmpty 把 *string 兜底为空串 (department 可空).
