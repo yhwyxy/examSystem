@@ -303,15 +303,21 @@ func TestAdminSubm_Export(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
-	// detail 为空 -> 无题列; 表头 = 专业/工号/姓名/部门/总分/时间.
-	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "部门", "总分", "时间"}) {
-		t.Fatalf("header=%q", rows[0])
+	// 分块格式: 标题行 + 表头 + 1 数据行 (detail 为空 -> 无题列).
+	if len(rows) != 3 {
+		t.Fatalf("rows=%d want 3 (title+header+data)", len(rows))
 	}
-	if rows[1][0] != "专业1" || rows[1][1] != "emp-1" || rows[1][2] != "tester" ||
-		rows[1][3] != "部门1" || rows[1][4] != "7" {
-		t.Fatalf("row=%q", rows[1])
+	if rows[0][0] != "专业1" {
+		t.Fatalf("title=%q want 专业1", rows[0][0])
 	}
-	if rows[1][5] == "" {
+	if !slices.Equal(rows[1], []string{"专业", "工号", "姓名", "部门", "总分", "时间"}) {
+		t.Fatalf("header=%q", rows[1])
+	}
+	if rows[2][0] != "专业1" || rows[2][1] != "emp-1" || rows[2][2] != "tester" ||
+		rows[2][3] != "部门1" || rows[2][4] != "7" {
+		t.Fatalf("row=%q", rows[2])
+	}
+	if rows[2][5] == "" {
 		t.Fatalf("submitted_at empty")
 	}
 }
@@ -343,8 +349,8 @@ func TestAdminSubm_Export_PaperNameFallback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
-	if rows[1][0] != "smoke-1" { // paper_id 兜底
-		t.Fatalf("专业=%q want smoke-1", rows[1][0])
+	if rows[0][0] != "smoke-1" { // paper_id 兜底 (标题行)
+		t.Fatalf("专业=%q want smoke-1", rows[0][0])
 	}
 }
 
@@ -402,8 +408,8 @@ func TestAdminSubm_ChinesePaperName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
-	if rows[1][0] != "机械专业" {
-		t.Fatalf("export 专业=%q want 机械专业", rows[1][0])
+	if rows[0][0] != "机械专业" {
+		t.Fatalf("export 专业=%q want 机械专业", rows[0][0])
 	}
 }
 
@@ -466,7 +472,7 @@ func TestAdminSubm_Export_TruncateScore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get rows: %v", err)
 	}
-	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+	checkRow(t, rows[2], []string{"专业1", "emp-1", "tester", "部门1",
 		"A（0.66/2）", "B（1.13/1）", "75.23", ""}, "truncate")
 }
 
@@ -554,62 +560,75 @@ func TestAdminSubm_Export_FilterPaper(t *testing.T) {
 		"1. 作答内容 - 得分", "2. 作答内容 - 得分",
 		"3. 作答内容 - 得分", "4. 作答内容 - 得分", "总分", "时间"}
 	rows := exportRows("paper_id=smoke-1")
-	if len(rows) != 2 {
-		t.Fatalf("smoke-1 rows=%d want 2 (header+1)", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("smoke-1 rows=%d want 3 (title+header+data)", len(rows))
 	}
-	if !slices.Equal(rows[0], wantHeader) {
-		t.Fatalf("smoke-1 header=%q want %q", rows[0], wantHeader)
+	if rows[0][0] != "专业1" {
+		t.Fatalf("smoke-1 title=%q want 专业1", rows[0][0])
 	}
-	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+	if !slices.Equal(rows[1], wantHeader) {
+		t.Fatalf("smoke-1 header=%q want %q", rows[1], wantHeader)
+	}
+	checkRow(t, rows[2], []string{"专业1", "emp-1", "tester", "部门1",
 		"A（4/4）", "RESTful 设计原则（5.5/6）",
 		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "smoke-1")
 
 	rows = exportRows("paper_id=smoke-2")
-	if len(rows) != 2 {
-		t.Fatalf("smoke-2 rows=%d want 2 (header+1)", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("smoke-2 rows=%d want 3 (title+header+data)", len(rows))
+	}
+	if rows[0][0] != "专业2" {
+		t.Fatalf("smoke-2 title=%q want 专业2", rows[0][0])
 	}
 	// 过滤后只有 bob 行 -> 列集合仅含 bob 自己的 q1.
-	if !slices.Equal(rows[0], []string{"专业", "工号", "姓名", "部门",
+	if !slices.Equal(rows[1], []string{"专业", "工号", "姓名", "部门",
 		"1. 作答内容 - 得分", "总分", "时间"}) {
-		t.Fatalf("smoke-2 header=%q", rows[0])
+		t.Fatalf("smoke-2 header=%q", rows[1])
 	}
-	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "smoke-2")
+	checkRow(t, rows[2], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "smoke-2")
 
 	rows = exportRows("employee_id=emp-1")
-	if len(rows) != 2 {
-		t.Fatalf("employee_id rows=%d want 2 (header+1)", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("employee_id rows=%d want 3 (title+header+data)", len(rows))
 	}
-	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+	checkRow(t, rows[2], []string{"专业1", "emp-1", "tester", "部门1",
 		"A（4/4）", "RESTful 设计原则（5.5/6）",
 		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "employee_id")
 
 	rows = exportRows("keyword=bob")
-	if len(rows) != 2 {
-		t.Fatalf("keyword rows=%d want 2 (header+1)", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("keyword rows=%d want 3 (title+header+data)", len(rows))
 	}
-	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "keyword")
+	checkRow(t, rows[2], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "keyword")
 
 	rows = exportRows("ids=" + fmtID(subID))
-	if len(rows) != 2 {
-		t.Fatalf("ids rows=%d want 2 (header+1)", len(rows))
+	if len(rows) != 3 {
+		t.Fatalf("ids rows=%d want 3 (title+header+data)", len(rows))
 	}
-	checkRow(t, rows[1], []string{"专业1", "emp-1", "tester", "部门1",
+	checkRow(t, rows[2], []string{"专业1", "emp-1", "tester", "部门1",
 		"A（4/4）", "RESTful 设计原则（5.5/6）",
 		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "ids")
 
 	rows = exportRows("")
-	if len(rows) != 3 {
-		t.Fatalf("no-filter rows=%d want 3 (header+2)", len(rows))
+	// 全量: 按 paper_id 分块, smoke-1 块 (标题/表头/tester) 在前, 空行,
+	// smoke-2 块 (标题/表头/bob). 各块列集合独立, 不跨专业 union.
+	if len(rows) != 7 {
+		t.Fatalf("no-filter rows=%d want 7 (2 blocks)", len(rows))
 	}
-	// 全量: bob (新) 在前, tester 在后; 列 = 两者 union 保序.
-	if !slices.Equal(rows[0], wantHeader) {
-		t.Fatalf("no-filter header=%q want %q", rows[0], wantHeader)
+	if rows[0][0] != "专业1" || !slices.Equal(rows[1], wantHeader) {
+		t.Fatalf("no-filter block1 title/header=%q %q", rows[0], rows[1])
 	}
-	checkRow(t, rows[1], []string{"专业2", "emp-2", "bob", "部门2",
-		"B（4/4）", "", "", "", "6", ""}, "no-filter bob")
 	checkRow(t, rows[2], []string{"专业1", "emp-1", "tester", "部门1",
 		"A（4/4）", "RESTful 设计原则（5.5/6）",
 		"子题作答1（4/4）", "子题作答2（5/6）", "7", ""}, "no-filter tester")
+	if len(rows[3]) != 0 { // 块间空行 (GetRows 对空行返回空切片)
+		t.Fatalf("no-filter blank row=%q want empty", rows[3])
+	}
+	if rows[4][0] != "专业2" || !slices.Equal(rows[5],
+		[]string{"专业", "工号", "姓名", "部门", "1. 作答内容 - 得分", "总分", "时间"}) {
+		t.Fatalf("no-filter block2 title/header=%q %q", rows[4], rows[5])
+	}
+	checkRow(t, rows[6], []string{"专业2", "emp-2", "bob", "部门2", "B（4/4）", "6", ""}, "no-filter bob")
 }
 
 // checkRow 逐列断言导出行; 时间列 (最后列) 仅断言非空.

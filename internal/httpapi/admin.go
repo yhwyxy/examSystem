@@ -1352,26 +1352,31 @@ func (r *paperNameResolver) resolve(paperID, stored string) string {
 }
 
 // exportSubmissionsHandler GET /api/admin/submissions/export: 导出 xlsx.
-// 表头: 专业(paper_name, NULL 时回退 paper_id)/工号/姓名/部门 + 每题
-// "n. 作答内容 - 得分"列 + 总分/时间. 每题列按
-// grading_detail_json 顺序 (composite 展平为子题列), 列集合由实际数据首次出现
-// 顺序 union 得到, 故先做轻量列发现, 再流式写行. 上限 export.DefaultRowsLimit
-// (100000); 过滤: ids (逗号分隔的提交 id, 优先) / paper_id / employee_id /
-// keyword (姓名或工号模糊), 与 listSubmissionsHandler 同模式.
+// 输出为单 sheet 按专业分块: 每个专业一块, 块首为合并的专业标题行, 第二行
+// 为该专业的题头 (专业/工号/姓名/部门 + 每题 "n. 作答内容 - 得分" + 总分/时间),
+// 之后为该专业的数据行; 块间空一行. 每题列按该专业 grading_detail_json 顺序
+// (composite 展平为子题列), 每个专业独立列集合, 不跨专业 union, 避免多试卷
+// 题号不唯一导致的错位/空列. 仅导出存在成绩 (submissions 行) 的专业. 上限
+// export.DefaultRowsLimit (100000); 过滤: ids (逗号分隔提交 id, 优先) /
+// paper_id / employee_id / keyword (姓名或工号模糊), 与 listSubmissionsHandler
+// 同模式.
 func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
-		colQIDs, err := discoverExportColumns(r.Context(), deps, q)
+		paperCols, paperOrder, err := discoverExportColumnsByPaper(r.Context(), deps, q)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
 				"export columns: "+err.Error())
 			return
 		}
-		// Excel 硬上限 16384 列; 预留 6 个固定列 (专业/工号/姓名/部门/总分/时间).
-		if len(colQIDs) > 16384-6 {
-			writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TOO_MANY_COLUMNS",
-				fmt.Sprintf("columns=%d exceed xlsx limit", len(colQIDs)+6))
-			return
+		// Excel 硬上限 16384 列; 每个专业块预留 6 个固定列
+		// (专业/工号/姓名/部门/总分/时间).
+		for _, pid := range paperOrder {
+			if len(paperCols[pid]) > 16384-6 {
+				writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TOO_MANY_COLUMNS",
+					fmt.Sprintf("columns=%d exceed xlsx limit", len(paperCols[pid])+6))
+				return
+			}
 		}
 
 		where, args := exportSubmissionsQuery(q)
@@ -1388,20 +1393,12 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 		}
 		defer rows.Close()
 
-		header := []string{"专业", "工号", "姓名", "部门"}
-		for i := range colQIDs {
-			header = append(header, fmt.Sprintf("%d. 作答内容 - 得分", i+1))
-		}
-		header = append(header, "总分", "时间")
-
 		// 专业显示名: 优先 papers store 中文 name, 回退已有 paper_name /
 		// paper_id (SQL COALESCE 已兜底).
 		resolver := newPaperNameResolver(deps)
 		xw := export.NewXLSXWriter()
-		if err := xw.WriteHeader(header); err != nil {
-			writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
-			return
-		}
+		currentPaper := ""
+		wroteAny := false
 		for rows.Next() {
 			var (
 				paperID     string
@@ -1417,6 +1414,31 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", err.Error())
 				return
 			}
+			if paperID != currentPaper {
+				// 新专业块: 空行分隔 (首个块前不加) + 标题行 + 本专业题头.
+				if wroteAny {
+					if err := xw.WriteBlank(); err != nil {
+						writeAdminError(w, http.StatusInternalServerError, "XLSX_ROW_FAILED", err.Error())
+						return
+					}
+				}
+				cols := paperCols[paperID]
+				if err := xw.WriteSectionTitle(resolver.resolve(paperID, paperName), 6+len(cols)); err != nil {
+					writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
+					return
+				}
+				header := []string{"专业", "工号", "姓名", "部门"}
+				for i := range cols {
+					header = append(header, fmt.Sprintf("%d. 作答内容 - 得分", i+1))
+				}
+				header = append(header, "总分", "时间")
+				if err := xw.WriteHeader(header); err != nil {
+					writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
+					return
+				}
+				currentPaper = paperID
+			}
+			wroteAny = true
 			cells := parseExportCells(detailRaw)
 			byQID := make(map[string]string, len(cells))
 			for _, c := range cells {
@@ -1424,7 +1446,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			}
 			row := export.Row{resolver.resolve(paperID, paperName), empID, name,
 				ptrOrEmpty(department)}
-			for _, qid := range colQIDs {
+			for _, qid := range paperCols[paperID] {
 				row = append(row, byQID[qid])
 			}
 			row = append(row, trunc2(score), submittedAt)
@@ -1435,6 +1457,17 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 					return
 				}
 				writeAdminError(w, http.StatusInternalServerError, "XLSX_ROW_FAILED", err.Error())
+				return
+			}
+		}
+		if err := rows.Err(); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", err.Error())
+			return
+		}
+		if !wroteAny {
+			// 无匹配成绩时仍输出固定表头, 保证文件不为空.
+			if err := xw.WriteHeader([]string{"专业", "工号", "姓名", "部门", "总分", "时间"}); err != nil {
+				writeAdminError(w, http.StatusInternalServerError, "XLSX_HEADER_FAILED", err.Error())
 				return
 			}
 		}
@@ -1488,42 +1521,53 @@ func exportSubmissionsQuery(q url.Values) (string, []any) {
 		args = append(args, "%"+kw+"%")
 		phIdx++
 	}
-	sb.WriteString(" ORDER BY submitted_at DESC LIMIT $" + strconv.Itoa(phIdx))
+	sb.WriteString(" ORDER BY paper_id, submitted_at DESC LIMIT $" + strconv.Itoa(phIdx))
 	args = append(args, export.DefaultRowsLimit)
 	return sb.String(), args
 }
 
-// discoverExportColumns 轻量读每行 grading_detail_json, 按首次出现顺序 union
-// 出"作答内容 - 得分"列的 qid 序列 (composite 子题展平为 parent:sub).
-func discoverExportColumns(ctx context.Context, deps Dependencies, q url.Values) ([]string, error) {
+// discoverExportColumnsByPaper 按专业分组发现题列: 每个专业的 qid 集合按该
+// 专业行首次出现顺序 union (composite 子题展平为 parent:sub), 专业间不合并.
+// 返回 paper_id -> 有序 qid 列表与专业出现顺序 (与数据查询同 ORDER BY, 保证
+// 写块时列集合一致).
+func discoverExportColumnsByPaper(ctx context.Context, deps Dependencies, q url.Values) (map[string][]string, []string, error) {
 	where, args := exportSubmissionsQuery(q)
 	sb := strings.Builder{}
-	sb.WriteString("SELECT coalesce(grading_detail_json, '[]'::jsonb)")
+	sb.WriteString("SELECT paper_id, coalesce(grading_detail_json, '[]'::jsonb)")
 	sb.WriteString(where)
 
 	rows, err := deps.Pool.Query(ctx, sb.String(), args...)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer rows.Close()
 
 	var (
-		cols []string
-		seen = make(map[string]bool)
+		colsByPaper = make(map[string][]string)
+		seenByPaper = make(map[string]map[string]bool)
+		order       []string
 	)
 	for rows.Next() {
-		var raw []byte
-		if err := rows.Scan(&raw); err != nil {
-			return nil, err
+		var (
+			paperID string
+			raw     []byte
+		)
+		if err := rows.Scan(&paperID, &raw); err != nil {
+			return nil, nil, err
+		}
+		if _, ok := colsByPaper[paperID]; !ok {
+			colsByPaper[paperID] = nil
+			seenByPaper[paperID] = make(map[string]bool)
+			order = append(order, paperID)
 		}
 		for _, c := range parseExportCells(raw) {
-			if !seen[c.qid] {
-				seen[c.qid] = true
-				cols = append(cols, c.qid)
+			if !seenByPaper[paperID][c.qid] {
+				seenByPaper[paperID][c.qid] = true
+				colsByPaper[paperID] = append(colsByPaper[paperID], c.qid)
 			}
 		}
 	}
-	return cols, rows.Err()
+	return colsByPaper, order, rows.Err()
 }
 
 // exportCell 是一道题 (或 composite 子题) 的导出单元格.

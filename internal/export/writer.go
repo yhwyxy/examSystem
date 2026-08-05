@@ -37,12 +37,11 @@ const DefaultRowsLimit = 100000
 
 // XLSXWriter 是 Writer 的真 xlsx 实现 (excelize v2).
 type XLSXWriter struct {
-	f         *excelize.File
-	sheet     string
-	rowOffset int
-	limit     int   // 最大行数; 0 = DefaultRowsLimit
-	written   int   // 已写数据行数 (不含 header)
-	headered  bool
+	f          *excelize.File
+	sheet      string
+	rowOffset  int
+	limit      int // 最大行数; 0 = DefaultRowsLimit
+	written    int // 已写数据行数 (不含 header)
 	overflowed bool
 }
 
@@ -54,14 +53,11 @@ func NewXLSXWriter() *XLSXWriter {
 	return &XLSXWriter{f: f, sheet: "Submissions", limit: DefaultRowsLimit}
 }
 
-// WriteHeader 写表头到第 1 行.
+// WriteHeader 写表头到当前行 (首块从第 1 行开始). 可重复调用: 分块导出时
+// 每个专业块各写一次自己的表头, 列数按该专业实际题数.
 func (w *XLSXWriter) WriteHeader(cols []string) error {
-	if w.headered {
-		return nil
-	}
-	defer func() { w.headered = true }()
 	for i, c := range cols {
-		axis, err := excelize.CoordinatesToCellName(i+1, 1)
+		axis, err := excelize.CoordinatesToCellName(i+1, w.rowOffset+1)
 		if err != nil {
 			return err
 		}
@@ -69,7 +65,45 @@ func (w *XLSXWriter) WriteHeader(cols []string) error {
 			return err
 		}
 	}
-	w.rowOffset = 1 // 下一行从第 2 行开始
+	w.rowOffset++
+	return nil
+}
+
+// WriteSectionTitle 写一行跨 span 列合并的加粗标题, 用作专业块标题行.
+func (w *XLSXWriter) WriteSectionTitle(text string, span int) error {
+	row := w.rowOffset + 1
+	first, err := excelize.CoordinatesToCellName(1, row)
+	if err != nil {
+		return err
+	}
+	last, err := excelize.CoordinatesToCellName(span, row)
+	if err != nil {
+		return err
+	}
+	if err := w.f.SetCellValue(w.sheet, first, text); err != nil {
+		return err
+	}
+	if err := w.f.MergeCell(w.sheet, first, last); err != nil {
+		return err
+	}
+	styleID, err := w.f.NewStyle(&excelize.Style{Font: &excelize.Font{Bold: true}})
+	if err != nil {
+		return err
+	}
+	if err := w.f.SetCellStyle(w.sheet, first, last, styleID); err != nil {
+		return err
+	}
+	w.rowOffset++
+	return nil
+}
+
+// WriteBlank 写一个空行, 用于分块之间的分隔.
+func (w *XLSXWriter) WriteBlank() error {
+	axis := fmt.Sprintf("A%d", w.rowOffset+1)
+	if err := w.f.SetCellValue(w.sheet, axis, ""); err != nil {
+		return err
+	}
+	w.rowOffset++
 	return nil
 }
 
