@@ -1066,11 +1066,25 @@ async function tryResumeSession() {
   }
 }
 
+function setupBackToTop() {
+  const btn = $('backToTop');
+  if (!btn) return;
+  const toggle = () => {
+    btn.classList.toggle('show', window.scrollY > 300);
+  };
+  window.addEventListener('scroll', toggle, { passive: true });
+  btn.addEventListener('click', () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+  toggle();
+}
+
 $('startBtn').addEventListener('click', startExam);
 $('examForm').addEventListener('submit', (event) => {
   event.preventDefault();
   submitExam(null);
 });
+setupBackToTop();
 
 window.addEventListener('pagehide', () => {
   if (state.tryout) {
