@@ -25,7 +25,9 @@ __pycache__
 data
 logs
 models
-packages
+# 其余轮子不进构建上下文; 仅主观题评分库当前版本 wheel 是 worker 离线构建依赖
+packages/*
+!packages/subjective_scoring-0.1.13-py3-none-any.whl
 benchmarks
 loadtest
 *.db

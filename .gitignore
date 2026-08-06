@@ -48,7 +48,10 @@ exam_system.sql
 
 # Local model caches / vendored wheels
 models/
-packages/
+# packages/ 其余轮子均为本地产物; 仅主观题评分库当前版本 wheel 入库
+# (worker 镜像离线构建依赖它, 见 Dockerfile.worker; 升级版本时同步改这里)
+packages/*
+!packages/subjective_scoring-0.1.13-py3-none-any.whl
 benchmarks/
 logs/
 

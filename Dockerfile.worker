@@ -1,7 +1,8 @@
 # scoring_worker 运行时镜像 (Python 3.12).
 #
 # 基础依赖与 scoring_worker/pyproject.toml 的 [project] dependencies 对齐;
-# subjective-scoring 从 GitHub tag 拉取, 构建需联网。
+# subjective-scoring 默认安装仓库内置 wheel (packages/), 构建不依赖 GitHub/代理;
+# 需要从 GitHub tag 拉最新时用 --build-arg SUBJECTIVE_SCORING_SOURCE=git。
 #
 # 本地语义模型模式 (RERANK_USE_REMOTE=false + RERANKER_MODEL) 需加装 torch 等
 # (镜像 ~2GB), 构建时注入 WORKER_EXTRAS:
@@ -16,19 +17,45 @@
 
 FROM python:3.12-slim AS build
 
-# git: pip 安装 git+https://github.com/yhwyxy/subjective-scoring@v0.1.13 需要
+WORKDIR /src
+
+# 国内加速: pip 默认清华源, 换回官方源:
+#   docker compose build --build-arg PIP_INDEX_URL=https://pypi.org/simple worker
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ENV PIP_INDEX_URL=$PIP_INDEX_URL
+
+# subjective-scoring 安装来源 (二选一):
+#   local (默认): 安装仓库内置 wheel packages/subjective_scoring-<version>.whl,
+#                 构建完全离线, 不需要 GitHub/代理; 升级版本时替换该 wheel 即可。
+#   git:          pip 从 git+https://github.com/... 拉取 (需能访问 GitHub)。
+ARG SUBJECTIVE_SCORING_SOURCE=local
+ARG SUBJECTIVE_SCORING_VERSION=0.1.13
+ARG SUBJECTIVE_SCORING_URL=https://github.com/yhwyxy/subjective-scoring
+
+# git: 仅 SUBJECTIVE_SCORING_SOURCE=git 时 pip 装 git+ 依赖需要
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git \
  && rm -rf /var/lib/apt/lists/*
 
 COPY scoring_worker/ ./scoring_worker/
+# 内置 wheel (纯 Python, 平台无关): 由本地 checkout 构建
+#   cd subjective-scoring && uv build --wheel --out-dir ../examSystem/packages/
+COPY packages/subjective_scoring-${SUBJECTIVE_SCORING_VERSION}-py3-none-any.whl ./packages/
 
 # 基础依赖 (独立层, 利用 Docker 缓存)
 RUN pip install --no-cache-dir --prefix=/opt/worker-deps \
       "psycopg[binary]>=3.2,<4" \
       "pyyaml>=6.0,<7" \
-      "python-dotenv>=1.0,<2" \
-      "subjective-scoring[text,sql,code,remote] @ git+https://github.com/yhwyxy/subjective-scoring@v0.1.13"
+      "python-dotenv>=1.0,<2"
+
+# subjective-scoring 本体 (extras: text/sql/code/remote 的传递依赖全部走清华 PyPI)
+RUN if [ "$SUBJECTIVE_SCORING_SOURCE" = "git" ]; then \
+      pip install --no-cache-dir --prefix=/opt/worker-deps \
+        "subjective-scoring[text,sql,code,remote] @ git+${SUBJECTIVE_SCORING_URL}@v${SUBJECTIVE_SCORING_VERSION}"; \
+    else \
+      pip install --no-cache-dir --prefix=/opt/worker-deps \
+        "subjective-scoring[text,sql,code,remote] @ ./packages/subjective_scoring-${SUBJECTIVE_SCORING_VERSION}-py3-none-any.whl"; \
+    fi
 
 # 可选: 本地模型依赖 (与 pyproject 的 [project.optional-dependencies] local 对齐)
 ARG WORKER_EXTRAS=

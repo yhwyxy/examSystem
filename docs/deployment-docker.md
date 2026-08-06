@@ -38,7 +38,8 @@
 - Linux 服务器, Docker Engine 24+ 且带 Compose v2 (`docker compose version`)。
 - 磁盘: 镜像约 1GB; 本地模型另需约 2GB (放 `./models`)。
 - 内存建议: PG 512MB+ / exam 512MB / worker 4GB (本地模型加载)。
-- 构建需联网 (Docker Hub / GitHub / PyPI); 构建机与部署机一致用 Linux (镜像内是
+- 构建需联网 (Docker Hub / PyPI 清华源; 模型下载走 hf-mirror); `subjective-scoring`
+  用仓库内置 wheel, 默认**不访问 GitHub**。构建机与部署机一致用 Linux (镜像内是
   Linux wheel, 与仓库 `packages/` 里的 Windows wheel 无关)。
 
 ## 2. 一次性准备
@@ -59,9 +60,11 @@ cp .env.production.example .env
 # 3) 数据/日志目录属主 (三容器均以 uid 10001 运行; exam 要写 data/ 与 logs/)
 mkdir -p data logs && sudo chown -R 10001:10001 data logs
 
-# 4) 模型目录 (本地模型模式才需要): 解包 bge-reranker-v2-m3 (需含 config.json)
+# 4) 模型目录 (本地模型模式才需要): 下载 bge-reranker-v2-m3 (需含 config.json)
+#    一键同步 (走 hf-mirror.com 国内镜像 + 一次性容器, 不要求宿主机装 Python):
 mkdir -p models
-#    把模型放到 models/bge-reranker-v2-m3/
+./scripts/fetch-models.sh        # -> ./models/bge-reranker-v2-m3/
+#    也可手动解包: 把 BAAI/bge-reranker-v2-m3 放到 models/bge-reranker-v2-m3/
 ```
 
 `.env` 里的评分方式 (三选一; 生产上推荐在管理后台「设置」栏切换, 保存后以 DB 为准,
@@ -85,8 +88,14 @@ docker compose -f docker-compose.prod.yml build
 ```
 
 - 产物: `examsystem:latest` (Go, 多阶段) + `examsystem-worker:latest` (Python 3.12)。
-- worker 基础依赖与 `scoring_worker/pyproject.toml` 对齐, `subjective-scoring` 从
-  GitHub tag `v0.1.13` 拉取; 升级该库时同步改 `Dockerfile.worker`。
+- worker 基础依赖与 `scoring_worker/pyproject.toml` 对齐; `subjective-scoring`
+  默认安装仓库内置 wheel (`packages/subjective_scoring-0.1.13-py3-none-any.whl`,
+  已入库, 升级库时同步替换), 构建**不需要访问 GitHub**。
+- worker 构建默认走国内镜像: pip 用清华源 (`PIP_INDEX_URL`, 可通过
+  `--build-arg PIP_INDEX_URL=https://pypi.org/simple` 换回官方源)。
+- 需要从 GitHub tag 拉 `subjective-scoring` 时 (构建机能访问 GitHub):
+  `--build-arg SUBJECTIVE_SCORING_SOURCE=git` (直连慢可用
+  `--build-arg SUBJECTIVE_SCORING_URL=<git 镜像地址>` 指到镜像)。
 - 改 `.env` 里的 `WORKER_EXTRAS` 后需重新 `build worker` 才生效。
 - 后台切到 remote_reranker/llm 不需要重建; 切回 local 前确认镜像带 `WORKER_EXTRAS`
   (否则 worker 会记录切换失败并沿用旧服务)。
