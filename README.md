@@ -153,17 +153,20 @@ uv pip install -e "../subjective-scoring[text,sql,code]"
 默认 CrossEncoder 为 `BAAI/bge-reranker-base`，需安装 `sentence-transformers`
 （`uv sync --extra embedding`）。未安装或加载失败时自动回退词法相似度，提交流程不中断。
 
-无法下载本地模型时，可在项目根目录 `.env` 中启用 Cohere-compatible 云端 Reranker：
+无法下载本地模型时，可改用 Cohere-compatible 云端 Reranker。注意 worker **不读取
+`.env`**，需在启动前设置环境变量（推荐 `bash scripts/start-worker-dev.sh`，或手动
+`export` / `$env:`，见上文「4. 手动启动」）：
 
-```dotenv
-RERANK_USE_REMOTE=true
-RERANK_API_URL=https://router.tumuer.me/v1/rerank
-RERANK_API_KEY=your-api-key
-RERANK_MODEL=Pro/BAAI/bge-reranker-v2-m3
+```bash
+export RERANK_USE_REMOTE=true
+export RERANK_API_URL=https://router.tumuer.me/v1/rerank
+export RERANK_API_KEY=your-api-key
+export RERANK_MODEL=Pro/BAAI/bge-reranker-v2-m3
 ```
 
 `RERANK_USE_REMOTE` 未配置或设为 `false` 时使用本地模型；设为 `true` 时，另外三个云端变量必须
-同时设置。`.env` 已被 Git 忽略，API Key 不应写入其他受版本控制的文件。
+同时设置。API Key 不应写入任何受版本控制的文件；Docker 生产部署的 env 模板见
+`.env.production.example`（复制为 `.env` 后填写，`.env` 已被 Git 忽略）。
 
 ## 题库 / 多专业试卷
 
