@@ -14,7 +14,11 @@ FROM alpine:3.20
 
 WORKDIR /app
 
-RUN apk add --no-cache ca-certificates tzdata wget
+# 非 root 运行 (uid 10001): 容器内 /app/data、/app/logs 及宿主机 bind mount
+# 需 chown 给 10001, 见 docs/deployment-docker.md §4/§5
+RUN apk add --no-cache ca-certificates tzdata wget \
+ && addgroup -g 10001 -S exam \
+ && adduser -S -D -H -u 10001 -G exam exam
 
 COPY --from=build /out/exam-server /usr/local/bin/exam-server
 COPY frontend ./frontend
@@ -22,7 +26,7 @@ COPY config.yaml ./config.yaml
 
 # 运行时数据目录（试卷 JSON、run 快照等）
 # 容器内 /app/data 与 /app/config.yaml 建议通过 volume 持久化
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/logs && chown -R 10001:10001 /app
 
 EXPOSE 8000
 
@@ -32,4 +36,10 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
 
 # 主观题评分依赖独立部署的 scoring_worker（Python，见 scoring_worker/），
 # 通过共享 PostgreSQL 的 grading_jobs 队列衔接，不在本镜像内。
-CMD ["exam-server", "serve", "--config", "config.yaml", "--bind", "0.0.0.0:8000", "--static", "frontend"]
+# 入口固定 exam-server, 子命令由命令行决定:
+#   docker run examsystem:latest                       = serve
+#   docker run examsystem:latest migrate --config ...  = migrate (一次性)
+ENTRYPOINT ["exam-server"]
+CMD ["serve", "--config", "config.yaml", "--bind", "0.0.0.0:8000", "--static", "frontend"]
+
+USER 10001

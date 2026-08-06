@@ -12,7 +12,10 @@
 #   docker compose -f docker-compose.prod.yml up -d
 #
 # 约定:
-#   - 密钥只经 .env 注入 (PG_PASSWORD / EXAM_DATABASE_URL / EXAM_ADMIN_PASSWORD), 不进镜像
+#   - 密钥只经 .env 注入 (PG_PASSWORD / PG_APP_PASSWORD / PG_MIGRATOR_PASSWORD /
+#     EXAM_DATABASE_URL / EXAM_MIGRATOR_DATABASE_URL / EXAM_ADMIN_PASSWORD), 不进镜像
+#   - 最小权限角色 (initdb 由 scripts/pg-bootstrap-prod.sh 自动创建):
+#     exam_app 运行态 (DML) / exam_migrator 一次性迁移 (DDL+DML)
 #   - exam 默认只绑 127.0.0.1:8000, 由反代 (Caddy/nginx) 提供 TLS 和域名
 #   - worker 默认 1 实例; 扩容: docker compose -f docker-compose.prod.yml up -d --scale worker=3
 #     (worker 单进程单线程轮询, 并行度 = 实例数; 每实例 WORKER_ID 需不同)
@@ -25,35 +28,53 @@ services:
     image: postgres:18-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${PG_USER:-exam_app}
+      # superuser 仅用于 initdb 建角色; 应用/迁移分别走最小权限角色
+      POSTGRES_USER: ${PG_USER:-exam_super}
       POSTGRES_PASSWORD: ${PG_PASSWORD:?PG_PASSWORD 必填 (生产强密码)}
       POSTGRES_DB: ${PG_DB:-exam_system}
+      # initdb 脚本用 (scripts/pg-bootstrap-prod.sh 创建最小权限角色)
+      PG_APP_PASSWORD: ${PG_APP_PASSWORD:?PG_APP_PASSWORD 必填}
+      PG_MIGRATOR_PASSWORD: ${PG_MIGRATOR_PASSWORD:?PG_MIGRATOR_PASSWORD 必填}
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      # PG18 镜像: VOLUME=/var/lib/postgresql, PGDATA=/var/lib/postgresql/18/docker.
+      # 必须挂整个 /var/lib/postgresql; 挂 /var/lib/postgresql/data 会让真实数据
+      # 落匿名卷 (命名卷 pg_data 为空), 换机/升级时丢数据.
+      - pg_data:/var/lib/postgresql
+      # 首次初始化自动建 exam_app / exam_migrator (幂等; 凭据来自 .env 环境变量)
+      - ./scripts/pg-bootstrap-prod.sh:/docker-entrypoint-initdb.d/10-bootstrap-prod.sh:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-exam_app} -d ${PG_DB:-exam_system}"]
+      test: ["CMD-SHELL", "pg_isready -U ${PG_USER:-exam_super} -d ${PG_DB:-exam_system}"]
       interval: 5s
       timeout: 3s
       retries: 10
     shm_size: 256mb
+    deploy:
+      resources:
+        limits:
+          memory: ${PG_MEM_LIMIT:-1g}
+          cpus: "${PG_CPUS:-1.0}"
     # 默认不映射宿主端口 (仅内网可达); 需要外部 psql 时取消注释
     # ports:
     #   - "127.0.0.1:5433:5432"
 
   exam:
     build: .
-    image: examsystem:latest
+    image: ${EXAM_IMAGE:-examsystem:latest}
     restart: unless-stopped
     init: true
     ports:
       - "${EXAM_BIND_ADDR:-127.0.0.1}:8000:8000"
     volumes:
       - ${EXAM_CONFIG_FILE:-./config.production.yaml}:/app/config.yaml:ro
+      # data/ 与 logs/ 必须 chown 给容器 uid 10001 (镜像内非 root 用户), 否则写入失败:
+      #   sudo chown -R 10001:10001 data logs
       - ./data:/app/data
       - ./logs:/app/logs
     environment:
       # 最高优先级, 覆盖 config.yaml 的 database.url
       EXAM_DATABASE_URL: ${EXAM_DATABASE_URL:?EXAM_DATABASE_URL 必填}
+      # 迁移专用角色 (exam_migrator, DDL+DML): 仅 migrate 子命令消费, serve 忽略
+      EXAM_MIGRATOR_DATABASE_URL: ${EXAM_MIGRATOR_DATABASE_URL:?EXAM_MIGRATOR_DATABASE_URL 必填}
       EXAM_ADMIN_PASSWORD: ${EXAM_ADMIN_PASSWORD:-}
     depends_on:
       postgres:
@@ -64,6 +85,11 @@ services:
       timeout: 3s
       start_period: 30s
       retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: ${EXAM_MEM_LIMIT:-512m}
+          cpus: "${EXAM_CPUS:-1.0}"
 
   worker:
     build:
@@ -71,7 +97,7 @@ services:
       dockerfile: Dockerfile.worker
       args:
         WORKER_EXTRAS: ${WORKER_EXTRAS:-}
-    image: examsystem-worker:latest
+    image: ${WORKER_IMAGE:-examsystem-worker:latest}
     restart: unless-stopped
     init: true
     volumes:
@@ -102,6 +128,13 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      # 轻量 DB 探活 (不加载评分模型); 本地模型模式首启加载慢, start_period 放宽
+      test: ["CMD", "python", "-m", "scoring_worker", "--health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
     deploy:
       resources:
         limits:

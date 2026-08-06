@@ -13,7 +13,16 @@
 | worker | examsystem-worker:latest (Dockerfile.worker) | 主观题评分轮询 (三模式可热切换) | 评分积压 (并行=实例数) |
 
 关键约定:
-- 密钥只经 `.env` 注入 (PG_PASSWORD / EXAM_DATABASE_URL / EXAM_ADMIN_PASSWORD), 不进镜像。
+- 密钥只经 `.env` 注入 (PG_PASSWORD / PG_APP_PASSWORD / PG_MIGRATOR_PASSWORD /
+  EXAM_DATABASE_URL / EXAM_MIGRATOR_DATABASE_URL / EXAM_ADMIN_PASSWORD), 不进镜像。
+- 最小权限角色 (initdb 由 `scripts/pg-bootstrap-prod.sh` 自动创建): `exam_app`
+  运行态 (仅 DML, 应用+worker 共用) / `exam_migrator` 一次性迁移 (DDL+DML)。
+  `migrate` 子命令自动读 `EXAM_MIGRATOR_DATABASE_URL` 切到迁移角色 (serve 不受影响)。
+- 三容器均以非 root (uid 10001) 运行; exam 挂载的 `data/` 与 `logs/` 需
+  `sudo chown -R 10001:10001 data logs` 才能写入。
+- PG18 镜像的卷要挂整个 `/var/lib/postgresql` (镜像内 PGDATA=
+  `/var/lib/postgresql/18/docker`); 挂 `/var/lib/postgresql/data` 会让真实数据
+  落匿名卷, 换机/升级时丢失。
 - exam 与 worker 共享同一 `./data` 卷: DB 里 snapshot_path 是相对
   `data/exam_runs/...` 存的, worker 必须能按相同相对路径读到快照文件。
 - worker 单进程单线程轮询 (`concurrency` 配置未实际生效), 并行度 = 实例数。
@@ -40,12 +49,17 @@ git clone <repo-url> && cd examSystem
 # 1) 生产配置 (database.url 留空, 由 EXAM_DATABASE_URL 注入)
 cp config.production.example.yaml config.production.yaml
 #    必改: admin.enable_auth: true; allow_origins 换成真实域名白名单
+#    (模板默认已非 "*", 见文件内注释)
 
 # 2) 环境变量 (强密码)
 cp .env.production.example .env
-#    必填: PG_PASSWORD / EXAM_DATABASE_URL / EXAM_ADMIN_PASSWORD
+#    必填: PG_PASSWORD / PG_APP_PASSWORD / PG_MIGRATOR_PASSWORD /
+#          EXAM_DATABASE_URL / EXAM_MIGRATOR_DATABASE_URL / EXAM_ADMIN_PASSWORD
 
-# 3) 模型目录 (本地模型模式才需要): 解包 bge-reranker-v2-m3 (需含 config.json)
+# 3) 数据/日志目录属主 (三容器均以 uid 10001 运行; exam 要写 data/ 与 logs/)
+mkdir -p data logs && sudo chown -R 10001:10001 data logs
+
+# 4) 模型目录 (本地模型模式才需要): 解包 bge-reranker-v2-m3 (需含 config.json)
 mkdir -p models
 #    把模型放到 models/bge-reranker-v2-m3/
 ```
@@ -84,12 +98,14 @@ docker compose -f docker-compose.prod.yml up -d postgres
 docker compose -f docker-compose.prod.yml ps          # postgres 应为 healthy
 
 # 一次性迁移 (复用 exam 镜像; 会等 postgres healthy 再跑)
+# migrate 子命令自动切到 exam_migrator 角色 (EXAM_MIGRATOR_DATABASE_URL, DDL+DML):
 docker compose -f docker-compose.prod.yml run --rm exam migrate --config /app/config.yaml
 ```
 
 > 注意: `migrate` 只应用 DDL (**0001 建表 + 0002 app_settings**), **不搬任何已有
 > 数据**。迁移是增量的: 已应用版本 (schema_migrations 记录) 直接跳过, 未应用的
-> 自动补上。全新部署的 `pg_data` 卷是空库; 若要从现有部署迁入, 先做第 4.1 节。
+> 自动补上。全新部署的 `pg_data` 卷是空库, 首次初始化会自动建
+> `exam_app`/`exam_migrator` 角色; 若要从现有部署迁入, 先做第 4.1 节。
 
 ## 4.1 从现有 PG 迁入数据 (首次切换时)
 
@@ -102,9 +118,14 @@ pg_dump -h 127.0.0.1 -p 5432 -U exam_app -d exam_system -n public > exam_system.
 #    已应用且 checksum 一致的自动跳过, 不会因表已存在而报错):
 docker compose -f docker-compose.prod.yml up -d postgres
 docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U "${PG_USER:-exam_app}" "${PG_DB:-exam_system}" < exam_system.sql
+  psql -U "${PG_USER:-exam_super}" "${PG_DB:-exam_system}" < exam_system.sql
 docker compose -f docker-compose.prod.yml run --rm exam migrate --config /app/config.yaml
 ```
+
+> 若旧部署跑的是「PG18 + 挂 `/var/lib/postgresql/data`」的错误卷配置, 真实数据
+> 在**匿名卷**里 (命名卷 `pg_data` 是空的): 务必先在本机旧容器内
+> `docker compose exec -T postgres pg_dump ...` 导出, 再停旧栈换新配置, 否则旧卷
+> 数据无处找回。
 
 业务文件数据 (`data/papers/*.json` 题库 + `data/exam_runs/` 快照/token) 走的是
 `./data` bind mount, 与旧部署共用同一目录即保留; 换机部署时整个 `data/` 目录一起拷贝。
@@ -123,6 +144,9 @@ docker compose -f docker-compose.prod.yml ps
 
 ```bash
 curl http://127.0.0.1:8000/api/health      # 期望 ok + version + time
+
+docker compose -f docker-compose.prod.yml ps   # postgres/exam/worker 应均 healthy
+# (worker 的 healthcheck 是轻量 DB 探活, 见服务定义; 本地模型首启加载慢, start_period 60s)
 
 # worker 链路自检 (真实评分一次, 不写 DB; 本地模型模式下会加载模型, 稍慢)
 docker compose -f docker-compose.prod.yml run --rm --no-deps worker \
@@ -169,16 +193,42 @@ docker compose -f docker-compose.prod.yml up -d --scale worker=3
 
 ## 9. 备份与恢复
 
-```bash
-# 数据库 (推荐 cron 每日)
-docker compose -f docker-compose.prod.yml exec -T postgres \
-  pg_dump -U "${PG_USER:-exam_app}" "${PG_DB:-exam_system}" | gzip > backup-$(date +%F).sql.gz
+推荐用仓库自带脚本 (PG dump + `data/` + 生产配置 + SHA-256 清单, 保留最近 14 份):
 
-# 业务数据卷 (试卷 data/papers + 快照 data/exam_runs + token)
-tar czf data-backup-$(date +%F).tar.gz data/
+```bash
+./scripts/backup-prod.sh                # 默认输出到 backups/YYYYMMDD-HHMMSS/
+# 计划任务 (cron 每日 02:00):
+#   0 2 * * * cd /path/to/examSystem && ./scripts/backup-prod.sh >> backups/backup.log 2>&1
 ```
 
-恢复: 停服务 → 还原 `pg_dump` 到空库 → 还原 `data/` → 起服务。
+`.env` 里的密钥不随备份走, 单独用密码管理器/离线介质保存 (`.env` 是部署机唯一凭据源)。
+
+**恢复流程** (先演练一次, 见下):
+
+```bash
+# 1) 停服务
+docker compose -f docker-compose.prod.yml down
+
+# 2) 还原 PG: 清掉旧卷数据再起空库, 灌入 dump, 补迁移 (增量跳过已应用)
+docker compose -f docker-compose.prod.yml up -d postgres
+gzip -dc backups/<时间戳>/exam_system.sql.gz | \
+  docker compose -f docker-compose.prod.yml exec -T postgres \
+  psql -U "${PG_USER:-exam_super}" "${PG_DB:-exam_system}"
+
+# 3) 还原业务数据 (data/papers + data/exam_runs + token) 与配置
+rm -rf data && tar xzf backups/<时间戳>/data.tar.gz
+cp backups/<时间戳>/config.production.yaml config.production.yaml
+
+# 4) 目录属主 + 起全栈
+sudo chown -R 10001:10001 data logs
+docker compose -f docker-compose.prod.yml up -d
+
+# 5) 校验: /api/health + docker compose ps 全 healthy + 抽查一条 run
+```
+
+**恢复演练** (每季度一次): 在**另一台测试机**上执行上述步骤, 验证 dump 可灌、
+服务可起、能查出历史 run; 用 `sha256sum -c SHA256SUMS` 校验备份文件完整性。
+演练同时验证 `scripts/backup-prod.sh` 的产物齐全 (dump / data / config / 清单)。
 
 ## 10. 升级流程
 
@@ -232,3 +282,13 @@ DATABASE_URL='postgres://exam_app:<密码>@127.0.0.1:5433/exam_system?sslmode=di
 - worker 启动报模型加载失败: `RERANKER_MODEL` 指向的目录缺 `config.json`
   (要指向 snapshots/<hash>/ 或模型根), 或 `models/` 挂载路径不存在。
 - 本地模式镜像没装 torch: `WORKER_EXTRAS` 没生效, 重新 `build worker`。
+- `migrate` 命令报 `exec: "migrate": executable file not found`: 新镜像已加
+  `ENTRYPOINT ["exam-server"]`, 直接用 `run --rm ... exam migrate ...`; 若在
+  旧镜像/裸 `docker run` 上执行需写成 `exam-server migrate`。
+- exam 容器写不了 `data/` / `logs/`: 容器以 uid 10001 运行, 宿主目录需
+  `sudo chown -R 10001:10001 data logs` (见 §2 步骤 3)。
+- PG 数据"看起来丢了"/卷是空的: 旧配置挂的是 `/var/lib/postgresql/data` (PG18
+  真实数据在 `/var/lib/postgresql/18/docker`, 落匿名卷), 见 §4.1 提示。
+- 迁移报 `permission denied for table ...`: 迁移要用 `exam_migrator` 连接串
+  (`EXAM_MIGRATOR_DATABASE_URL`, migrate 子命令自动使用, 见 §4);
+  运行态 `exam_app` 只 DML, 不要用它建表。

@@ -38,8 +38,14 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# 非 root 运行 (uid 10001); worker 只读 data/ 与 models/ 挂载, 无需写宿主目录
+RUN groupadd --gid 10001 exam \
+ && useradd --uid 10001 --gid exam --create-home exam
+
 COPY --from=build /opt/worker-deps /usr/local
 COPY scoring_worker/ ./scoring_worker/
+
+USER 10001
 
 # worker 自带 SIGTERM graceful shutdown; init 兜底回收子进程
 CMD ["python", "-m", "scoring_worker"]

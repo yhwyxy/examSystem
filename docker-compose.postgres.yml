@@ -22,7 +22,9 @@ services:
       POSTGRES_DB: exam_system
       # 额外角色: exam_app / exam_migrator 通过 init.sql 创建(可选)
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      # PG18 镜像: VOLUME=/var/lib/postgresql, PGDATA=/var/lib/postgresql/18/docker.
+      # 挂整个 /var/lib/postgresql (挂 /var/lib/postgresql/data 会让数据落匿名卷).
+      - pg_data:/var/lib/postgresql
       - ./scripts/pg-bootstrap.sql:/docker-entrypoint-initdb.d/00-bootstrap.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U exam_super -d exam_system"]

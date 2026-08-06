@@ -3,7 +3,9 @@
 server:
   host: "0.0.0.0"
   port: 8000
-  allow_origins: ["*"]
+  # 真实域名白名单 (生产必改): 反代域, 如 https://exam.example.com.
+  # 留 "*" 会让任意来源可带管理员 token 访问, 慎用.
+  allow_origins: ["https://exam.example.com"]
 exam:
   title: "企业内部考试"
   duration_minutes: 60

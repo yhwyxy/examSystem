@@ -28,6 +28,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -341,6 +342,9 @@ func cmdMigrate(args []string) error {
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
+	// 角色分离 (生产): 迁移用 exam_migrator (DDL+DML), 运行态 exam_app 仅 DML.
+	// EXAM_MIGRATOR_DATABASE_URL 存在时覆盖 EXAM_DATABASE_URL; serve 不受影响.
+	cfg.Database.URL = migrateDatabaseURL(cfg)
 	if err := cfg.ValidateRequired(); err != nil {
 		return fmt.Errorf("preflight: %w", err)
 	}
@@ -376,6 +380,16 @@ func cmdMigrate(args []string) error {
 	}
 	fmt.Fprintf(os.Stdout, "migrate: db url %s\n", maskedDBURL(cfg.Database.URL))
 	return nil
+}
+
+// migrateDatabaseURL 返回迁移用连接串: 优先 EXAM_MIGRATOR_DATABASE_URL (角色分离,
+// 生产 compose 里 exam 服务注入, 仅 migrate 子命令消费), 否则回退 config 的
+// database.url。serve 子命令不调用本函数, 恒用 EXAM_DATABASE_URL (exam_app).
+func migrateDatabaseURL(cfg *config.Config) string {
+	if v := strings.TrimSpace(os.Getenv("EXAM_MIGRATOR_DATABASE_URL")); v != "" {
+		return v
+	}
+	return cfg.Database.URL
 }
 
 // ----------------------- preflight --------------------

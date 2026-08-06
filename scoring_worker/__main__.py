@@ -143,6 +143,21 @@ def _preflight() -> int:
         close_service()
 
 
+def _health() -> int:
+    """--health: 轻量 DB 探活 (compose healthcheck 用), 不加载评分模型."""
+    cfg = Config.from_env()
+    try:
+        import psycopg
+        with psycopg.connect(cfg.database_url, connect_timeout=5) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+        return 0
+    except Exception as exc:  # noqa: BLE001 - healthcheck 需吞掉一切异常转非零退出
+        print(f"scoring_worker --health FAIL: {exc}", file=sys.stderr)
+        return 1
+
+
 def main() -> int:
     import argparse
     parser = argparse.ArgumentParser(prog="scoring_worker", description="主观题评分 worker")
@@ -151,9 +166,13 @@ def main() -> int:
     parser.add_argument("--preflight", action="store_true",
                         help="check + 用固定无敏感 fixture 跑一次真实评分; "
                              "任一模式断言非 lexical fallback; 不 claim/不写 DB")
+    parser.add_argument("--health", action="store_true",
+                        help="轻量 DB 探活 (healthcheck 用); 不加载评分模型")
     args = parser.parse_args()
     if args.preflight:
         return _preflight()
+    if args.health:
+        return _health()
     if args.check:
         return _check_only()
 

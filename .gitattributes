@@ -1,0 +1,12 @@
+# 统一行尾为 LF (曾因 Windows 编辑器写入 CRLF 导致迁移 SQL / shell 脚本问题).
+# Git 仓库始终存 LF; 检出时也保持 LF (Windows 用户的 PowerShell 亦兼容 LF).
+* text=auto eol=lf
+
+# 二进制文件不经过 text 转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
