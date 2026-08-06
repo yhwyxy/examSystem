@@ -87,6 +87,10 @@ services:
       RERANK_API_URL: ${RERANK_API_URL:-}
       RERANK_API_KEY: ${RERANK_API_KEY:-}
       RERANK_MODEL: ${RERANK_MODEL:-}
+      SCORING_METHOD: ${SCORING_METHOD:-}
+      LLM_API_URL: ${LLM_API_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
       RERANKER_MODEL: ${RERANKER_MODEL:-/models/bge-reranker-v2-m3}
       HF_HOME: ${HF_HOME:-/models/hf-cache}
       HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-1}

@@ -34,6 +34,7 @@ env/
 .env
 .env.*
 !.env.example
+!.env.production.example
 # 生产配置 (含管理端密码等, 从 example 复制后填写, 不提交)
 config.production.yaml
 
@@ -52,7 +53,9 @@ benchmarks/
 logs/
 
 # 本地工作文档 (不提交)
-docs/
+docs/*
+# 例外: 部署文档保持入库 (DEPLOY.md / README 引用, 需随代码演进)
+!docs/deployment-*.md
 评分系统迭代流程.md
 主观题评分误差分析.md
 
