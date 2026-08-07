@@ -49,12 +49,13 @@ RUN pip install --no-cache-dir --prefix=/opt/worker-deps \
       "python-dotenv>=1.0,<2"
 
 # subjective-scoring 本体 (extras: text/sql/code/remote 的传递依赖全部走清华 PyPI)
+# 本地 wheel 用 pip 官方语法 "<路径>[extras]" (去掉 name@, 因为 @ 只认 URL/VCS, 不认本地文件)
 RUN if [ "$SUBJECTIVE_SCORING_SOURCE" = "git" ]; then \
       pip install --no-cache-dir --prefix=/opt/worker-deps \
         "subjective-scoring[text,sql,code,remote] @ git+${SUBJECTIVE_SCORING_URL}@v${SUBJECTIVE_SCORING_VERSION}"; \
     else \
       pip install --no-cache-dir --prefix=/opt/worker-deps \
-        "subjective-scoring[text,sql,code,remote] @ ./packages/subjective_scoring-${SUBJECTIVE_SCORING_VERSION}-py3-none-any.whl"; \
+        "/src/packages/subjective_scoring-${SUBJECTIVE_SCORING_VERSION}-py3-none-any.whl[text,sql,code,remote]"; \
     fi
 
 # 可选: 本地模型依赖 (与 pyproject 的 [project.optional-dependencies] local 对齐)

@@ -18,8 +18,10 @@
 - 最小权限角色 (initdb 由 `scripts/pg-bootstrap-prod.sh` 自动创建): `exam_app`
   运行态 (仅 DML, 应用+worker 共用) / `exam_migrator` 一次性迁移 (DDL+DML)。
   `migrate` 子命令自动读 `EXAM_MIGRATOR_DATABASE_URL` 切到迁移角色 (serve 不受影响)。
-- 三容器均以非 root (uid 10001) 运行; exam 挂载的 `data/` 与 `logs/` 需
-  `sudo chown -R 10001:10001 data logs` 才能写入。
+- 三容器运行态均为非 root (uid 10001)。exam 的入口脚本 `docker-entrypoint.sh`
+  以 root 启动, 对挂载目录 `data/` `logs/` chown 到 10001 后经 su-exec 降权再运行
+  exam-server (postgres 镜像同款模式), 部署时**无需**手动 chown (手动 chown 仅
+  旧镜像需要, 见 §2 步骤 3 与 §13)。
 - PG18 镜像的卷要挂整个 `/var/lib/postgresql` (镜像内 PGDATA=
   `/var/lib/postgresql/18/docker`); 挂 `/var/lib/postgresql/data` 会让真实数据
   落匿名卷, 换机/升级时丢失。
@@ -32,6 +34,11 @@
 - `EXAM_ADMIN_PASSWORD` 是**初始密码**: 登录后可在「设置」栏修改 (bcrypt 存 DB,
   优先级高于 env/config 明文; 改密后旧 token 全部失效)。
 - 迁移用 exam 镜像跑一次性任务, 不常驻。
+- 本地语义模型是**部署输入物**, 运行时**不自动下载**: worker 容器以
+  `HF_HUB_OFFLINE=1` + `HF_HOME=/models/hf-cache` + `models/` 只读挂载三层禁网。
+  模型必须由 fetch-models.sh 或手动放入宿主 `models/` (扁平布局, 见 §2 步骤 4);
+  路径对不上时评分**静默回退词法**不报错 (见 §13), 部署后务必跑 §6 的
+  `--preflight` 自检。
 
 ## 1. 前置条件
 
@@ -57,14 +64,24 @@ cp .env.production.example .env
 #    必填: PG_PASSWORD / PG_APP_PASSWORD / PG_MIGRATOR_PASSWORD /
 #          EXAM_DATABASE_URL / EXAM_MIGRATOR_DATABASE_URL / EXAM_ADMIN_PASSWORD
 
-# 3) 数据/日志目录属主 (三容器均以 uid 10001 运行; exam 要写 data/ 与 logs/)
-mkdir -p data logs && sudo chown -R 10001:10001 data logs
+# 3) 数据/日志目录 (exam 入口脚本会自动 chown 属主并降权, 见 §0, 无需手动)
+mkdir -p data logs
+#    仅旧镜像 (无 docker-entrypoint.sh) 需要手动属主:
+#    sudo chown -R 10001:10001 data logs
 
 # 4) 模型目录 (本地模型模式才需要): 下载 bge-reranker-v2-m3 (需含 config.json)
 #    一键同步 (走 hf-mirror.com 国内镜像 + 一次性容器, 不要求宿主机装 Python):
 mkdir -p models
 ./scripts/fetch-models.sh        # -> ./models/bge-reranker-v2-m3/
 #    也可手动解包: 把 BAAI/bge-reranker-v2-m3 放到 models/bge-reranker-v2-m3/
+#    布局要求: RERANKER_MODEL=/models/bge-reranker-v2-m3 期望**扁平布局** —— 该目录
+#    顶部就是 config.json。若目录里只有 hub/models--BAAI--*/snapshots/<hash>/ (默认
+#    huggingface-cli download 的 cache 布局), 路径对不上 → 评分静默回退词法
+#    (见 §13 常见问题)。模型已在宿主时**无需重下**, 软链修复:
+#       SNAP=$(cat models/models--BAAI--bge-reranker-v2-m3/refs/main 2>/dev/null \
+#              || ls models/models--BAAI--bge-reranker-v2-m3/snapshots/ | head -1)
+#       ln -sfn "models--BAAI--bge-reranker-v2-m3/snapshots/$SNAP" models/bge-reranker-v2-m3
+#       docker compose -f docker-compose.prod.yml restart worker
 ```
 
 `.env` 里的评分方式 (三选一; 生产上推荐在管理后台「设置」栏切换, 保存后以 DB 为准,
@@ -228,8 +245,7 @@ gzip -dc backups/<时间戳>/exam_system.sql.gz | \
 rm -rf data && tar xzf backups/<时间戳>/data.tar.gz
 cp backups/<时间戳>/config.production.yaml config.production.yaml
 
-# 4) 目录属主 + 起全栈
-sudo chown -R 10001:10001 data logs
+# 4) 目录属主 + 起全栈 (新镜像入口自愈属主; chown 仅旧镜像需要)
 docker compose -f docker-compose.prod.yml up -d
 
 # 5) 校验: /api/health + docker compose ps 全 healthy + 抽查一条 run
@@ -288,14 +304,43 @@ DATABASE_URL='postgres://exam_app:<密码>@127.0.0.1:5433/exam_system?sslmode=di
 - `app_settings` 表不存在或没有评分设置行: worker 回退 env 默认 (local 或
   `RERANK_USE_REMOTE=true`), 不报错, 与旧部署兼容。
 - `snapshot hash mismatch`: 改过试卷没跑同步 (见第 11 节)。
-- worker 启动报模型加载失败: `RERANKER_MODEL` 指向的目录缺 `config.json`
-  (要指向 snapshots/<hash>/ 或模型根), 或 `models/` 挂载路径不存在。
+- 语义模型不可用 (评分照跑但产废分): preflight 退出码 2, 每题 warning
+  「语义模型不可用，已回退到词法相似度」。**这是最危险的故障**: worker 的
+  healthcheck 只探 DB 不加载模型, 容器显示 healthy, 直到提交试卷才暴露。
+  根因按序排查:
+  1. **模型目录布局不对 (最常见)**: `RERANKER_MODEL=/models/bge-reranker-v2-m3`
+     期望扁平布局 (目录顶部就是 `config.json`); 用默认 `huggingface-cli download`
+     拉出的是 cache 布局 (`hub/models--BAAI--bge-reranker-v2-m3/snapshots/<hash>/`),
+     `/models/bge-reranker-v2-m3` 不存在 → CrossEncoder 把它当 repo id 离线解析
+     → 报 not found。模型已在宿主时**无需重下**, 软链修复 (compose 目录下执行):
+     ```bash
+     SNAP=$(cat models/models--BAAI--bge-reranker-v2-m3/refs/main 2>/dev/null \
+            || ls models/models--BAAI--bge-reranker-v2-m3/snapshots/ | head -1)
+     ln -sfn "models--BAAI--bge-reranker-v2-m3/snapshots/$SNAP" models/bge-reranker-v2-m3
+     docker compose -f docker-compose.prod.yml restart worker
+     ```
+     验证: `docker compose -f docker-compose.prod.yml run --rm --no-deps worker \
+       python -m scoring_worker --preflight` 退出码应 0 (日志 `非 lexical`)。
+  2. **镜像没装 torch/sentence-transformers**: `WORKER_EXTRAS` 未生效, 需带
+     `WORKER_EXTRAS` 重建 worker (见 §3)。验:
+     `docker compose -f docker-compose.prod.yml exec worker python -c \
+       "import sentence_transformers, torch; print(torch.__version__)"`。
+  3. **模型文件不完整 / `models/` 挂载源不存在**: 缺 `config.json` 或
+     `pytorch_model.bin` (fetch-models.sh 只验 config.json, 会漏判半成品);
+     或宿主 `models/` 目录为空 (bind mount 会自动建 root 属主空目录挂上,
+     内容不完整照常回退)。验: `exec worker ls -la /models/bge-reranker-v2-m3/`。
+  4. 模型路径对不上时 worker **不会自动下载**: 生产部署以 `HF_HUB_OFFLINE=1` +
+     `HF_HOME=/models/hf-cache` + `models/` 只读挂载三层禁网, 见 §0 关键约定。
 - 本地模式镜像没装 torch: `WORKER_EXTRAS` 没生效, 重新 `build worker`。
 - `migrate` 命令报 `exec: "migrate": executable file not found`: 新镜像已加
   `ENTRYPOINT ["exam-server"]`, 直接用 `run --rm ... exam migrate ...`; 若在
   旧镜像/裸 `docker run` 上执行需写成 `exam-server migrate`。
-- exam 容器写不了 `data/` / `logs/`: 容器以 uid 10001 运行, 宿主目录需
-  `sudo chown -R 10001:10001 data logs` (见 §2 步骤 3)。
+- exam 容器写不了 `data/` / `logs/` (报 `papers.AtomicWriteJSON tmp open:
+  .../.json.tmp.tmp: permission denied` 等 EACCES): 宿主目录属主是 root,
+  uid 10001 无写权限。新镜像入口 (`docker-entrypoint.sh`, root 启动 → chown →
+  su-exec 降权) 会自动修复, **重建镜像后自愈**:
+  `docker compose -f docker-compose.prod.yml build exam && up -d --force-recreate exam`。
+  旧镜像临时处理: `sudo chown -R 10001:10001 data logs` (见 §2 步骤 3)。
 - PG 数据"看起来丢了"/卷是空的: 旧配置挂的是 `/var/lib/postgresql/data` (PG18
   真实数据在 `/var/lib/postgresql/18/docker`, 落匿名卷), 见 §4.1 提示。
 - 迁移报 `permission denied for table ...`: 迁移要用 `exam_migrator` 连接串
