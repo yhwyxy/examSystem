@@ -32,6 +32,9 @@ import (
 	"github.com/yhwyxy/examSystem/internal/runs"
 )
 
+// beijingTZ 北京时间 (UTC+8); 存储层统一 UTC, 导出时转成本地时区展示.
+var beijingTZ = time.FixedZone("Asia/Shanghai", 8*3600)
+
 // MountAdmin 挂载 /api/admin/* 子树, 全部受 RequireAdmin middleware 保护
 // (login 在 RequireAdmin 外, 单独 mount 在 api 子树根).
 func MountAdmin(api chi.Router, deps Dependencies) {
@@ -1455,7 +1458,7 @@ func exportSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			for _, qid := range cols {
 				row = append(row, byQID[qid])
 			}
-			row = append(row, trunc2(score), submittedAt)
+			row = append(row, trunc2(score), submittedAt.In(beijingTZ))
 			if err := xw.WriteRow(row); err != nil {
 				if err == export.ErrTooManyRows {
 					writeAdminError(w, http.StatusUnprocessableEntity, "EXPORT_TRUNCATED",
