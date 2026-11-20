@@ -27,7 +27,9 @@ def test_case_insensitive_equivalent_sql():
     assert result.scorer == "SQLStructureScorer"
     assert result.scoring_mode is ScoringMode.SQL
     assert result.score >= 9.0
-    assert result.force_manual_review is False
+    assert result.force_manual_review is True
+    assert result.metadata["execution_validation"]["status"] == "unable_to_verify"
+    assert result.metadata["execution_validation"]["reason"] == "unsupported_or_missing_dialect"
     assert result.metadata["parser"] == "sqlglot"
 
 

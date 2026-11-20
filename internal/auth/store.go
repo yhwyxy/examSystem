@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -29,25 +30,39 @@ const tokenTTL = 24 * time.Hour
 //
 // 为 nil 时 Login/ChangePassword 分别回退/报错 (见各自实现).
 type PasswordProvider struct {
-	Check func(ctx context.Context, password string) (bool, error)
-	Set   func(ctx context.Context, newPassword string) error
+	Check        func(ctx context.Context, password string) (bool, error)
+	Set          func(ctx context.Context, newPassword string) error
+	Authenticate func(ctx context.Context, username, password string) (role string, err error)
 }
 
 // Store 线程安全 token 仓库. 单进程; 多实例时需要换 Redis 等共享存储.
 type Store struct {
 	mu       sync.RWMutex
-	tokens   map[string]time.Time // token -> expiry
+	tokens   map[string]tokenRecord
 	enabled  bool
 	pw       PasswordProvider       // nil = 未配置 (Login 全拒绝; 兼容旧 secretFn 迁移)
 	secretFn func() (string, error) // 兼容旧构造: 仅当 pw.Check 未设置时用
 }
+
+type tokenRecord struct {
+	expires  time.Time
+	username string
+	role     string
+}
+
+const (
+	RoleAdmin              = "admin"
+	RoleQuestionBankEditor = "question_bank_editor"
+	RoleReviewer           = "reviewer"
+	RolePublisher          = "publisher"
+)
 
 // NewStore 构造一个 token 内存 store. enable=false 时 RequireAdmin 放行.
 // secretFn 是旧式明文密码加载器 (config.yaml admin.password); 新代码优先用
 // SetPasswordProvider 注入 PasswordProvider (DB bcrypt), 未注入时回退 secretFn.
 func NewStore(enable bool, secretFn func() (string, error)) *Store {
 	return &Store{
-		tokens:   make(map[string]time.Time),
+		tokens:   make(map[string]tokenRecord),
 		secretFn: secretFn,
 		enabled:  enable,
 	}
@@ -100,21 +115,46 @@ func (s *Store) checkPassword(ctx context.Context, password string) (bool, error
 // Login 校验 admin password (constant-time). 成功生成新 token (32 字节 URL-safe)
 // 写入 store (expiry = now + tokenTTL) + 返回 token.
 func (s *Store) Login(ctx context.Context, password string) (string, error) {
+	token, _, err := s.LoginUser(ctx, "admin", password)
+	return token, err
+}
+
+// LoginUser authenticates a named account and records its role in the session.
+func (s *Store) LoginUser(ctx context.Context, username, password string) (string, string, error) {
 	if s == nil || !s.enabled {
-		return "", ErrAuthDisabled
+		return "", "", ErrAuthDisabled
 	}
-	ok, err := s.checkPassword(ctx, password)
-	if err != nil || !ok {
-		return "", ErrInvalidCredentials
+	username = strings.TrimSpace(username)
+	if username == "" {
+		username = "admin"
+	}
+	if len(username) > 64 {
+		return "", "", ErrInvalidCredentials
+	}
+	role := RoleAdmin
+	var err error
+	if s.pw.Authenticate != nil {
+		role, err = s.pw.Authenticate(ctx, username, password)
+	} else if username != "admin" {
+		return "", "", ErrInvalidCredentials
+	} else {
+		var ok bool
+		ok, err = s.checkPassword(ctx, password)
+		if !ok && err == nil {
+			err = ErrInvalidCredentials
+		}
+	}
+	if err != nil || !validRole(role) {
+		return "", "", ErrInvalidCredentials
 	}
 	tok, err := randomToken()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	s.mu.Lock()
-	s.tokens[tok] = time.Now().Add(tokenTTL)
+	s.tokens[tok] = tokenRecord{expires: time.Now().Add(tokenTTL), username: username, role: role}
 	s.mu.Unlock()
-	return tok, nil
+	return tok, role, nil
 }
 
 // ChangePassword 校验旧密码 -> 强度校验 -> 写新密码 -> 使所有旧 token 失效.
@@ -147,7 +187,20 @@ func (s *Store) ChangePassword(ctx context.Context, oldPassword, newPassword str
 // InvalidateAll 清空全部已签发 token (改密/回收后调用).
 func (s *Store) InvalidateAll() {
 	s.mu.Lock()
-	s.tokens = make(map[string]time.Time)
+	s.tokens = make(map[string]tokenRecord)
+	s.mu.Unlock()
+}
+
+func (s *Store) InvalidateUser(username string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	for token, record := range s.tokens {
+		if record.username == username {
+			delete(s.tokens, token)
+		}
+	}
 	s.mu.Unlock()
 }
 
@@ -161,18 +214,54 @@ func (s *Store) VerifyToken(token string) error {
 		return ErrInvalidToken
 	}
 	s.mu.RLock()
-	expiry, ok := s.tokens[token]
+	record, ok := s.tokens[token]
 	s.mu.RUnlock()
 	if !ok {
 		return ErrInvalidToken
 	}
-	if time.Now().After(expiry) {
+	if time.Now().After(record.expires) {
 		s.mu.Lock()
 		delete(s.tokens, token)
 		s.mu.Unlock()
 		return ErrTokenExpired
 	}
 	return nil
+}
+
+// UsernameForToken returns the stable login identity associated with a valid token.
+func (s *Store) UsernameForToken(token string) string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	record, ok := s.tokens[token]
+	s.mu.RUnlock()
+	if !ok || time.Now().After(record.expires) {
+		return ""
+	}
+	return record.username
+}
+
+func (s *Store) RoleForToken(token string) string {
+	if s == nil {
+		return ""
+	}
+	s.mu.RLock()
+	record, ok := s.tokens[token]
+	s.mu.RUnlock()
+	if !ok || time.Now().After(record.expires) {
+		return ""
+	}
+	return record.role
+}
+
+func validRole(role string) bool {
+	switch role {
+	case RoleAdmin, RoleQuestionBankEditor, RoleReviewer, RolePublisher:
+		return true
+	default:
+		return false
+	}
 }
 
 // randomToken 生成 32 字节 URL-safe base64 (无 padding).

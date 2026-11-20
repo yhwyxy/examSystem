@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,16 +53,9 @@ func setupPG(t *testing.T) (pool *pgxpool.Pool, token string, cleanup func()) {
 	if err := os.WriteFile(filepath.Join(storeDir, "go-contract-paper.json"), data, 0644); err != nil {
 		t.Fatalf("write snapshot: %v", err)
 	}
-	// 计算 sha256hex 通过 papers.ComputeSHA256.
-	doc, err := papers.LoadDocumentUseNumber(src)
-	if err != nil {
-		t.Fatalf("LoadDocumentUseNumber: %v", err)
-	}
-	shaHex, err := papers.ComputeSHA256(doc)
-	if err != nil {
-		t.Fatalf("ComputeSHA256: %v", err)
-	}
-	_ = shaHex
+	// LoadSnapshot checks the bytes written to disk.
+	sum := sha256.Sum256(data)
+	shaHex := hex.EncodeToString(sum[:])
 	snapshotPath := filepath.Join(storeDir, "go-contract-paper.json")
 	now := time.Now().UTC()
 	_, err = pool.Exec(ctx, `INSERT INTO exam_runs
@@ -317,7 +311,13 @@ func TestGetStatus_FieldsAndMapping(t *testing.T) {
 	}
 
 	// 纯客观卷 short-circuit 应该 grading_status=done, review_status=auto_scored -> status=auto_scored.
-	status, err := svc.GetStatus(ctx, res.SubmissionID)
+	if _, err := svc.GetStatus(ctx, res.SubmissionID, ""); !errors.Is(err, submissions.ErrInvalidSessionToken) {
+		t.Fatalf("GetStatus without session token err=%v, want ErrInvalidSessionToken", err)
+	}
+	if _, err := svc.GetStatus(ctx, res.SubmissionID, "another-session-token"); !errors.Is(err, submissions.ErrInvalidSessionToken) {
+		t.Fatalf("GetStatus with wrong session token err=%v, want ErrInvalidSessionToken", err)
+	}
+	status, err := svc.GetStatus(ctx, res.SubmissionID, token)
 	if err != nil {
 		t.Fatalf("GetStatus: %v", err)
 	}

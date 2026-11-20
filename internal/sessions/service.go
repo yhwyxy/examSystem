@@ -339,9 +339,10 @@ func (s *Service) StartOrResume(ctx context.Context, q pgxExec,
 
 // SaveDraftResult 给 HTTP 层反映 CAS 结果.
 type SaveDraftResult struct {
-	Revision     int
-	DraftSavedAt time.Time
-	Throttled    bool // true 表示距离上次保存太近, 拒写 (rls 0 行无变化)
+	Revision            int
+	DraftSavedAt        time.Time
+	ServerMinIntervalMS int64
+	Throttled           bool // true 表示距离上次保存太近, 拒写 (rls 0 行无变化)
 	// RunStatus / FinalizeAt 来自 session 所属 run, 供前端锁卷判断;
 	// SessionStatus 恒 "active" (submitted 时 SaveDraft 直接报错).
 	RunStatus     string
@@ -405,9 +406,10 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 	if s.draftThrottle > 0 && sess.DraftSavedAt != nil {
 		if elapsed := s.now().Sub(*sess.DraftSavedAt); elapsed < s.draftThrottle {
 			res := &SaveDraftResult{
-				Revision:     sess.DraftRevision, // 不变
-				DraftSavedAt: *sess.DraftSavedAt,
-				Throttled:    true,
+				Revision:            sess.DraftRevision, // 不变
+				DraftSavedAt:        *sess.DraftSavedAt,
+				ServerMinIntervalMS: s.draftThrottle.Milliseconds(),
+				Throttled:           true,
 			}
 			s.fillRunInfo(ctx, sess.RunID, res)
 			return res, nil
@@ -427,9 +429,10 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 		return nil, err
 	}
 	out := &SaveDraftResult{
-		Revision:     res.Revision,
-		DraftSavedAt: derefTime(res.DraftSavedAt),
-		Throttled:    false,
+		Revision:            res.Revision,
+		DraftSavedAt:        derefTime(res.DraftSavedAt),
+		ServerMinIntervalMS: s.draftThrottle.Milliseconds(),
+		Throttled:           false,
 	}
 	s.fillRunInfo(ctx, sess.RunID, out)
 	return out, nil
@@ -461,20 +464,21 @@ func derefTime(t *time.Time) time.Time {
 // StatusResult 是 Status 调用结果. json tag 与前端 exam.js 轮询契约对齐
 // (snake_case; 之前无 tag 输出 PascalCase 导致前端全读 undefined).
 type StatusResult struct {
-	SessionID     string          `json:"session_id"`
-	RunID         string          `json:"run_id"`
-	EmployeeID    string          `json:"employee_id"`
-	Name          string          `json:"name"`
-	Status        SessionStatus   `json:"session_status"`
-	RunStatus     string          `json:"run_status"`
-	StartedAt     time.Time       `json:"started_at"`
-	DeadlineAt    time.Time       `json:"deadline_at"`
-	DraftRevision int             `json:"draft_revision"`
-	DraftSavedAt  *time.Time      `json:"draft_saved_at"`
-	FinalizeAt    *time.Time      `json:"finalize_at"`
-	SubmissionID  *string         `json:"submission_id"`
-	Draft         json.RawMessage `json:"answers"`
-	ServerTime    time.Time       `json:"server_time"`
+	SessionID      string          `json:"session_id"`
+	RunID          string          `json:"run_id"`
+	EmployeeID     string          `json:"employee_id"`
+	Name           string          `json:"name"`
+	Status         SessionStatus   `json:"session_status"`
+	RunStatus      string          `json:"run_status"`
+	StartedAt      time.Time       `json:"started_at"`
+	DeadlineAt     time.Time       `json:"deadline_at"`
+	DraftRevision  int             `json:"draft_revision"`
+	ServerRevision int             `json:"server_revision"`
+	DraftSavedAt   *time.Time      `json:"draft_saved_at"`
+	FinalizeAt     *time.Time      `json:"finalize_at"`
+	SubmissionID   *string         `json:"submission_id"`
+	Draft          json.RawMessage `json:"answers"`
+	ServerTime     time.Time       `json:"server_time"`
 }
 
 // Status 对齐 Python get_session_status: 用 token hash 查会话; 返回草案 / 截止 / revision
@@ -495,17 +499,18 @@ SELECT `+sessionCols+` FROM exam_sessions WHERE session_token_hash = $1`,
 		return nil, fmt.Errorf("sessions.Status probe by token: %w", err)
 	}
 	res := &StatusResult{
-		SessionID:     sess.ID,
-		RunID:         sess.RunID,
-		EmployeeID:    sess.EmployeeID,
-		Name:          sess.Name,
-		Status:        sess.Status,
-		StartedAt:     sess.StartedAt,
-		DeadlineAt:    sess.DeadlineAt,
-		DraftRevision: sess.DraftRevision,
-		DraftSavedAt:  sess.DraftSavedAt,
-		Draft:         sess.DraftJSON,
-		ServerTime:    s.now(),
+		SessionID:      sess.ID,
+		RunID:          sess.RunID,
+		EmployeeID:     sess.EmployeeID,
+		Name:           sess.Name,
+		Status:         sess.Status,
+		StartedAt:      sess.StartedAt,
+		DeadlineAt:     sess.DeadlineAt,
+		DraftRevision:  sess.DraftRevision,
+		ServerRevision: sess.DraftRevision,
+		DraftSavedAt:   sess.DraftSavedAt,
+		Draft:          sess.DraftJSON,
+		ServerTime:     s.now(),
 	}
 	// run 状态 (closing/closed -> 前端锁卷); 查询失败不阻断状态返回.
 	if s.runsLookup != nil {

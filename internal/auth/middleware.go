@@ -10,7 +10,11 @@ import (
 // ctxKey 是 *Store上下文 value 的 key 类型 (避免冲突).
 type ctxKey int
 
-const adminTokenKey ctxKey = 1
+const (
+	adminTokenKey ctxKey = 1
+	adminUserKey  ctxKey = 2
+	adminRoleKey  ctxKey = 3
+)
 
 // RequireAdmin 是 chi 路由中间件: 校验 Authorization: Bearer <token>.
 // enabled=false: 直接放行 (plan: 与 Python enable_auth=false parity).
@@ -36,8 +40,47 @@ func (s *Store) RequireAdmin(next http.Handler) http.Handler {
 			return
 		}
 		ctx := context.WithValue(r.Context(), adminTokenKey, tok)
+		ctx = context.WithValue(ctx, adminUserKey, s.UsernameForToken(tok))
+		ctx = context.WithValue(ctx, adminRoleKey, s.RoleForToken(tok))
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+func (s *Store) RequireRole(allowed ...string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return s.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if s == nil || !s.enabled {
+				next.ServeHTTP(w, r)
+				return
+			}
+			role := RoleFromContext(r.Context())
+			if role == RoleAdmin || containsRole(allowed, role) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeAuthError(w, http.StatusForbidden, "FORBIDDEN", "insufficient admin role")
+		}))
+	}
+}
+
+func RoleFromContext(ctx context.Context) string {
+	role, _ := ctx.Value(adminRoleKey).(string)
+	return role
+}
+
+func containsRole(roles []string, role string) bool {
+	for _, allowed := range roles {
+		if allowed == role {
+			return true
+		}
+	}
+	return false
+}
+
+// UsernameFromContext returns the authenticated admin identity for audit records.
+func UsernameFromContext(ctx context.Context) string {
+	username, _ := ctx.Value(adminUserKey).(string)
+	return username
 }
 
 // writeAuthError 与 httpapi.Error shape parity: {"error":{"code":..,"message":..}}.

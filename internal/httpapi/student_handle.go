@@ -6,10 +6,10 @@
 // Status / SubmitManual), 但 HTTP 层只挂了 /api/session/submit 与
 // /api/submission/{id}/status 两条 post-submit 路径. 公开 student API 缺:
 //
-//   GET  /api/exam?paper={slug}&run={run_token}        取脱敏卷形 (papers.SanitizeForStudent)
-//   POST /api/exam/start                                开始 / 幂等续接会话 (StartOrResume)
-//   PUT  /api/exam/sessions/{id}/draft                 草稿保存 (SaveDraft, 学生成 PUT 路径)
-//   GET  /api/exam/sessions/{id}/status                会话 + run 状态轮询 (Status)
+//	GET  /api/exam?paper={slug}&run={run_token}        取脱敏卷形 (papers.SanitizeForStudent)
+//	POST /api/exam/start                                开始 / 幂等续接会话 (StartOrResume)
+//	PUT  /api/exam/sessions/{id}/draft                 草稿保存 (SaveDraft, 学生成 PUT 路径)
+//	GET  /api/exam/sessions/{id}/status                会话 + run 状态轮询 (Status)
 //
 // 业务编排已在 sessions 包内完成 (Task 6-7 fencing 含), 这里仅 HTTP 层薄包装.
 package httpapi
@@ -25,7 +25,6 @@ import (
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 )
-
 
 // mountStudentExam 挂 /api/exam/* 4 个公开 + 鉴权路由到 chi.Router 上.
 // 调用方: NewRouter 的 api subtree 内, 在 health / reload-config 之后.
@@ -47,7 +46,6 @@ func mountStudentExam(api chi.Router, deps Dependencies) {
 	api.Get("/exam/sessions/{id}/status", rateLimitBySessionID(deps.RateLimiter,
 		ratelimit.PresetDraftStatus, "status", getSessionStatusHandler(deps)))
 }
-
 
 // getPublicExamHandler GET /api/exam?paper={slug}&run={run_token}
 // 步骤: FindByToken -> runs.GetPublicExam (读 run 冻结快照 + hash 校验 + 脱敏).
@@ -103,11 +101,12 @@ func getPublicExamHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-
 // startExamHandler POST /api/exam/start
 // Body: {run_token, employee_id, name, department?}; http 取 X-Forwarded-For / User-Agent.
 // 响应{session_id, session_token, started_at, deadline_at, draft_revision,
-//        answers, run_status, session_status, created}.
+//
+//	answers, run_status, session_status, created}.
+//
 // 幂等: 同 run+employee 已有活动 session 不另发 token, session_token 返 null
 // (与 Python 基线 test_save_draft_idempotent_resume 契约一致).
 func startExamHandler(deps Dependencies) http.HandlerFunc {
@@ -158,19 +157,18 @@ func startExamHandler(deps Dependencies) http.HandlerFunc {
 			sessStatus = "closed"
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"session_id":      res.SessionID,
-			"session_token":   stok,
-			"started_at":       res.StartedAt,
-			"deadline_at":      res.Deadline,
-			"draft_revision":   res.DraftRevision,
-			"answers":          answersRaw,
-			"run_status":       res.RunStatus,
-			"session_status":   sessStatus,
-			"created":          res.NewSession,
+			"session_id":     res.SessionID,
+			"session_token":  stok,
+			"started_at":     res.StartedAt,
+			"deadline_at":    res.Deadline,
+			"draft_revision": res.DraftRevision,
+			"answers":        answersRaw,
+			"run_status":     res.RunStatus,
+			"session_status": sessStatus,
+			"created":        res.NewSession,
 		})
 	}
 }
-
 
 // putDraftHandler PUT /api/exam/sessions/{id}/draft Body={session_token, revision, answers}.
 // revision 是"客户端新版本号" (本地 revision+1); 服务端 CAS 要求当前 == revision-1.
@@ -211,13 +209,15 @@ func putDraftHandler(deps Dependencies) http.HandlerFunc {
 			finalizeAt = res.FinalizeAt
 		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"success":        !res.Throttled,
-			"draft_revision": res.Revision,
-			"draft_saved_at": res.DraftSavedAt,
-			"run_status":     res.RunStatus,
-			"session_status": res.SessionStatus,
-			"finalize_at":    finalizeAt,
-			"throttled":      res.Throttled,
+			"success":                !res.Throttled,
+			"draft_revision":         res.Revision,
+			"server_min_interval_ms": res.ServerMinIntervalMS,
+			"last_draft_at":          res.DraftSavedAt,
+			"draft_saved_at":         res.DraftSavedAt,
+			"run_status":             res.RunStatus,
+			"session_status":         res.SessionStatus,
+			"finalize_at":            finalizeAt,
+			"throttled":              res.Throttled,
 		})
 	}
 }
@@ -236,11 +236,11 @@ func writeStaleDraftError(w http.ResponseWriter, currentRevision int) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"error": body, "detail": body})
 }
 
-
 // getSessionStatusHandler GET /api/exam/sessions/{id}/status?session_token=...
 // 响应 sessions.StatusResult (json tag 已对齐前端 snake_case 契约):
 // {session_id, session_status, run_status, started_at, deadline_at, draft_revision,
-//  draft_saved_at, finalize_at, submission_id, answers, server_time}.
+//
+//	draft_saved_at, finalize_at, submission_id, answers, server_time}.
 func getSessionStatusHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		stok := r.URL.Query().Get("session_token")
@@ -258,7 +258,6 @@ func getSessionStatusHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-
 // mapStartErrCode 把 sessions.StartOrResume 错误映射到 HTTP 状态码.
 // ErrInvalidSessionToken/r -> 401; ErrRunClosed -> 409; 其他 -> 500.
 func mapStartErrCode(err error) int {
@@ -270,7 +269,6 @@ func mapStartErrCode(err error) int {
 	}
 	return http.StatusInternalServerError
 }
-
 
 // mapSessionErrCode 把 sessions.SaveDraft / Status 错误映射到 HTTP 状态码.
 // ErrInvalidSessionToken -> 401; ErrStaleDraftRevision / ErrRunClosed /
@@ -308,7 +306,6 @@ func sessionErrCodeName(err error) string {
 	}
 	return "SESSION_INTERNAL"
 }
-
 
 // nullableString 把 non-empty string -> *string (空 string -> nil). 用于 sessions
 // StartOrResume/SaveDraft 入参 *string 形.

@@ -2,7 +2,7 @@
 
 所有 SQL 使用 psycopg 3 Connection (sync, 支持 autocommit). 通过 CTE + FOR UPDATE
 SKIP LOCKED 保证多 worker 并发安全; fenced complete 校验 lease_owner / lease_token
-/ lease_until > now 防止超 - 期 write-back 误覆盖.
+/ lease_until > clock_timestamp() 防止过期写回误覆盖.
 """
 from __future__ import annotations
 
@@ -43,12 +43,39 @@ FAIL_DEAD = "dead"
 FAIL_LOST = "lost"
 
 
+_EXHAUSTED_SQL = """
+WITH locked_submissions AS MATERIALIZED (
+    SELECT s.id FROM submissions s
+    WHERE EXISTS(SELECT 1 FROM grading_jobs j WHERE j.submission_id=s.id
+      AND j.attempts >= j.max_attempts
+      AND ((j.status = 'queued' AND j.available_at <= clock_timestamp())
+        OR (j.status = 'leased' AND j.lease_until <= clock_timestamp())))
+    ORDER BY s.id
+    FOR UPDATE OF s SKIP LOCKED
+    LIMIT 100
+), dead AS (
+    UPDATE grading_jobs j
+    SET status = 'dead', lease_owner = NULL, lease_token = NULL,
+        lease_until = NULL, last_error = 'LEASE_ATTEMPTS_EXHAUSTED', updated_at = now()
+    FROM locked_submissions s WHERE j.submission_id=s.id
+      AND j.attempts >= j.max_attempts
+      AND ((j.status = 'queued' AND j.available_at <= clock_timestamp())
+        OR (j.status = 'leased' AND j.lease_until <= clock_timestamp()))
+    RETURNING j.submission_id, j.generation
+)
+UPDATE submissions s
+SET grading_status = 'failed', grading_error = 'LEASE_ATTEMPTS_EXHAUSTED',
+    review_status = 'need_review'
+FROM dead WHERE s.id = dead.submission_id AND s.grading_generation = dead.generation;
+"""
+
 _CLAIM_SQL = """
 WITH candidate AS (
     SELECT id
     FROM grading_jobs
-    WHERE (status = 'queued' AND available_at <= now())
-       OR (status = 'leased' AND lease_until < now())
+    WHERE attempts < max_attempts
+      AND ((status = 'queued' AND available_at <= now())
+       OR (status = 'leased' AND lease_until <= clock_timestamp()))
     ORDER BY available_at, id
     FOR UPDATE SKIP LOCKED
     LIMIT 1
@@ -58,7 +85,7 @@ SET status = 'leased',
     attempts = j.attempts + 1,
     lease_owner = %(worker_id)s,
     lease_token = %(lease_token)s,
-    lease_until = now() + make_interval(secs => %(lease_seconds)s),
+    lease_until = clock_timestamp() + make_interval(secs => %(lease_seconds)s),
     updated_at = now()
 FROM candidate
 WHERE j.id = candidate.id
@@ -73,6 +100,9 @@ def claim_job(conn, worker_id: str, lease_seconds: int) -> Optional[Job]:
     两 worker 并发不会抢同一行 (SkipLocked); lease 过期可被回收.
     """
     import secrets
+    # A killed process cannot call fail_job. Expired final attempts must become
+    # visible failures instead of being reclaimed forever; current leases stay valid.
+    conn.execute(_EXHAUSTED_SQL)
     cur = conn.cursor(row_factory=dict_row)
     cur.execute(
         _CLAIM_SQL,
@@ -90,13 +120,13 @@ def claim_job(conn, worker_id: str, lease_seconds: int) -> Optional[Job]:
 
 _RENEW_SQL = """
 UPDATE grading_jobs
-SET lease_until = now() + make_interval(secs => %(lease_seconds)s),
+SET lease_until = clock_timestamp() + make_interval(secs => %(lease_seconds)s),
     updated_at = now()
 WHERE id = %(job_id)s
   AND status = 'leased'
   AND lease_owner = %(worker_id)s
   AND lease_token = %(lease_token)s
-  AND lease_until > now()
+  AND lease_until > clock_timestamp()
 RETURNING id;
 """
 
@@ -122,7 +152,7 @@ WHERE id = %(job_id)s
   AND status = 'leased'
   AND lease_owner = %(worker_id)s
   AND lease_token = %(lease_token)s
-  AND lease_until > now()
+  AND lease_until > clock_timestamp()
 FOR UPDATE;
 """
 
@@ -148,6 +178,17 @@ SET status = 'done',
     updated_at = now()
 WHERE id = %(job_id)s
 RETURNING id;
+"""
+
+_INSERT_GRADING_HISTORY_SQL = """
+INSERT INTO grading_history (
+    submission_id, generation, grading_detail_json, subjective_score_machine,
+    subjective_score_final, total_score, review_status
+)
+SELECT id, grading_generation, grading_detail_json, subjective_score_machine,
+       subjective_score_final, total_score, review_status
+FROM submissions WHERE id = %(submission_id)s AND grading_generation = %(generation)s
+ON CONFLICT (submission_id, generation) DO NOTHING;
 """
 
 _COMPLETE_JOB_SUPERSEDED_SQL = """
@@ -179,8 +220,21 @@ def complete_job(conn, job: Job,
         grading_detail_json = grading_detail_json.decode("utf-8")
     if isinstance(grading_detail_json, str):
         grading_detail_json = json.loads(grading_detail_json)
+    def stamp_generation(entry):
+        if not isinstance(entry, dict):
+            return
+        entry["grading_generation"] = job.generation
+        if isinstance(entry.get("detail"), dict):
+            stamp_generation(entry["detail"])
+        for sub in entry.get("sub_results") or []:
+            stamp_generation(sub)
+    for entry in grading_detail_json:
+        stamp_generation(entry)
 
-    # 1) 校验租约仍在 (lease_owner / lease_token / lease_until > now)
+    # All paths that write both tables take the submission lock before the
+    # job lock, matching Go Regrade. Claim alone commits its job lock promptly.
+    conn.execute("SELECT id FROM submissions WHERE id=%s FOR UPDATE", (job.submission_id,))
+    # 1) 校验租约仍在
     if conn.execute(_COMPLETE_VERIFY_SQL, {
         "job_id": job.id, "worker_id": job.lease_owner,
         "lease_token": job.lease_token,
@@ -197,6 +251,9 @@ def complete_job(conn, job: Job,
     }).fetchone() is None:
         conn.execute(_COMPLETE_JOB_SUPERSEDED_SQL, {"job_id": job.id})
         return "superseded"
+    conn.execute(_INSERT_GRADING_HISTORY_SQL, {
+        "submission_id": job.submission_id, "generation": job.generation,
+    })
     # 3) 写 job status='done' + 清空 lease
     conn.execute(_COMPLETE_JOB_DONE_SQL, {"job_id": job.id})
     return "done"
@@ -205,9 +262,10 @@ def complete_job(conn, job: Job,
 _FAIL_VERIFY_SQL = """
 SELECT 1 FROM grading_jobs
 WHERE id = %(job_id)s
+  AND status = 'leased'
   AND lease_owner = %(worker_id)s
   AND lease_token = %(lease_token)s
-  AND lease_until > now()
+  AND lease_until > clock_timestamp()
 FOR UPDATE;
 """
 
@@ -244,15 +302,7 @@ UPDATE submissions
 SET grading_status = 'failed',
     grading_error = %(error_msg)s,
     review_status = 'need_review'
-WHERE id = %(submission_id)s
-"""
-
-_FAIL_LOST_SET_SQL = """
-UPDATE grading_jobs
-SET last_error = %(error_msg)s,
-    updated_at = now()
-WHERE id = %(job_id)s AND status != 'leased'
-RETURNING status;
+WHERE id = %(submission_id)s AND grading_generation = %(generation)s
 """
 
 
@@ -262,13 +312,11 @@ def fail_job(conn, job: Job, error_msg: str, base_backoff: int = 2) -> str:
     返回 'queued' (重新入队 backoff) / 'dead' (max_attempts 达到) /
     'lost' (lease 已失效, 不再修改).
     """
+    conn.execute("SELECT id FROM submissions WHERE id=%s FOR UPDATE", (job.submission_id,))
     if conn.execute(_FAIL_VERIFY_SQL, {
         "job_id": job.id, "worker_id": job.lease_owner,
         "lease_token": job.lease_token,
     }).fetchone() is None:
-        conn.execute(_FAIL_LOST_SET_SQL, {
-            "job_id": job.id, "error_msg": error_msg[:2000]
-        })
         return FAIL_LOST
     attempts = job.attempts  # claim 已 attempts+1, 故 attempts 是已增加的值
     if attempts >= job.max_attempts:
@@ -277,6 +325,7 @@ def fail_job(conn, job: Job, error_msg: str, base_backoff: int = 2) -> str:
         })
         conn.execute(_FAIL_DEAD_SUBMISSION_SQL, {
             "submission_id": job.submission_id,
+            "generation": job.generation,
             "error_msg": error_msg[:2000],
         })
         return FAIL_DEAD

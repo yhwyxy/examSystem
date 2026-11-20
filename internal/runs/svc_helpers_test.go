@@ -120,6 +120,14 @@ func TestOpenSuccess(t *testing.T) {
 	if run.PublicTokenHash == "" {
 		t.Error("PublicTokenHash is empty")
 	}
+	var maxScore, passingScore float64
+	if err := pool.QueryRow(ctx, `SELECT max_score, passing_score FROM exam_runs WHERE id=$1`, run.ID).
+		Scan(&maxScore, &passingScore); err != nil {
+		t.Fatalf("read immutable scoring thresholds: %v", err)
+	}
+	if maxScore != 100 || passingScore != 60 {
+		t.Errorf("run scoring thresholds = %v/%v, want 100/60", maxScore, passingScore)
+	}
 }
 
 func TestOpenDuplicateActiveRejects(t *testing.T) {
@@ -185,7 +193,7 @@ func TestBeginCloseOpenToClosing(t *testing.T) {
 	}
 	defer tx.Rollback(ctx)
 
-	updated, err := svc.BeginClose(ctx, tx, run.ID, 5*60) // 5 min grace
+	updated, err := svc.BeginClose(ctx, tx, run.ID, 5*time.Minute)
 	if err != nil {
 		t.Fatalf("BeginClose: %v", err)
 	}
@@ -223,7 +231,7 @@ func TestBeginCloseIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin tx1: %v", err)
 	}
-	_, err = svc.BeginClose(ctx, tx1, run.ID, 5*60)
+	firstRun, err := svc.BeginClose(ctx, tx1, run.ID, 5*time.Minute)
 	if err != nil {
 		tx1.Rollback(ctx)
 		t.Fatalf("first BeginClose: %v", err)
@@ -238,12 +246,15 @@ func TestBeginCloseIdempotent(t *testing.T) {
 		t.Fatalf("begin tx2: %v", err)
 	}
 	defer tx2.Rollback(ctx)
-	updated, err := svc.BeginClose(ctx, tx2, run.ID, 5*60)
+	updated, err := svc.BeginClose(ctx, tx2, run.ID, time.Hour)
 	if err != nil {
 		t.Errorf("second BeginClose: %v", err)
 	}
 	if updated.Status != runs.StatusClosing {
 		t.Errorf("Status = %q, want %q", updated.Status, runs.StatusClosing)
+	}
+	if firstRun.FinalizeAt == nil || updated.FinalizeAt == nil || !firstRun.FinalizeAt.Equal(*updated.FinalizeAt) {
+		t.Errorf("repeated close changed finalize_at: first=%v second=%v", firstRun.FinalizeAt, updated.FinalizeAt)
 	}
 }
 

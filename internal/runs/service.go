@@ -6,10 +6,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -118,8 +120,9 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, slug string,
 		return nil, fmt.Errorf("runs.Open: write snapshot: %w", err)
 	}
 
-	run, err := s.repo.Open(ctx, tx, runID, slug, snapshotPath, snapshotHash,
-		tokenHash, durationMinutes)
+	maxScore, passingScore := paperScoreMetadata(doc)
+	run, err := s.repo.OpenWithScoreMetadata(ctx, tx, runID, slug, snapshotPath, snapshotHash,
+		tokenHash, durationMinutes, maxScore, passingScore)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +134,37 @@ func (s *Service) Open(ctx context.Context, tx pgx.Tx, slug string,
 		}
 	}
 	return &OpenResult{Run: run, PublicToken: token}, nil
+}
+
+func paperScoreMetadata(doc papers.Document) (*float64, *float64) {
+	info, ok := doc["exam_info"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	return optionalPaperScore(info["total_score"]), optionalPaperScore(info["passing_score"])
+}
+
+func optionalPaperScore(value any) *float64 {
+	var score float64
+	switch n := value.(type) {
+	case float64:
+		score = n
+	case float32:
+		score = float64(n)
+	case int:
+		score = float64(n)
+	case int64:
+		score = float64(n)
+	case json.Number:
+		parsed, err := strconv.ParseFloat(n.String(), 64)
+		if err != nil {
+			return nil
+		}
+		score = parsed
+	default:
+		return nil
+	}
+	return &score
 }
 
 // savePublicToken 把明文 token 写到 <tokenDir>/<runID>.token 文件, 0600 权限.
@@ -299,10 +333,14 @@ func (s *Service) BeginClose(ctx context.Context, tx pgx.Tx, runID string,
 
 var _ = uuid.New
 
-// FindOpenBySlug 查 paper 最近一条 open 状态 run. 无 -> 返 (nil, nil).
-// 供 admin exam-link GET 用.
+// FindOpenBySlug returns the active open/closing run for a paper, or nil when none exists.
 func (s *Service) FindOpenBySlug(ctx context.Context, tx pgx.Tx, slug string) (*Run, error) {
 	return s.repo.FindOpenByPaper(ctx, tx, slug)
+}
+
+// FindLatestBySlug returns the most recent run, including a completed round.
+func (s *Service) FindLatestBySlug(ctx context.Context, tx pgx.Tx, slug string) (*Run, error) {
+	return s.repo.FindLatestByPaper(ctx, tx, slug)
 }
 
 // ListExamsOverview 转发到 Repository. slugs 来自 Papers.List().

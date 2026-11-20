@@ -95,6 +95,15 @@ func (r *Repository) MaxRoundForPaper(ctx context.Context, tx pgx.Tx, paperID st
 func (r *Repository) Open(ctx context.Context, tx pgx.Tx,
 	id, paperID, snapshotPath, snapshotHash, publicTokenHash string,
 	durationMinutes int) (*Run, error) {
+	return r.OpenWithScoreMetadata(ctx, tx, id, paperID, snapshotPath, snapshotHash,
+		publicTokenHash, durationMinutes, nil, nil)
+}
+
+// OpenWithScoreMetadata stores the thresholds copied from the immutable paper
+// snapshot so reporting never has to consult a subsequently edited paper file.
+func (r *Repository) OpenWithScoreMetadata(ctx context.Context, tx pgx.Tx,
+	id, paperID, snapshotPath, snapshotHash, publicTokenHash string,
+	durationMinutes int, maxScore, passingScore *float64) (*Run, error) {
 	// 先 per-paper advisory lock 串行化, 防止 round_no 竞态
 	if _, err := tx.Exec(ctx,
 		"SELECT pg_advisory_xact_lock($1)", advisoryLockKeyByPaper(paperID)); err != nil {
@@ -111,15 +120,15 @@ func (r *Repository) Open(ctx context.Context, tx pgx.Tx,
 		INSERT INTO exam_runs (
 			id, paper_id, round_no, public_token_hash, status,
 			duration_minutes, snapshot_path, snapshot_hash, is_legacy,
-			opened_at, created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,$9)
+			opened_at, created_at, max_score, passing_score
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false,$9,$9,$10,$11)
 		RETURNING id, paper_id, round_no, public_token_hash, status,
 		          duration_minutes, snapshot_path, snapshot_hash, is_legacy,
 		          opened_at, closing_started_at, finalize_at, closed_at, created_at
 	`,
 		id, paperID, roundNo, publicTokenHash, string(StatusOpen),
 		durationMinutes, snapshotPath, snapshotHash,
-		now,
+		now, maxScore, passingScore,
 	).Scan(&run.ID, &run.PaperID, &run.RoundNo, &run.PublicTokenHash, &run.Status,
 		&run.DurationMinutes, &run.SnapshotPath, &run.SnapshotHash, &run.IsLegacy,
 		&run.OpenedAt, &run.ClosingStartedAt, &run.FinalizeAt, &run.ClosedAt, &run.CreatedAt)
@@ -226,15 +235,14 @@ func isNoRows(err error) bool {
 	return errors.Is(err, pgx.ErrNoRows)
 }
 
-// ErrAlreadyClosed 表示已事务 attempt close 但已是 closed 不可逆.
+// ErrAlreadyClosed indicates a run finished finalization before a close retry.
 var ErrAlreadyClosed = errors.New("RUN_ALREADY_CLOSED")
 
 // BeginClose 把 run 从 open 切到 closing; finalize_at 设为 now + grace.
-// 已 closing/closed 都刷新 finalize_at, 但状态不回退; 已 closed 返 ErrAlreadyClosed.
+// 重复调用对已 closing run 不延长宽限期; 已 closed 返 ErrAlreadyClosed.
 func (r *Repository) BeginClose(ctx context.Context, tx pgx.Tx,
 	runID string, graceDuration time.Duration) (*Run, error) {
-	// 单 UPDATE: open -> closing; closing 维持 closing+刷新 finalize_at;
-	// closed 触发 cardinality 0 (operator 已 CLOSED)
+	// 只切换 open -> closing。重试不改既有 finalize_at，避免重复点击无限延长收卷。
 	now := time.Now().UTC()
 	finalizeAt := now.Add(graceDuration)
 	_, err := tx.Exec(ctx, `
@@ -247,9 +255,6 @@ func (r *Repository) BeginClose(ctx context.Context, tx pgx.Tx,
 	if err != nil {
 		return nil, fmt.Errorf("runs.BeginClose: %w", err)
 	}
-	// 再统一 finalizeAt 字段同步(已 closing 也刷一次 -- 与 Python 等价)
-	_, _ = tx.Exec(ctx, "UPDATE exam_runs SET finalize_at = $2 WHERE id = $1 AND status='closing'",
-		runID, finalizeAt)
 	// 重新读出当前最新状态
 	run, err := r.FindByID(ctx, tx, runID)
 	if err != nil {
@@ -261,16 +266,15 @@ func (r *Repository) BeginClose(ctx context.Context, tx pgx.Tx,
 	return run, nil
 }
 
-// FindOpenByPaper 按 paper_id 查最近一条 open 状态 run (UI exam-link 用).
-// 设计前提: 每 paper 同时最多 1 个 open run (uq_exam_runs_active 保证), 故 LIMIT 1.
-// 无 open run -> 返 (nil, nil).
+// FindOpenByPaper returns the active open or closing run for a paper. At most one
+// exists because uq_exam_runs_active covers both statuses.
 func (r *Repository) FindOpenByPaper(ctx context.Context, tx pgx.Tx, paperID string) (*Run, error) {
 	row := tx.QueryRow(ctx, `
 		SELECT id, paper_id, round_no, public_token_hash, status,
 		       duration_minutes, snapshot_path, snapshot_hash, is_legacy,
 		       opened_at, closing_started_at, finalize_at, closed_at, created_at
 		FROM exam_runs
-		WHERE paper_id = $1 AND status = 'open'
+		WHERE paper_id = $1 AND status IN ('open', 'closing')
 		LIMIT 1`, paperID)
 	run, err := scanRun(row)
 	if err != nil {
@@ -278,6 +282,20 @@ func (r *Repository) FindOpenByPaper(ctx context.Context, tx pgx.Tx, paperID str
 			return nil, nil
 		}
 		return nil, fmt.Errorf("runs.FindOpenByPaper: %w", err)
+	}
+	return run, nil
+}
+
+// FindLatestByPaper returns the last round even after it is fully closed.
+func (r *Repository) FindLatestByPaper(ctx context.Context, tx pgx.Tx, paperID string) (*Run, error) {
+	row := tx.QueryRow(ctx, `SELECT `+runColumns+` FROM exam_runs
+		WHERE paper_id = $1 ORDER BY round_no DESC LIMIT 1`, paperID)
+	run, err := scanRun(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("runs.FindLatestByPaper: %w", err)
 	}
 	return run, nil
 }

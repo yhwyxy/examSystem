@@ -5,7 +5,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scoring_worker.grader_bridge import build_scoring_request
+from scoring_worker.grader_bridge import build_scoring_request, _require_execution_validation_for_sql_and_code
+from types import SimpleNamespace
 
 CALC_Q = {
     "id": "q42",
@@ -35,11 +36,11 @@ def test_calculation_mode_and_config_passthrough():
     assert calc.final_answers[0].tolerance == 0.5
 
 
-def test_calculation_mode_without_config_stays_text():
+def test_calculation_mode_without_config_remains_calculation():
     q = dict(CALC_Q)
     q.pop("calculation")
     req = build_scoring_request(q, "答案")
-    assert req.scoring_mode.value == "text"
+    assert req.scoring_mode.value == "calculation"
 
 
 def test_extra_equivalences_passthrough():
@@ -57,3 +58,76 @@ def test_extra_equivalences_passthrough():
     eqs = req.scoring_config.text_bounded_corrections.extra_equivalences
     assert ("Mn", "锰") in eqs
     assert ("Cr", "铬") in eqs
+
+
+def test_sql_execution_fixture_and_dialect_pass_through_when_supported():
+    datasets = [
+        {"name": "public", "visibility": "public", "tables": []},
+        {"name": "hidden", "visibility": "hidden", "tables": []},
+    ]
+    question = {
+        "id": "sql-q",
+        "type": "short_answer",
+        "score": 10,
+        "scoring_mode": "sql",
+        "sql_dialect": "sqlite",
+        "sql_test_datasets": datasets,
+        "question": "查询商品",
+        "answer": "SELECT name FROM products",
+    }
+    req = build_scoring_request(question, "SELECT name FROM products")
+    if "sql_test_datasets" in type(req).model_fields:
+        assert req.sql_dialect == "sqlite"
+        assert req.sql_test_datasets[0]["name"] == "public"
+
+
+def test_code_test_cases_pass_through_when_supported():
+    cases = [
+        {"name": "public", "visibility": "public", "input": "1", "expected_output": "1"},
+        {"name": "hidden", "visibility": "hidden", "input": "0", "expected_output": "0"},
+    ]
+    question = {
+        "id": "code-q",
+        "type": "short_answer",
+        "score": 10,
+        "scoring_mode": "code",
+        "code_language": "python",
+        "code_test_cases": cases,
+        "question": "读入一个整数并原样输出",
+        "answer": "print(input())",
+    }
+    req = build_scoring_request(question, "print(input())")
+    if "code_test_cases" in type(req).model_fields:
+        assert req.code_test_cases[1]["visibility"] == "hidden"
+
+
+def test_old_scoring_library_cannot_auto_accept_unverified_sql_or_code():
+    request = SimpleNamespace(scoring_mode=SimpleNamespace(value="sql"), sql_test_datasets=[{}, {}])
+    result = SimpleNamespace(metadata={}, warnings=[], force_manual_review=False)
+    checked = _require_execution_validation_for_sql_and_code(result, request)
+    assert checked.force_manual_review is True
+    assert checked.metadata["execution_review_reason"] == "execution_validation_unavailable"
+
+    complete = SimpleNamespace(
+        metadata={"execution_validation": {"status": "verified", "passed": 2, "total": 2,
+                                          "datasets": [{"passed": True}, {"passed": True}]}},
+        warnings=[], force_manual_review=False,
+    )
+    assert _require_execution_validation_for_sql_and_code(complete, request) is complete
+
+
+def test_sql_mutation_policy_survives_worker_request_construction():
+    question = {"id": "mutation", "type": "short_answer", "score": 10,
+                "scoring_mode": "sql", "sql_dialect": "sqlite", "question": "删除空值",
+                "answer": "DELETE FROM items WHERE value IS NULL",
+                "sql_execution": {"mode": "mutation", "mutation_tables": ["Items"]},
+                "sql_test_datasets": [{"name": "one", "tables": []}, {"name": "two", "tables": []}]}
+    request = build_scoring_request(question, question["answer"])
+    assert request.sql_execution == {"mode": "mutation", "mutation_tables": ["items"]}
+
+
+def test_zero_count_or_missing_execution_records_cannot_approve_a_score():
+    request = SimpleNamespace(scoring_mode=SimpleNamespace(value="sql"), sql_test_datasets=[])
+    result = SimpleNamespace(score=10, warnings=[], force_manual_review=False,
+                             metadata={"execution_validation": {"status": "verified", "passed": 0, "total": 0, "datasets": []}})
+    assert _require_execution_validation_for_sql_and_code(result, request).force_manual_review is True

@@ -104,7 +104,7 @@ def test_aggregate_review_status_clean_paper_high_confidence():
         {"machine_score": 9.0, "max_score": 10.0,
          "review_status": "high_confidence",
          "low_confidence": False, "need_manual_review": False},
-    ]) == "high_confidence"
+    ]) == "auto_scored"
 
 
 def test_grade_composite_extracts_sub_answers(monkeypatch):
@@ -114,8 +114,8 @@ def test_grade_composite_extracts_sub_answers(monkeypatch):
     import scoring_worker.grader_bridge as gb
     seen = {}
 
-    def _fake_grade(question, student_answer, *, preserve=None):
-        seen[question["id"]] = student_answer
+    def _fake_grade(question, student_answer, *, preserve=None, service=None, multiple_choice_partial=True):
+        seen[question["id"]] = student_answer.get("answer") if isinstance(student_answer, dict) else student_answer
         return (3.0, 3.0, "reviewed",
                 {"review_status": "reviewed", "manually_reviewed": False,
                  "low_confidence": False, "need_manual_review": False,
@@ -131,7 +131,7 @@ def test_grade_composite_extracts_sub_answers(monkeypatch):
     assert seen == {"q9-1": "回答一", "q9-2": "回答二"}
     assert f == 6.0 and m == 6.0
     assert entry["sub_results"][0]["sub_question_id"] == "q9-1"
-    assert overall == "reviewed"  # 6/10 < 0.8, 无人工/低置信信号
+    assert overall == "auto_scored"  # 机器评分不冒充人工复核
 
 
 def test_build_scoring_request_passes_code_language_for_code_mode():

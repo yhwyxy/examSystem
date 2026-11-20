@@ -92,3 +92,38 @@ def test_reset_service_clears_singletons():
     gb.reset_service()
     assert gb._service_singleton is None
     assert gb._remote_reranker is None
+
+
+@pytest.mark.parametrize("method", ["local", "remote_reranker", "llm"])
+def test_all_scoring_modes_receive_dedicated_remote_execution_runners(monkeypatch, method):
+    _strip_proxy(monkeypatch)
+    monkeypatch.setenv("SANDBOX_API_URL", "https://sandbox.example")
+    monkeypatch.setenv("SANDBOX_AUTH_TOKEN", "sandbox-test-only-token-32-characters-long")
+    monkeypatch.setenv("SANDBOX_RUNNER_BUILD", "test-build")
+    from subjective_scoring import ScoringMode
+    from subjective_scoring.sandbox_transport import RemoteCodeRunner, RemoteSQLRunner
+
+    service = gb.build_scoring_service({
+        "method": method, "rerank_api_url": "https://reranker.example",
+        "rerank_api_key": "reranker-test-key", "rerank_model": "test",
+        "llm_api_url": "https://judge.example", "llm_api_key": "judge-test-key", "llm_model": "test",
+    })
+    code = service._scorers[ScoringMode.CODE]
+    sql = service._scorers[ScoringMode.SQL]
+    if method == "llm":
+        assert isinstance(code.code_execution_runner, RemoteCodeRunner)
+        assert isinstance(sql.sql_execution_runner, RemoteSQLRunner)
+        assert isinstance(code.fallback.execution_runner, RemoteCodeRunner)
+    else:
+        assert isinstance(code.execution_runner, RemoteCodeRunner)
+        assert isinstance(sql.execution_runner, RemoteSQLRunner)
+    gb._close_service_scorers(service)
+
+
+def test_partial_sandbox_configuration_fails_without_disclosing_token(monkeypatch):
+    monkeypatch.setenv("SANDBOX_API_URL", "https://sandbox.example")
+    monkeypatch.setenv("SANDBOX_AUTH_TOKEN", "secret-test-token")
+    monkeypatch.delenv("SANDBOX_RUNNER_BUILD", raising=False)
+    with pytest.raises(RuntimeError, match="sandbox 配置不完整") as error:
+        gb.build_scoring_service({"method": "local"})
+    assert "secret-test-token" not in str(error.value)

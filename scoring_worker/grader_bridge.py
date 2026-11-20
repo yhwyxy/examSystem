@@ -1,15 +1,9 @@
-"""主观题打分 bridge: subjective-scoring 0.1.7 适配 (plan Task 7 Step 4 完整版).
-
-不 import root.backend (plan 边界); 但与 backend/grader.py 评分结果保持
-结构 parity (细节字段对齐 admin 读取 / XLSX 导出).
-
-依赖 subjective-scoring git tag v0.1.7 @ yhwyxy/subjective-scoring:
-    SubjectiveScoringService / ScoringRequest / ScoringResult / ScoringMode /
-    ReviewLevel / CohereRerankerPairScorer
-"""
+"""Adapt the pinned subjective-scoring contract for grading, review and export."""
 from __future__ import annotations
 
 import json
+import hashlib
+from difflib import SequenceMatcher
 import logging
 import os
 import re
@@ -36,6 +30,26 @@ _service_lock = threading.RLock()
 _service_singleton: Any | None = None  # SubjectiveScoringService 实例
 _remote_reranker: Any | None = None    # CohereRerankerPairScorer 实例
 _project_root = Path(__file__).resolve().parent.parent
+
+
+def _sandbox_runner_options() -> dict[str, Any]:
+    url = os.environ.get("SANDBOX_API_URL", "").strip()
+    token = os.environ.get("SANDBOX_AUTH_TOKEN", "").strip()
+    build = os.environ.get("SANDBOX_RUNNER_BUILD", "").strip()
+    if not any((url, token, build)):
+        return {}
+    if not all((url, token, build)):
+        raise RuntimeError("sandbox 配置不完整，需 URL、专用 token 和 runner build")
+    try:
+        from subjective_scoring.sandbox_transport import HTTPExecutionClient, RemoteCodeRunner, RemoteSQLRunner
+    except ImportError as exc:
+        raise RuntimeError("评分库版本尚不支持远程 sandbox，请完成版本升级") from exc
+    try:
+        client = HTTPExecutionClient(url=url, token=token, expected_build=build)
+    except ValueError as exc:
+        raise RuntimeError("sandbox 配置无效，需 HTTPS、专用长 token 和固定 build") from exc
+    return {"code_execution_runner": RemoteCodeRunner(client),
+            "sql_execution_runner": RemoteSQLRunner(client)}
 
 
 def validate_remote_reranker_config() -> dict[str, str] | None:
@@ -80,6 +94,7 @@ def get_subjective_service() -> Any:
                 svc = SubjectiveScoringService(
                     allow_model_load=False,
                     text_pair_scorer=reranker, code_pair_scorer=reranker,
+                    **_sandbox_runner_options(),
                 )
             except Exception:
                 reranker.close()
@@ -109,6 +124,7 @@ def build_scoring_service(scoring_cfg: dict | None = None) -> Any:
     )
     cfg = dict(scoring_cfg or {})
     method = str(cfg.get("method") or "local").strip().lower()
+    sandbox_options = _sandbox_runner_options()
 
     if method == "remote_reranker":
         url = str(cfg.get("rerank_api_url") or os.environ.get("RERANK_API_URL", "")).strip()
@@ -122,6 +138,7 @@ def build_scoring_service(scoring_cfg: dict | None = None) -> Any:
             return SubjectiveScoringService(
                 allow_model_load=False,
                 text_pair_scorer=reranker, code_pair_scorer=reranker,
+                **sandbox_options,
             )
         except Exception:
             reranker.close()
@@ -137,6 +154,7 @@ def build_scoring_service(scoring_cfg: dict | None = None) -> Any:
         judge = LLMJudgeConfig(url=url, api_key=key, model=model)
         return SubjectiveScoringService(
             allow_model_load=False, llm_judge=judge, judge_fallback=True,
+            **sandbox_options,
         )
 
     # local (默认): 本地语义模型
@@ -150,12 +168,26 @@ def build_scoring_service(scoring_cfg: dict | None = None) -> Any:
     return SubjectiveScoringService(
         allow_model_load=True,
         text_model=model_name or None, code_model=model_name or None,
+        **sandbox_options,
     )
 
 
 def get_subjective_service_for_config(scoring_cfg: dict | None) -> Any:
     """按 DB 评分配置构造服务 (不走单例; poll loop 检测到配置变化时重建)."""
-    return build_scoring_service(scoring_cfg)
+    svc = build_scoring_service(scoring_cfg)
+    # Version the configuration without persisting credentials or endpoints.
+    cfg = scoring_cfg or {}
+    public_config = {k: cfg.get(k) for k in ("method", "llm_model", "rerank_model", "llm_api_url", "rerank_api_url")}
+    for env in ("RERANK_MODEL", "RERANKER_MODEL", "LLM_MODEL", "RERANK_USE_REMOTE"):
+        public_config[env] = os.environ.get(env)
+    public_config["bridge_contract_version"] = "p0-v1"
+    public_config["sandbox_runner_build"] = os.environ.get("SANDBOX_RUNNER_BUILD", "")
+    public_config["sandbox_endpoint_fingerprint"] = hashlib.sha256(
+        os.environ.get("SANDBOX_API_URL", "").encode()).hexdigest()
+    svc._exam_requested_model = cfg.get("llm_model") if cfg.get("method") == "llm" else cfg.get("rerank_model")
+    svc._exam_config_version = hashlib.sha256(
+        json.dumps(public_config, sort_keys=True).encode()).hexdigest()
+    return svc
 
 
 def _close_service_scorers(svc: Any) -> None:
@@ -193,14 +225,12 @@ def parse_scoring_rubric(
     """build scoring_points: 解析 scoring_rubric 文本.
 
     1. 单赛道式: 每行一个点 ("点 X 分" 或 "点: 描述 N") -> regex 抽取 + 标准化.
-    2. 无 scoring_rubric 且有 max_score -> 整卷作为单一得分点 (max).
+    2. 无可解析标准 -> 无评分点，由评分库综合评分或转人工复核。
     3. 分数总和不等于 max_score: 按比例缩放 (max_score 归一).
     4. 完全无 max_score + 无 rubric -> None (走 judge 没多评分点).
     """
-    if not scoring_rubric and max_score in {None, 0}:
-        return None
     if not scoring_rubric:
-        return [(str(max_score), float(max_score))]
+        return None
     points: list[tuple[str, float]] = []
     for line in _RUBRIC_SPLIT_RE.split(scoring_rubric):
         line = line.strip()
@@ -214,7 +244,7 @@ def parse_scoring_rubric(
         if text and w >= 0:
             points.append((text, w))
     if not points:
-        return [(str(max_score), float(max_score))] if max_score else None
+        return None
     if max_score:
         total = sum(p[1] for p in points)
         if total > 0 and abs(total - float(max_score)) > 1e-6:
@@ -247,27 +277,20 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
     字段对齐 ScoringRequest 真实 schema (preflight 2026-07-26 校验):
         question (非 question_text) / question_type / code_language /
         scoring_points: list[ScoringPoint] (非 tuple) / scoring_config.
-    scoring_mode 映射: text->TEXT, code/sql/code_completion->CODE.
+    显式模式优先；缺少模式时使用评分库的统一路由规则。
     """
     from subjective_scoring import ScoringMode  # type: ignore
     qtype = str(question.get("type", "") or "")
     mode_raw = str(question.get("scoring_mode") or "").strip().lower()
-    has_lang = bool(question.get("allowed_languages")
-                    or question.get("code_language"))
-    if mode_raw == "code" or (mode_raw == "" and has_lang):
-        mode = ScoringMode.CODE
-    elif mode_raw == "calculation" and isinstance(question.get("calculation"), dict):
-        mode = ScoringMode.CALCULATION
-    else:
-        mode = ScoringMode.TEXT
-    scoring_points = _structured_scoring_points(question)
-    if scoring_points is None:
+    mode = ScoringMode(mode_raw) if mode_raw else None
+    sp_list = _structured_scoring_points(question)
+    if sp_list is None:
         # 没有显式评分点时才走 rubric 解析；评分点已配为空数组则不进入
         scoring_points = parse_scoring_rubric(
             question.get("scoring_rubric"),
             question.get("score"),
         )
-    sp_list = _to_scoring_points(scoring_points)
+        sp_list = _to_scoring_points(scoring_points)
     code_lang = question.get("code_language")
     if not code_lang:
         allowed = question.get("allowed_languages")
@@ -275,15 +298,17 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
             code_lang = allowed[0]
     # 语言随评分模式走: scoring_mode=code 的题不论 type (short_answer/essay
     # 也可能是代码题) 都必须透传, 否则引擎默认按 python 解析 -> AST 全灭.
-    pass_lang = mode == ScoringMode.CODE or qtype in (
-        "sql", "sql_completion", "code_completion", "code")
     request_kwargs: dict[str, Any] = {
         "question_id": str(question.get("id", "?")),
         "question_type": qtype or "subjective",
         "question": str(question.get("question", "")),
         "reference_answer": str(question.get("answer", "")),
+        "sql_dialect": question.get("sql_dialect"),
+        "sql_test_datasets": question.get("sql_test_datasets") or [],
+        "sql_execution": question.get("sql_execution", {}),
+        "code_test_cases": question.get("code_test_cases") or [],
         "student_answer": student_answer,
-        "code_language": code_lang if pass_lang else None,
+        "code_language": code_lang or None,
         "code_scoring_profile": question.get("code_scoring_profile") or None,
         "course_type": question.get("course_type"),
         "max_score": float(question.get("score", 0) or 0),
@@ -291,20 +316,26 @@ def build_scoring_request(question: dict[str, Any], student_answer: str) -> Any:
         "scoring_points": sp_list,
         "scoring_config": _build_scoring_options(question),
     }
-    return _build_scoring_request_kwargs(request_kwargs)
+    request = _build_scoring_request_kwargs(request_kwargs)
+    if mode is None:
+        from subjective_scoring import QuestionTypeRouter
+        request = request.model_copy(update={
+            "scoring_mode": QuestionTypeRouter().resolve(request).mode,
+        })
+    return request
 
 
 def _build_scoring_options(question: dict[str, Any]) -> Any | None:
     """题目带 calculation 配置或业务同义组时构造请求级 ScoringOptions。"""
     calc = question.get("calculation")
     eqs = question.get("extra_equivalences")
-    if not isinstance(calc, dict) and not eqs:
+    if not isinstance(calc, dict) and not eqs and not question.get("scoring_config"):
         return None
     try:
         from subjective_scoring import ScoringOptions
     except ImportError:
         from subjective_scoring.models.schemas import ScoringOptions  # type: ignore
-    payload: dict[str, Any] = {}
+    payload: dict[str, Any] = dict(question.get("scoring_config") or {})
     if isinstance(calc, dict):
         payload["calculation"] = calc
     if isinstance(eqs, list) and eqs:
@@ -320,7 +351,7 @@ def _build_scoring_options(question: dict[str, Any]) -> Any | None:
 
 def _structured_scoring_points(
     question: dict[str, Any],
-) -> list[tuple[str, float]] | None:
+) -> list[Any] | None:
     """题目自带结构化 scoring_points ([{text, score, ...}]) 时直接采用.
 
     空列表 [] 也返回 [] — 代表「显式配置了无评分点」, 不走 rubric 兜底.
@@ -328,21 +359,22 @@ def _structured_scoring_points(
     """
     raw = question.get("scoring_points")
     if not isinstance(raw, list):
+        if "scoring_points" in question:
+            raise ValueError("scoring_points must be a list")
         return None
     if not raw:
         return []
-    points: list[tuple[str, float]] = []
-    for p in raw:
-        if not isinstance(p, dict):
-            continue
-        text = str(p.get("text") or "").strip()
-        try:
-            w = float(p.get("score", 0) or 0)
-        except (TypeError, ValueError):
-            continue
-        if text and w > 0:
-            points.append((text, w))
-    return points or None
+    from subjective_scoring import ScoringPoint
+    points = []
+    for idx, p in enumerate(raw):
+        # Legacy points may lack IDs; all supplied attributes are validated,
+        # rather than silently discarding critical/conflict configuration.
+        payload = dict(p)
+        payload.setdefault("id", f"p{idx + 1}")
+        points.append(ScoringPoint.model_validate(payload))
+    if len({p.id for p in points}) != len(points):
+        raise ValueError("duplicate scoring point ID")
+    return points
 
 
 def _build_scoring_request_kwargs(kwargs: dict[str, Any]) -> Any:
@@ -356,7 +388,11 @@ def _build_scoring_request_kwargs(kwargs: dict[str, Any]) -> Any:
                   "reference_answer", "student_answer", "code_language",
                   "code_scoring_profile",
                   "course_type", "max_score", "scoring_mode",
-                  "scoring_points", "scoring_config"}
+                  "scoring_points", "scoring_config", "sql_dialect",
+                  "sql_test_datasets", "sql_execution", "code_test_cases"}
+    model_fields = getattr(ScoringRequest, "model_fields", None)
+    if isinstance(model_fields, dict):
+        valid_keys.intersection_update(model_fields)
     cleaned = {k: v for k, v in kwargs.items()
                if k in valid_keys and v is not None}
     return ScoringRequest(**cleaned)
@@ -382,12 +418,44 @@ def _legacy_review_status(result: Any) -> str:
     if val in ("high", "auto_pass"):
         return "high_confidence"
     if val in ("medium", "suggested_review"):
-        return "reviewed"
+        return "need_review"
     if val in ("low",):
         return "low_confidence"
     if val in ("manual", "manual_required"):
         return "need_review"
     return "low_confidence"
+
+
+def _original_evidence(answer: str, evidence: str | None) -> tuple[str | None, int | None, int | None]:
+    """Map a normalized text quote back to the original answer, with verification."""
+    if not evidence:
+        return evidence, None, None
+    start = answer.find(evidence)
+    if start >= 0:
+        return evidence, start, start + len(evidence)
+    from subjective_scoring.components.normalizer import TextNormalizer
+    normalizer = TextNormalizer()
+    normalized = normalizer.normalize(answer)
+    quote = normalizer.normalize(evidence)
+    start = normalized.find(quote)
+    if start < 0 or not quote:
+        return None, None, None
+    end = start + len(quote)
+    spans = []
+    for tag, a0, a1, b0, b1 in SequenceMatcher(None, normalized, answer, autojunk=False).get_opcodes():
+        if a1 <= start or a0 >= end:
+            continue
+        if tag == "equal":
+            spans.append((b0 + max(start, a0) - a0, b0 + min(end, a1) - a0))
+        else:
+            spans.append((b0, b1))
+    if not spans:
+        return None, None, None
+    original_start, original_end = spans[0][0], spans[-1][1]
+    original = answer[original_start:original_end]
+    if normalizer.normalize(original) != quote:
+        return None, None, None
+    return original, original_start, original_end
 
 
 def detail_from_scoring_result(
@@ -404,29 +472,118 @@ def detail_from_scoring_result(
     low = review_status == "low_confidence" or (
         getattr(result, "need_manual_review", False) and
         float(getattr(result, "confidence", 0.0)) < 0.5)
-    matched = [
-        {
-            "point_id": getattr(p, "point_id", None),
+    trace = getattr(result, "trace", None)
+    intermediate = getattr(trace, "intermediate", None)
+    metadata = getattr(intermediate, "metadata", {}) or {}
+    provenance = {k: metadata[k] for k in (
+        "model", "parser", "judge_backend", "llm_error", "route_reason",
+        "route_mode", "decision_reason", "calibrator", "requested_model",
+        "execution_validation", "execution_review_reason", "assessment_type",
+    ) if k in metadata}
+    fallback_reason = None
+    if metadata.get("judge_backend") == "llm_fallback":
+        fallback_reason = "llm_failure:" + str(metadata.get("llm_error", "unknown"))
+    elif metadata.get("model") == "lexical_fallback":
+        fallback_reason = "lexical_fallback"
+    elif metadata.get("error"):
+        fallback_reason = "engine_error:" + str(metadata["error"])
+    configured_points = (
+        _structured_scoring_points(question) or _to_scoring_points(
+            parse_scoring_rubric(question.get("scoring_rubric"), max_score))
+    )
+    descriptions = {p.id: p.text for p in configured_points}
+    descriptions["__full_reference__"] = "整题综合评分"
+    calculation = question.get("calculation") or (question.get("scoring_config") or {}).get("calculation") or {}
+    for item in calculation.get("steps", []) + calculation.get("final_answers", []):
+        descriptions[item.get("id")] = item.get("description") or item.get("id")
+    descriptions.update({"sql.select":"查询字段", "sql.from":"来源表", "sql.where":"筛选条件",
+                         "sql.join":"关联条件", "sql.group_by":"分组", "sql.having":"分组筛选", "sql.order_by":"排序", "sql.limit":"结果数量"})
+
+    def point_detail(p: Any, status: str) -> dict[str, Any]:
+        pid = getattr(p, "point_id", None)
+        relation = getattr(p, "relation", None)
+        evidence = getattr(p, "evidence", None)
+        original, start, end = _original_evidence(student_answer, evidence)
+        return {
+            "point_id": pid,
+            "description": descriptions.get(pid, "整题综合评分" if pid == "whole" else str(pid or "结构验证")),
+            "status": status,
             "score": getattr(p, "score", 0.0),
             "max_score": getattr(p, "max_score", 0.0),
-            "similarity": getattr(p, "similarity", 0.0),
-            "evidence": getattr(p, "evidence", None),
+            "similarity": getattr(p, "similarity", None),
+            "evidence": original if original is not None else evidence,
+            "evidence_start": start,
+            "evidence_end": end,
+            "evidence_located": start is not None,
             "reason": getattr(p, "reason", None),
-        } for p in (getattr(result, "matched_points", None) or [])
-    ]
-    missed = [
-        {
-            "point_id": getattr(p, "point_id", None),
-            "score": getattr(p, "score", 0.0),
-            "max_score": getattr(p, "max_score", 0.0),
-            "reason": getattr(p, "reason", None),
-        } for p in (getattr(result, "missed_points", None) or [])
-    ]
+            "relation": relation.value if hasattr(relation, "value") else relation,
+            "relation_confidence": getattr(p, "relation_confidence", None),
+            "provisional_score": getattr(p, "provisional_score", None),
+        }
+    matched = [point_detail(p, "matched") for p in (getattr(result, "matched_points", None) or [])]
+    missed = [point_detail(p, "missed") for p in (getattr(result, "missed_points", None) or [])]
+    execution = metadata.get("execution_validation")
+    if isinstance(execution, dict) and execution.get("status") == "verified":
+        records = execution.get("datasets") if metadata.get("route_mode") == "sql" else execution.get("cases")
+        if not isinstance(records, list):
+            records = execution.get("datasets") or execution.get("cases") or []
+        for point in matched + missed:
+            match = re.fullmatch(r"(?:sql\.dataset|code\.test)\.(\d+)", str(point["point_id"]))
+            if match and 0 < int(match.group(1)) <= len(records):
+                record = records[int(match.group(1)) - 1]
+                if isinstance(record, dict) and type(record.get("passed")) is bool:
+                    point["validation"] = {key: record[key] for key in (
+                        "name", "visibility", "passed", "reason", "expected_rows", "actual_rows"
+                    ) if key in record}
+                    point["evidence_kind"] = "execution_record"
+    if score > 0 and not matched and not missed and metadata.get("deterministic"):
+        matched = [{
+            "point_id":"__full_reference__", "description":"整题参考答案匹配",
+            "status":"matched", "score":score, "max_score":max_score,
+            "evidence":student_answer, "evidence_start":0, "evidence_end":len(student_answer),
+            "evidence_located":True, "relation":"supported", "relation_confidence":1.0,
+            "reason":str(metadata.get("decision_reason") or "deterministic_reference_match"),
+        }]
+    # Guard the pinned library contract as well as newer library releases.
+    # This keeps critical conflict policy effective before a library upgrade.
+    guards = []
+    if score > 0 and not matched and not missed:
+        guards.append("missing_score_evidence")
+    for item in matched:
+        if (float(item["score"] or 0) > 0 and not item["evidence"]
+                and not (item.get("validation", {}).get("passed") is True)):
+            guards.append("missing_score_evidence")
+    point_config = {p.id: p for p in configured_points}
+    seen = set()
+    for item in matched + missed:
+        pid = item["point_id"]
+        if pid in seen:
+            guards.append("duplicate_scoring_result_point")
+            score = 0.0
+        seen.add(pid)
+        point = point_config.get(pid)
+        if item["relation"] in {"contradicted", "unknown"} and float(item["score"] or 0) > 0:
+            score = max(0.0, score - float(item["score"]))
+            item["score"] = 0.0
+            guards.append("unsupported_point_score")
+        if point and item["relation"] == "contradicted":
+            guards.append("scoring_point_conflict")
+            if point.critical and float(item["relation_confidence"] or 0) >= float(
+                (question.get("scoring_config") or {}).get("text_relation_thresholds", {}).get("conflict", 0.8)
+            ):
+                policy = getattr(point.conflict_policy, "value", point.conflict_policy)
+                if policy == "zero_total":
+                    score = 0.0
+                elif policy == "cap_total":
+                    score = min(score, max_score * point.conflict_score_cap_ratio)
     smode = getattr(result, "scoring_mode", None)
     rvlevel = getattr(result, "review_level", None)
     # 开放题（scoring_points=[] 显式配置）覆盖 review_status
     if _is_open_ended_question(question):
         review_status = "open_ended"
+    requires_review = bool(getattr(result, "need_manual_review", False)) or bool(fallback_reason) or bool(guards) or _is_open_ended_question(question)
+    if requires_review and review_status == "high_confidence":
+        review_status = "need_review"
     entry: dict[str, Any] = {
         "question_id": question.get("id"),
         "type": question.get("type"),
@@ -441,16 +598,22 @@ def detail_from_scoring_result(
         "similarity": round(float(getattr(result, "confidence", 0.0)), 4),
         "confidence": round(float(getattr(result, "confidence", 0.0)), 4),
         "reason": "; ".join(result.warnings) if getattr(result, "warnings", None) else None,
-        "fallback_reason": None,
+        "fallback_reason": fallback_reason,
+        "scoring_backend": getattr(intermediate, "scorer", None) or getattr(result, "track", None),
+        "scoring_model": metadata.get("model"),
+        "scoring_metadata": provenance,
         "review_status": review_status,
         "low_confidence": low,
         "scoring_mode": smode.value if smode and hasattr(smode, "value") else None,
         "track": getattr(result, "track", None),
-        "need_manual_review": bool(getattr(result, "need_manual_review", False)),
-        "review_level": rvlevel.value if rvlevel and hasattr(rvlevel, "value") else None,
+        "need_manual_review": requires_review,
+        "decision": "manual_review" if requires_review else getattr(getattr(result, "decision", None), "value", None),
+        "decision_reason": guards[0] if guards else "missing_scoring_standard" if _is_open_ended_question(question) else fallback_reason or getattr(result, "decision_reason", None),
+        "provisional_score": getattr(result, "provisional_score", None),
+        "review_level": "manual_required" if requires_review else rvlevel.value if rvlevel and hasattr(rvlevel, "value") else None,
         "matched_points": matched,
         "missed_points": missed,
-        "warnings": list(getattr(result, "warnings", []) or []),
+        "warnings": list(getattr(result, "warnings", []) or []) + guards,
     }
     return _merge_preserved_review(entry, preserve)
 
@@ -492,55 +655,38 @@ def _entry_flag(e: dict[str, Any], key: str) -> bool:
 
 
 def aggregate_review_status(entries: list[dict[str, Any]]) -> str:
-    """整卷级别 review_status plass规则:
-
-    1. low_confidence 标志任一 -> 'need_review' (Worker 上抛人工)
-    2. 任一 manually_reviewed=True -> 'partial_manual'
-    3. 任一 need_manual_review=True -> 'need_review'
-    4. open_ended 标记的题 -> 整卷 'need_review'（开放题需人工审核）
-    5. 否则根据 machine_score 与 max 比例 -> high_confidence/reviewed 链.
-
-    与 backend/grader.py parity 名字. 旗标读取兼容顶层 / detail 嵌套层, 并把
-    单题 review_status 字符串 (low_confidence/need_review/unanswered/open_ended)
-    一并算作需人工信号.
-    """
-    if not entries:
-        return "need_review"
-    score = 0.0
-    max_score = 0.0
-    found_low = False
-    found_manual = False
-    found_need_manual = False
-    found_unanswered = False
-    found_open_ended = False
-
-    for e in entries:
-        s = float(e.get("machine_score", 0) or 0)
-        m = float(e.get("max_score", 0) or 0)
-        score += s
-        max_score += m
-        rs = str(e.get("review_status") or "")
-        if _entry_flag(e, "low_confidence") or rs == "low_confidence":
-            found_low = True
-        if e.get("manually_reviewed"):
-            found_manual = True
-        if _entry_flag(e, "need_manual_review") or rs == "need_review":
-            found_need_manual = True
-        if rs == "unanswered":
-            found_unanswered = True
-        if rs == "open_ended":
-            found_open_ended = True
-
-    if found_unanswered or found_need_manual or found_low or found_open_ended:
-        return "need_review"
-    if found_manual:
-        return "partial_manual"
-    if max_score <= 0:
+    """Summarize unresolved review requirements, then human review coverage."""
+    leaves = []
+    def collect(entry):
+        if not isinstance(entry, dict):
+            leaves.append({"need_manual_review": True})
+            return
+        if entry.get("type") in {"single_choice", "multiple_choice", "true_false"}:
+            return
+        if entry.get("manually_reviewed") and entry.get("review_action") == "whole_question":
+            leaves.append(entry)
+            return
+        subs = entry.get("sub_results")
+        if isinstance(subs, list) and subs:
+            for sub in subs:
+                collect(sub)
+        else:
+            leaves.append(entry)
+    for entry in entries:
+        collect(entry)
+    pending_statuses = {"low_confidence", "need_review", "unanswered", "open_ended", "pending", "grading"}
+    for entry in leaves:
+        if entry.get("manually_reviewed"):
+            continue
+        if (_entry_flag(entry, "low_confidence") or _entry_flag(entry, "need_manual_review")
+                or entry.get("review_status") in pending_statuses):
+            return "need_review"
+    manual_count = sum(bool(e.get("manually_reviewed")) for e in leaves)
+    if manual_count and manual_count == len(leaves):
         return "reviewed"
-    ratio = score / max_score
-    if ratio >= 0.8:
-        return "high_confidence"
-    return "reviewed"
+    if manual_count:
+        return "partial_manual"
+    return "auto_scored"
 
 
 def _is_blank_answer(student_answer: Any) -> bool:
@@ -557,6 +703,8 @@ def _is_blank_answer(student_answer: Any) -> bool:
 def grade_subjective(
     question: dict[str, Any], student_answer: Any, *,
     preserve: dict[str, Any] | None = None,
+    service: Any | None = None,
+    multiple_choice_partial: bool = True,
 ) -> tuple[float, float, str, dict[str, Any]]:
     """主观题打分入口 (grading.py 调用).
 
@@ -567,15 +715,34 @@ def grade_subjective(
     if str(question.get("type")) == "composite":
         if _is_blank_answer(student_answer):
             entry = _empty_subjective_detail(question, preserve=preserve)
-            return (0.0, 0.0, entry["review_status"], entry)
-        ssvc = get_subjective_service()
-        return _grade_composite(ssvc, question, student_answer, preserve)
+            return (float(entry["final_score"]), 0.0, entry["review_status"], entry)
+        return _grade_composite(service, question, student_answer, preserve, multiple_choice_partial)
+
+    selected_language = None
+    if isinstance(student_answer, dict):
+        selected_language = student_answer.get("language")
+        student_answer = student_answer.get("answer", "")
+    if selected_language:
+        selected_language = str(selected_language).strip().lower()
+        allowed = question.get("allowed_languages") or [question.get("code_language")]
+        if selected_language not in allowed:
+            raise ValueError("answer language is not allowed")
+        question = dict(question, code_language=selected_language)
+        for source, target in (("answers_by_language", "answer"),
+                               ("scoring_points_by_language", "scoring_points"),
+                               ("scoring_config_by_language", "scoring_config"),
+                               ("code_scoring_profile_by_language", "code_scoring_profile")):
+            values = question.get(source)
+            if isinstance(values, dict):
+                if selected_language not in values:
+                    raise ValueError(f"missing {source} for selected language")
+                question[target] = values[selected_language]
 
     if not isinstance(student_answer, str):
         student_answer = "" if student_answer is None else str(student_answer)
     if student_answer.strip() == "":
         entry = _empty_subjective_detail(question, preserve=preserve)
-        return (0.0, 0.0, entry["review_status"], entry)
+        return (float(entry["final_score"]), 0.0, entry["review_status"], entry)
 
     # 精确评分模式分派 — 命中则直接返回，不经过 text reranker
     scoring_mode = question.get("scoring_mode") or ""
@@ -584,11 +751,32 @@ def grade_subjective(
         if result is not None:
             return result
 
-    ssvc = get_subjective_service()
+    ssvc = service if service is not None else get_subjective_service()
     request = build_scoring_request(question, student_answer)
-    result = ssvc.score(request)
+    if hasattr(ssvc, "score_with_trace"):
+        result = ssvc.score_with_trace(request)
+    else:
+        result = ssvc.score(request)
+    result = _require_execution_validation_for_sql_and_code(result, request)
     entry = detail_from_scoring_result(question, student_answer,
                                        result, preserve=preserve)
+    entry["selected_language"] = selected_language or request.code_language
+    entry["requested_model"] = getattr(ssvc, "_exam_requested_model", None)
+    config_payload = {
+        "options": request.scoring_config.model_dump(mode="json"),
+        "points": [p.model_dump(mode="json") for p in request.scoring_points],
+        "mode": request.scoring_mode.value,
+        "service": getattr(ssvc, "_exam_config_version", "environment"),
+    }
+    config_payload["reference_answer"] = request.reference_answer
+    config_payload["code_language"] = request.code_language
+    config_payload["code_scoring_profile"] = request.code_scoring_profile
+    config_payload["sql_dialect"] = getattr(request, "sql_dialect", None)
+    config_payload["sql_test_datasets"] = getattr(request, "sql_test_datasets", [])
+    config_payload["sql_execution"] = getattr(request, "sql_execution", {})
+    config_payload["code_test_cases"] = getattr(request, "code_test_cases", [])
+    entry["scoring_config_version"] = hashlib.sha256(
+        json.dumps(config_payload, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     return (
         round(float(entry["final_score"]), 6),
         round(float(entry["machine_score"]), 6),
@@ -597,9 +785,59 @@ def grade_subjective(
     )
 
 
+def _require_execution_validation_for_sql_and_code(result: Any, request: Any) -> Any:
+    """旧版锁定评分库缺少执行器时，也不能把静态估分当成已验证结果。"""
+    mode = getattr(getattr(request, "scoring_mode", None), "value", None)
+    if mode not in {"sql", "code"}:
+        return result
+    trace = getattr(result, "trace", None)
+    intermediate = getattr(trace, "intermediate", None)
+    metadata = getattr(intermediate, "metadata", None) if intermediate is not None else getattr(result, "metadata", None)
+    metadata = dict(metadata) if isinstance(metadata, dict) else {}
+    execution = metadata.get("execution_validation")
+    if isinstance(execution, dict) and execution.get("status") == "verified":
+        total, passed = execution.get("total"), execution.get("passed")
+        records = execution.get("datasets" if mode == "sql" else "cases")
+        expected = getattr(request, "sql_test_datasets" if mode == "sql" else "code_test_cases", [])
+        if (type(total) is int and total > 0 and type(passed) is int and passed == total
+                and isinstance(records, list) and len(records) == total
+                and all(isinstance(record, dict) and record.get("passed") is True for record in records)
+                and isinstance(expected, list) and len(expected) == total):
+            return result
+        reason = "execution_tests_incomplete"
+    else:
+        reason = "execution_validation_unavailable"
+    warnings = list(getattr(result, "warnings", []) or [])
+    warning = "SQL/代码缺少完整的隔离执行验证，机器分仅作参考并需人工复核"
+    if warning not in warnings:
+        warnings.append(warning)
+    metadata["execution_review_reason"] = reason
+    if trace is not None and intermediate is not None:
+        from subjective_scoring import ReviewLevel, ScoringDecision
+        trace.intermediate = intermediate.model_copy(update={
+            "force_manual_review": True, "warnings": warnings, "metadata": metadata,
+        })
+        result.result = result.result.model_copy(update={
+            "need_manual_review": True, "review_level": ReviewLevel.MANUAL_REQUIRED,
+            "decision": ScoringDecision.MANUAL_REVIEW, "decision_reason": reason, "warnings": warnings,
+        })
+        return result
+    if hasattr(result, "model_copy"):
+        fields = getattr(type(result), "model_fields", {})
+        return result.model_copy(update={
+            "need_manual_review" if "need_manual_review" in fields else "force_manual_review": True,
+            "warnings": warnings, "metadata": metadata,
+        })
+    result.force_manual_review = True
+    result.warnings = warnings
+    result.metadata = metadata
+    return result
+
+
 def _grade_composite(
     ssvc: Any, question: dict[str, Any], student_answer: Any,
     preserve: dict[str, Any] | None,
+    multiple_choice_partial: bool = True,
 ) -> tuple[float, float, str, dict[str, Any]]:
     """Composite 题: 沿 subquestions 各自打分; final = sum(sub_final).
 
@@ -631,10 +869,16 @@ def _grade_composite(
     for sub in subs:
         sub_id = str(sub.get("id"))
         raw = ans_map.get(sub_id, "")
-        if isinstance(raw, dict):
-            raw = raw.get("answer", "")
-        f, m, r, e = grade_subjective(sub, raw,
-                                      preserve=sub_preserve.get(sub_id))
+        if sub.get("type") in {"single_choice", "multiple_choice", "true_false"}:
+            from .grading import _grade_objective
+            e = _grade_objective(sub, raw.get("answer") if isinstance(raw, dict) else raw,
+                                 partial=multiple_choice_partial)
+            e = _merge_preserved_review(e, sub_preserve.get(sub_id))
+            f, m, r = e["final_score"], e["machine_score"], e["review_status"]
+        else:
+            f, m, r, e = grade_subjective(sub, raw,
+                                          preserve=sub_preserve.get(sub_id), service=ssvc,
+                                          multiple_choice_partial=multiple_choice_partial)
         final_total += f
         machine_total += m
         sub_results.append({
@@ -642,8 +886,9 @@ def _grade_composite(
             "question_id": sub_id,
             "type": sub.get("type"),
             "question": sub.get("question", ""),
-            "student_answer": raw,
-            "reference_answer": sub.get("answer", ""),
+            "student_answer": e.get("student_answer", raw),
+            "reference_answer": e.get("reference_answer", sub.get("answer", "")),
+            "selected_language": e.get("selected_language"),
             "max_score": float(sub.get("score", 0) or 0),
             "score": m,
             "machine_score": m,
@@ -662,7 +907,7 @@ def _grade_composite(
         "final_score": round(final_total, 6),
         "low_confidence": any(s["low_confidence"] for s in sub_results),
         "need_manual_review": any(s["need_manual_review"] for s in sub_results),
-        "manually_reviewed": any(s["manually_reviewed"] for s in sub_results),
+        "manually_reviewed": bool(sub_results) and all(s["manually_reviewed"] for s in sub_results),
         "confidence": round(min(
             (float(s.get("detail", {}).get("confidence", 0.0) or 0.0)
              for s in sub_results), default=0.0), 4),
@@ -670,6 +915,10 @@ def _grade_composite(
         "reason": "; ".join(reasons) if reasons else None,
     }
     overall = aggregate_review_status(sub_results)
+    if (preserve or {}).get("review_action") == "whole_question":
+        entry = _merge_preserved_review(entry, preserve)
+        final_total = float(entry["final_score"])
+        overall = "reviewed"
     return (round(final_total, 6), round(machine_total, 6), overall, entry)
 
 
@@ -752,7 +1001,7 @@ def _exact_review_status(level: str) -> str:
     if level == "auto_pass":
         return "high_confidence"
     if level == "suggested_review":
-        return "reviewed"
+        return "need_review"
     if level == "manual_required":
         return "need_review"
     return "low_confidence"

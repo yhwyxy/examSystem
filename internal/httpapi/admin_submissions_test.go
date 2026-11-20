@@ -11,54 +11,25 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/xuri/excelize/v2"
+	"github.com/yhwyxy/examSystem/internal/db"
 	"github.com/yhwyxy/examSystem/internal/papers"
 	"github.com/yhwyxy/examSystem/internal/review"
+	"github.com/yhwyxy/examSystem/internal/testutil"
 )
 
-// testSubmPool 全包集成测用连 exam_system 库, 缺 env t.Skip 同 review 包策略 (C1 方案).
-//
-// 注意: 多个集成测包共用同一 exam_system 库, 跑 go test ./... 时必须 -p 1 串行,
-// 否则 review 包 admin_submissions_test 包同时 truncate/seed 同表竞态导致 TestApply_Success
-// 等单测偶发 fail. 这是单测库分用同一实例的内在局限, 与生产代码无关, 后续可分库 / schema.
-var (
-	submPoolOnce sync.Once
-	submPoolInst *pgxpool.Pool
-	submPoolErr  error
-)
-
+// testSubmPool gives every test a migrated schema so packages can run concurrently.
 func testSubmPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	submPoolOnce.Do(func() {
-		dsn := os.Getenv("TEST_DATABASE_URL")
-		if dsn == "" {
-			submPoolErr = fmt.Errorf("TEST_DATABASE_URL unset")
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		p, err := pgxpool.New(ctx, dsn)
-		if err != nil {
-			submPoolErr = err
-			return
-		}
-		if err := p.Ping(ctx); err != nil {
-			submPoolErr = err
-			p.Close()
-			return
-		}
-		submPoolInst = p
-	})
-	if submPoolErr != nil {
-		t.Skipf("admin_submissions integration test skipped: %v", submPoolErr)
+	pool, _ := testutil.NewSchema(t)
+	if _, err := db.Migrate(context.Background(), pool); err != nil {
+		t.Fatalf("Migrate: %v", err)
 	}
-	return submPoolInst
+	return pool
 }
 
 // newSubmRouter 用真 pool 构造 admin 路由子树, 兼容顶层 /stats /regrade (path C 修正).
@@ -76,9 +47,11 @@ func newSubmRouterWith(t *testing.T, pool *pgxpool.Pool, reviewSvc *review.Servi
 	r.Route("/admin", func(adm chi.Router) {
 		if pool == nil {
 			adm.Get("/stats", serviceNotReady("POOL_NIL"))
+			adm.Get("/stats/breakdown", serviceNotReady("POOL_NIL"))
 			adm.Post("/regrade/{id}", serviceNotReady("REVIEW_NIL"))
 		} else {
 			adm.Get("/stats", statsSubmissionsHandler(deps))
+			adm.Get("/stats/breakdown", adminStatisticsBreakdownHandler(pool))
 			adm.Post("/regrade/{id}", regradeSubmissionHandler(deps))
 		}
 		MountAdminSubmissions(adm, deps)
@@ -139,6 +112,51 @@ func setupSubmData(t *testing.T, pool *pgxpool.Pool) int64 {
 }
 
 // TestAdminSubm_List: seed 1 条, GET /submissions 返 200 + submissions 数组 len=1.
+func TestHistoricalGradeLabelsDistinguishOldScoresFromCurrentGenerationHistory(t *testing.T) {
+	pool := testSubmPool(t)
+	router := newSubmRouter(t, pool, nil)
+	id := setupSubmData(t, pool)
+	ctx := context.Background()
+	check := func(historical, legacy bool) {
+		t.Helper()
+		for _, path := range []string{"/admin/submissions", fmt.Sprintf("/admin/submissions/%d", id)} {
+			recorder := httptest.NewRecorder()
+			router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path, nil))
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("%s status=%d body=%s", path, recorder.Code, recorder.Body.String())
+			}
+			var body struct {
+				Submission  map[string]any   `json:"submission"`
+				Submissions []map[string]any `json:"submissions"`
+			}
+			if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			row := body.Submission
+			if len(body.Submissions) > 0 {
+				row = body.Submissions[0]
+			}
+			if row["historical_grade"] != historical || row["run_is_legacy"] != legacy || row["round_no"] != float64(1) || row["total_score"] != float64(7) {
+				t.Fatalf("incorrect historical presentation on %s: %+v", path, row)
+			}
+		}
+	}
+	check(false, false)
+	if _, err := pool.Exec(ctx, `UPDATE submissions SET graded_at=now()-interval '1 day' WHERE id=$1`, id); err != nil {
+		t.Fatal(err)
+	}
+	check(true, false)
+	if _, err := pool.Exec(ctx, `INSERT INTO grading_history(submission_id,generation,grading_detail_json,
+subjective_score_machine,subjective_score_final,total_score,review_status) VALUES($1,1,'[]',2,3,7,'reviewed')`, id); err != nil {
+		t.Fatal(err)
+	}
+	check(false, false)
+	if _, err := pool.Exec(ctx, `UPDATE exam_runs SET is_legacy=true WHERE id='run-1'`); err != nil {
+		t.Fatal(err)
+	}
+	check(true, true)
+}
+
 func TestAdminSubm_List(t *testing.T) {
 	pool := testSubmPool(t)
 	r := newSubmRouter(t, pool, nil)
@@ -170,8 +188,11 @@ func TestAdminSubm_List(t *testing.T) {
 func TestAdminSubm_Stats(t *testing.T) {
 	pool := testSubmPool(t)
 	r := newSubmRouter(t, pool, nil)
-	setupSubmData(t, pool)
+	subID := setupSubmData(t, pool)
 	defer setupSubmData(t, pool)
+	if _, err := pool.Exec(context.Background(), `UPDATE submissions SET reviewed_at=now() WHERE id=$1`, subID); err != nil {
+		t.Fatalf("mark submission reviewed: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/stats", nil)
 	rr := httptest.NewRecorder()
@@ -180,14 +201,31 @@ func TestAdminSubm_Stats(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
 	}
 	var resp struct {
-		SubmittedCount     int64            `json:"submitted_count"`
-		AvgScore           float64          `json:"avg_score"`
-		MaxScore           float64          `json:"max_score"`
-		MinScore           float64          `json:"min_score"`
-		PendingReview      int64            `json:"pending_review"`
-		LowConfidenceCount int64            `json:"low_confidence_count"`
-		Counts             map[string]int64 `json:"counts"`
-		Total              int64            `json:"total"`
+		SubmittedCount     int64   `json:"submitted_count"`
+		AvgScore           float64 `json:"avg_score"`
+		MaxScore           float64 `json:"max_score"`
+		MinScore           float64 `json:"min_score"`
+		PendingReview      int64   `json:"pending_review"`
+		LowConfidenceCount int64   `json:"low_confidence_count"`
+		ActiveWorkers      int64   `json:"active_workers"`
+		ScoringQueueDepth  int64   `json:"scoring_queue_depth"`
+		Scores             struct {
+			Machine struct {
+				Count        int64   `json:"count"`
+				AverageScore float64 `json:"avg_total_score"`
+			} `json:"machine"`
+			ReviewedFinal struct {
+				Count        int64   `json:"count"`
+				AverageScore float64 `json:"avg_total_score"`
+			} `json:"reviewed_final"`
+			Published struct {
+				Available bool     `json:"available"`
+				Count     int64    `json:"count"`
+				Average   *float64 `json:"avg_total_score"`
+			} `json:"published"`
+		} `json:"scores"`
+		Counts map[string]int64 `json:"counts"`
+		Total  int64            `json:"total"`
 	}
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -201,8 +239,219 @@ func TestAdminSubm_Stats(t *testing.T) {
 	if resp.PendingReview != 0 || resp.LowConfidenceCount != 0 {
 		t.Fatalf("pending_review=%d low_confidence_count=%d want 0", resp.PendingReview, resp.LowConfidenceCount)
 	}
+	if resp.ActiveWorkers != 0 || resp.ScoringQueueDepth != 0 {
+		t.Fatalf("active_workers=%d scoring_queue_depth=%d want 0", resp.ActiveWorkers, resp.ScoringQueueDepth)
+	}
+	if resp.Scores.Machine.Count != 1 || resp.Scores.Machine.AverageScore != 6 {
+		t.Fatalf("machine scores=%+v want count=1 average=6", resp.Scores.Machine)
+	}
+	if resp.Scores.ReviewedFinal.Count != 1 || resp.Scores.ReviewedFinal.AverageScore != 7 {
+		t.Fatalf("reviewed scores=%+v want count=1 average=7", resp.Scores.ReviewedFinal)
+	}
+	if resp.Scores.Published.Available || resp.Scores.Published.Count != 0 || resp.Scores.Published.Average != nil {
+		t.Fatalf("published scores=%+v want explicitly unavailable", resp.Scores.Published)
+	}
 	if resp.Counts["reviewed"] != 1 {
 		t.Fatalf("counts.reviewed=%d want 1", resp.Counts["reviewed"])
+	}
+}
+
+func TestAdminSubm_StatsQueueAndWorkerCounts(t *testing.T) {
+	pool := testSubmPool(t)
+	r := newSubmRouter(t, pool, nil)
+	subID := setupSubmData(t, pool)
+	defer setupSubmData(t, pool)
+
+	ctx := context.Background()
+	_, err := pool.Exec(ctx, `
+		INSERT INTO grading_jobs
+			(submission_id, paper_id, run_id, generation, status, lease_owner, lease_until, available_at)
+		VALUES
+			($1, 'smoke-1', 'run-1', 2, 'leased', 'worker-a', now() + interval '1 minute', now()),
+			($1, 'smoke-1', 'run-1', 3, 'leased', 'worker-a', now() + interval '1 minute', now()),
+			($1, 'smoke-1', 'run-1', 4, 'leased', 'worker-expired', now() - interval '1 second', now()),
+			($1, 'smoke-1', 'run-1', 5, 'queued', NULL, NULL, now() - interval '1 second'),
+			($1, 'smoke-1', 'run-1', 6, 'queued', NULL, NULL, now() + interval '1 minute')`, subID)
+	if err != nil {
+		t.Fatalf("seed grading jobs: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/stats", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		ActiveWorkers     int64 `json:"active_workers"`
+		ScoringQueueDepth int64 `json:"scoring_queue_depth"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.ActiveWorkers != 1 {
+		t.Fatalf("active_workers=%d want 1 distinct unexpired worker", resp.ActiveWorkers)
+	}
+	if resp.ScoringQueueDepth != 1 {
+		t.Fatalf("scoring_queue_depth=%d want 1 due queued job", resp.ScoringQueueDepth)
+	}
+}
+
+func TestPublishedStatsUseLatestImmutableVersion(t *testing.T) {
+	pool := testSubmPool(t)
+	router := newSubmRouter(t, pool, nil)
+	submissionID := setupSubmData(t, pool)
+	ctx := context.Background()
+	snapshotHash := strings.Repeat("a", 64)
+	answerHash, gradingHash := strings.Repeat("b", 64), strings.Repeat("c", 64)
+	if _, err := pool.Exec(ctx, `UPDATE exam_runs SET snapshot_hash=$1,max_score=10,passing_score=5 WHERE id='run-1'`, snapshotHash); err != nil {
+		t.Fatal(err)
+	}
+	var similarityID, anomalyID int64
+	if err := pool.QueryRow(ctx, `INSERT INTO answer_similarity_batches
+(run_id,snapshot_hash,answer_set_hash,rule_version,status,submission_count,completed_at)
+VALUES ('run-1',$1,$2,'lexical-overlap-v1','completed',1,now()) RETURNING id`, snapshotHash, answerHash).Scan(&similarityID); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO score_anomaly_batches
+(run_id,similarity_batch_id,snapshot_hash,answer_set_hash,grading_set_hash,rule_version,status,submission_count,completed_at)
+VALUES ('run-1',$1,$2,$3,$4,'score-consistency-v1','completed',1,now()) RETURNING id`, similarityID, snapshotHash, answerHash, gradingHash).Scan(&anomalyID); err != nil {
+		t.Fatal(err)
+	}
+	var firstID, secondID int64
+	if err := pool.QueryRow(ctx, `INSERT INTO score_publication_batches
+(run_id,paper_id,paper_name,version,actor,snapshot_hash,answer_set_hash,grading_set_hash,similarity_batch_id,anomaly_batch_id,submission_count)
+VALUES ('run-1','smoke-1','专业1',1,'publisher-a',$1,$2,$3,$4,$5,1) RETURNING id`, snapshotHash, answerHash, gradingHash, similarityID, anomalyID).Scan(&firstID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO score_publication_grades
+(batch_id,submission_id,participant_name,employee_id,department,grading_generation,review_status,objective_score,subjective_machine,subjective_final,total_score,max_score)
+VALUES ($1,$2,'tester','emp-1','部门1',1,'reviewed',4,2,3,7,10)`, firstID, submissionID); err != nil {
+		t.Fatal(err)
+	}
+	gradingHash2 := strings.Repeat("d", 64)
+	var anomalyID2 int64
+	if err := pool.QueryRow(ctx, `INSERT INTO score_anomaly_batches
+(run_id,similarity_batch_id,snapshot_hash,answer_set_hash,grading_set_hash,rule_version,status,submission_count,completed_at)
+VALUES ('run-1',$1,$2,$3,$4,'score-consistency-v2','completed',1,now()) RETURNING id`, similarityID, snapshotHash, answerHash, gradingHash2).Scan(&anomalyID2); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `INSERT INTO score_publication_batches
+(run_id,paper_id,paper_name,version,supersedes_batch_id,correction_reason,actor,snapshot_hash,answer_set_hash,grading_set_hash,similarity_batch_id,anomaly_batch_id,submission_count)
+	VALUES ('run-1','smoke-1','专业1',2,$1,'复核后更正分数','publisher-a',$2,$3,$4,$5,$6,1) RETURNING id`, firstID, snapshotHash, answerHash, gradingHash2, similarityID, anomalyID2).Scan(&secondID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO score_publication_grades
+(batch_id,submission_id,participant_name,employee_id,department,grading_generation,review_status,objective_score,subjective_machine,subjective_final,total_score,max_score)
+VALUES ($1,$2,'tester','emp-1','部门1',1,'reviewed',4,2,4,8,10)`, secondID, submissionID); err != nil {
+		t.Fatal(err)
+	}
+	statsResponse := httptest.NewRecorder()
+	router.ServeHTTP(statsResponse, httptest.NewRequest(http.MethodGet, "/admin/stats", nil))
+	if statsResponse.Code != http.StatusOK {
+		t.Fatalf("stats status=%d body=%s", statsResponse.Code, statsResponse.Body.String())
+	}
+	var stats struct {
+		Scores struct {
+			Published struct {
+				Available bool    `json:"available"`
+				Count     int64   `json:"count"`
+				Average   float64 `json:"avg_total_score"`
+			} `json:"published"`
+		} `json:"scores"`
+	}
+	if err := json.NewDecoder(statsResponse.Body).Decode(&stats); err != nil {
+		t.Fatal(err)
+	}
+	if !stats.Scores.Published.Available || stats.Scores.Published.Count != 1 || stats.Scores.Published.Average != 8 {
+		t.Fatalf("published summary=%+v", stats.Scores.Published)
+	}
+	breakdownResponse := httptest.NewRecorder()
+	router.ServeHTTP(breakdownResponse, httptest.NewRequest(http.MethodGet, "/admin/stats/breakdown", nil))
+	if breakdownResponse.Code != http.StatusOK {
+		t.Fatalf("breakdown status=%d body=%s", breakdownResponse.Code, breakdownResponse.Body.String())
+	}
+	var breakdown statisticsBreakdownResponse
+	if err := json.NewDecoder(breakdownResponse.Body).Decode(&breakdown); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range []statsBreakdown{breakdown.ByProfession[0], breakdown.ByDepartment[0], breakdown.ByRound[0]} {
+		if !group.PublishedReady || group.Published.Count != 1 || group.Published.Average == nil || *group.Published.Average != 8 || group.Published.Distribution["80-89%"] != 1 {
+			t.Fatalf("published breakdown=%+v", group.Published)
+		}
+	}
+}
+
+func TestAdminStatsBreakdownUsesRunThresholdsAndQuestionEvidence(t *testing.T) {
+	pool := testSubmPool(t)
+	r := newSubmRouter(t, pool, nil)
+	subID := setupSubmData(t, pool)
+	defer setupSubmData(t, pool)
+	ctx := context.Background()
+	if _, err := pool.Exec(ctx, `UPDATE exam_runs SET max_score=10,passing_score=6 WHERE id='run-1'`); err != nil {
+		t.Fatalf("set run thresholds: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `UPDATE submissions SET reviewed_at=now(), grading_detail_json=$1 WHERE id=$2`,
+		[]byte(`[{
+			"question_id":"q-subj","type":"short_answer","score":2,
+			"machine_score":2,"final_score":3,"max_score":4
+		}]`), subID); err != nil {
+		t.Fatalf("seed question evidence: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/stats/breakdown?paper_id=smoke-1&department=%E9%83%A8%E9%97%A8%31", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	var resp struct {
+		Filters      map[string]string   `json:"filters"`
+		ByProfession []statsBreakdown    `json:"by_profession"`
+		ByDepartment []statsBreakdown    `json:"by_department"`
+		ByRound      []statsBreakdown    `json:"by_round"`
+		ByQuestion   []questionScoreRate `json:"by_question"`
+	}
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Filters["paper_id"] != "smoke-1" || resp.Filters["department"] != "部门1" {
+		t.Fatalf("filters=%v", resp.Filters)
+	}
+	if len(resp.ByProfession) != 1 || resp.ByProfession[0].Key != "专业1" {
+		t.Fatalf("profession breakdown=%+v", resp.ByProfession)
+	}
+	if len(resp.ByDepartment) != 1 || resp.ByDepartment[0].Key != "部门1" {
+		t.Fatalf("department breakdown=%+v", resp.ByDepartment)
+	}
+	if len(resp.ByRound) != 1 || resp.ByRound[0].RoundNo == nil || *resp.ByRound[0].RoundNo != 1 {
+		t.Fatalf("round breakdown=%+v", resp.ByRound)
+	}
+	for _, group := range []statsBreakdown{resp.ByProfession[0], resp.ByDepartment[0], resp.ByRound[0]} {
+		if group.Machine.Average == nil || *group.Machine.Average != 6 || group.Machine.PassRate == nil || *group.Machine.PassRate != 1 {
+			t.Fatalf("machine metrics=%+v, want avg 6 and 100%% pass", group.Machine)
+		}
+		if group.ReviewedFinal.Average == nil || *group.ReviewedFinal.Average != 7 || group.ReviewedFinal.PassRate == nil || *group.ReviewedFinal.PassRate != 1 {
+			t.Fatalf("reviewed metrics=%+v, want avg 7 and 100%% pass", group.ReviewedFinal)
+		}
+		if group.Review.RequiredCount != 1 || group.Review.CompletedCount != 1 || group.Review.ProgressRate == nil || *group.Review.ProgressRate != 1 {
+			t.Fatalf("review progress=%+v, want 1/1 complete", group.Review)
+		}
+		if group.Machine.Distribution["60-69%"] != 1 || group.ReviewedFinal.Distribution["70-79%"] != 1 {
+			t.Fatalf("score distributions machine=%v reviewed=%v", group.Machine.Distribution, group.ReviewedFinal.Distribution)
+		}
+		if group.PublishedReady || group.Published.Count != 0 {
+			t.Fatalf("published metrics should be unavailable pending P5: %+v", group)
+		}
+	}
+	if len(resp.ByQuestion) != 1 {
+		t.Fatalf("question breakdown=%+v, want one question", resp.ByQuestion)
+	}
+	question := resp.ByQuestion[0]
+	if question.QuestionID != "q-subj" || question.AttemptCount != 1 || question.ReviewedCount != 1 ||
+		question.MachineScoreRate == nil || *question.MachineScoreRate != 0.5 ||
+		question.ReviewedScoreRate == nil || *question.ReviewedScoreRate != 0.75 {
+		t.Fatalf("question rate=%+v", question)
 	}
 }
 

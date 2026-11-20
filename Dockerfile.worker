@@ -29,7 +29,7 @@ ENV PIP_INDEX_URL=$PIP_INDEX_URL
 #                 构建完全离线, 不需要 GitHub/代理; 升级版本时替换该 wheel 即可。
 #   git:          pip 从 git+https://github.com/... 拉取 (需能访问 GitHub)。
 ARG SUBJECTIVE_SCORING_SOURCE=local
-ARG SUBJECTIVE_SCORING_VERSION=0.1.13
+ARG SUBJECTIVE_SCORING_VERSION=0.1.14
 ARG SUBJECTIVE_SCORING_URL=https://github.com/yhwyxy/subjective-scoring
 
 # git: 仅 SUBJECTIVE_SCORING_SOURCE=git 时 pip 装 git+ 依赖需要

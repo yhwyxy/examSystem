@@ -12,6 +12,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/yhwyxy/examSystem/internal/jobs"
@@ -28,7 +30,7 @@ type Service struct {
 	jobsRepo *jobs.Repository
 }
 
-// NewService 构造 review.Service. jobsRepo 可为 nil (单测可省).
+// NewService 构造 review.Service；jobsRepo 为 nil 时仅支持 Apply，Regrade 明确失败。
 func NewService(pool Pool, jr *jobs.Repository) *Service {
 	return &Service{pool: pool, jobsRepo: jr}
 }
@@ -50,6 +52,8 @@ var (
 	ErrGradingInProgress  = errors.New("GRADING_IN_PROGRESS")
 	ErrQuestionNotFound   = errors.New("QUESTION_NOT_FOUND")
 	ErrScoreOutOfRange    = errors.New("SCORE_OUT_OF_RANGE")
+	ErrReasonRequired     = errors.New("REVIEW_REASON_REQUIRED")
+	ErrQueueUnavailable   = errors.New("REGRADE_QUEUE_UNAVAILABLE")
 )
 
 // ApplyInput 是 Apply 入参; SubQID 空表示整题人工确认.
@@ -59,6 +63,7 @@ type ApplyInput struct {
 	SubQID       string
 	NewScore     float64
 	Note         string
+	Actor        string
 }
 
 // ApplyResult 是 Apply 成功返回.
@@ -90,7 +95,7 @@ func getSubmissionTx(ctx context.Context, q pgx.Tx, id int64) (*SubmissionSnap, 
 // SQL 字段名按 migrations/0001_initial.sql 真实名: submissions.subjective_score_final,
 // submissions.total_score, submissions.review_status, submissions.reviewed_at,
 // submissions.reviewer_note; review_logs(submission_id, question_id, old_score, new_score, note)
-// 无 sub_question_id 列; review_logs.created_at 无默认值, 必须显式 NOW().
+// 0012 追加操作者、子题与代次；历史行保留未知归属。
 func (s *Service) Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -111,43 +116,68 @@ func (s *Service) Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error
 	} else if err != nil {
 		return nil, fmt.Errorf("scan submission: %w", err)
 	}
-	if snap.ReviewStatus == "grading" {
+	if snap.ReviewStatus == "grading" || snap.GradingStatus == "pending" || snap.GradingStatus == "grading" {
 		return nil, ErrGradingInProgress
 	}
 
 	// 2) 解析 grading_detail 找题, 取 max_score.
-	detail, oldScore, maxScore, qtype, found := findScoreInDetail(snap.GradingDetail,
+	_, oldScore, maxScore, qtype, found := findScoreInDetail(snap.GradingDetail,
 		in.QuestionID, in.SubQID)
 	if !found {
 		return nil, ErrQuestionNotFound
 	}
-	if in.NewScore < 0 || in.NewScore > maxScore {
+	if math.IsNaN(in.NewScore) || math.IsInf(in.NewScore, 0) || in.NewScore < 0 || in.NewScore > maxScore {
 		return nil, fmt.Errorf("%w: %g 超出 [0, %g]", ErrScoreOutOfRange, in.NewScore, maxScore)
 	}
+	in.Note = strings.TrimSpace(in.Note)
+	if len([]rune(in.Note)) == 0 || len([]rune(in.Note)) > 2000 {
+		return nil, ErrReasonRequired
+	}
+	actor := strings.TrimSpace(in.Actor)
+	if actor == "" {
+		actor = "local-admin"
+	}
 
-	// 3) INSERT review_logs (无 sub_question_id 列, created_at 单元默认值, 强 NOW()).
+	newDetail, err := setDetailScoreInPlace(snap.GradingDetail, in.QuestionID, in.SubQID, in.NewScore)
+	if err != nil {
+		return nil, fmt.Errorf("set detail score: %w", err)
+	}
+	newStatus, err := aggregateReviewStatus(newDetail)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate review status: %w", err)
+	}
+
+	// 3) 审计绑定锁定的评分代次、具体题目和可信操作者。
 	if _, err := tx.Exec(ctx, `
-		INSERT INTO review_logs (submission_id, question_id, old_score, new_score, note, created_at)
-		VALUES ($1, $2, $3, $4, NULLIF($5, '')::text, NOW())`,
-		in.SubmissionID, in.QuestionID, oldScore, in.NewScore, in.Note); err != nil {
+		INSERT INTO review_logs (submission_id, question_id, old_score, new_score, note, created_at,
+		actor,sub_question_id,grading_generation)
+		VALUES ($1, $2, $3, $4, $5, NOW(),$6,NULLIF($7,''),$8)`,
+		in.SubmissionID, in.QuestionID, oldScore, in.NewScore, in.Note, actor, in.SubQID, snap.Generation); err != nil {
 		return nil, fmt.Errorf("insert review_log: %w", err)
 	}
 
 	// 4) 重算 total_score; 主观题同步更新 subjective_score_final (客观题不动 subjective).
 	newTotal := snap.TotalScore - oldScore + in.NewScore
+	oldPart, newPart := oldScore, in.NewScore
+	if in.SubQID != "" {
+		_, oldPart, _, _, _ = findScoreInDetail(snap.GradingDetail, in.QuestionID, "")
+		_, newPart, _, _, _ = findScoreInDetail(newDetail, in.QuestionID, "")
+		newTotal = snap.TotalScore - oldPart + newPart
+	}
 	if newTotal < 0 {
 		newTotal = 0
 	}
 	GUARDSQL := `
 		UPDATE submissions
-		SET total_score = $1, review_status = 'reviewed',
+		SET total_score = $1, review_status = $7,
 		    reviewed_at = NOW(), reviewer_note = NULLIF($2, '')::text`
-	args := []interface{}{newTotal, in.Note, in.SubmissionID, snap.Generation}
+	args := []interface{}{newTotal, in.Note, in.SubmissionID, snap.Generation, oldPart, newPart, newStatus, newDetail}
 	if !isObjectiveQuestion(qtype) {
 		GUARDSQL += `, subjective_score_final = subjective_score_final - $5 + $6`
-		args = append(args, oldScore, in.NewScore)
+	} else {
+		GUARDSQL += `, objective_score = objective_score - $5 + $6`
 	}
-	GUARDSQL += ` WHERE id = $3 AND grading_generation = $4`
+	GUARDSQL += `, grading_detail_json = $8 WHERE id = $3 AND grading_generation = $4`
 	tag, err := tx.Exec(ctx, GUARDSQL, args...)
 	if err != nil {
 		return nil, fmt.Errorf("update submission: %w", err)
@@ -155,23 +185,11 @@ func (s *Service) Apply(ctx context.Context, in ApplyInput) (*ApplyResult, error
 	if tag.RowsAffected() == 0 {
 		return nil, ErrGradingInProgress
 	}
-	_ = detail
-
-	// 5) 同步回写 grading_detail_json 中该题 score (与 Python 蓝本 detail[qid].score = newScore 对齐).
-	newDetail, err := setDetailScoreInPlace(snap.GradingDetail, in.QuestionID, in.SubQID, in.NewScore)
-	if err != nil {
-		return nil, fmt.Errorf("set detail score: %w", err)
-	}
-	if _, err := tx.Exec(ctx,
-		`UPDATE submissions SET grading_detail_json = $1 WHERE id = $2 AND grading_generation = $3`,
-		newDetail, in.SubmissionID, snap.Generation); err != nil {
-		return nil, fmt.Errorf("update grading_detail: %w", err)
-	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("commit: %w", err)
 	}
-	return &ApplyResult{NewTotalScore: newTotal, NewStatus: "reviewed"}, nil
+	return &ApplyResult{NewTotalScore: newTotal, NewStatus: newStatus}, nil
 }
 
 // entryQIDMatches 匹配条目题号: 规范键 question_id, 兼容仅写 id 的旧条目
@@ -250,10 +268,11 @@ func setDetailScoreInPlace(detail []byte, qid, subQID string, newScore float64) 
 		}
 		if subQID == "" {
 			it["final_score"] = newScore
-			it["score"] = newScore
 			it["manually_reviewed"] = true
 			it["review_status"] = "reviewed"
+			it["review_action"] = "whole_question"
 		} else {
+			delete(it, "review_action")
 			var subTotal float64
 			for _, sraw := range entrySubResults(it) {
 				s, ok := sraw.(map[string]any)
@@ -268,11 +287,92 @@ func setDetailScoreInPlace(detail []byte, qid, subQID string, newScore float64) 
 				subTotal += numFloat(s["final_score"])
 			}
 			it["final_score"] = subTotal
-			it["score"] = subTotal
-			it["manually_reviewed"] = true
+			allManual := true
+			for _, raw := range entrySubResults(it) {
+				sub, ok := raw.(map[string]any)
+				allManual = allManual && ok && sub["manually_reviewed"] == true
+			}
+			it["manually_reviewed"] = allManual
+			it["review_status"] = aggregateEntries([]map[string]any{it})
 		}
 	}
 	return json.Marshal(items)
+}
+
+// The same rules are used by the worker: unresolved review requirements win;
+// stale machine warnings do not reopen a question already reviewed by a person.
+func aggregateReviewStatus(detail []byte) (string, error) {
+	var items []map[string]any
+	if err := json.Unmarshal(detail, &items); err != nil {
+		return "", err
+	}
+	return aggregateEntries(items), nil
+}
+
+func aggregateEntries(items []map[string]any) string {
+	manual, automatic := false, false
+	for _, it := range items {
+		if isObjectiveQuestion(stringValue(it["type"])) {
+			continue
+		}
+		if subs := entrySubResults(it); len(subs) > 0 && it["review_action"] != "whole_question" {
+			children := make([]map[string]any, 0, len(subs))
+			for _, raw := range subs {
+				child, ok := raw.(map[string]any)
+				if !ok {
+					return "need_review"
+				}
+				children = append(children, child)
+			}
+			switch aggregateEntries(children) {
+			case "need_review":
+				return "need_review"
+			case "reviewed":
+				manual = true
+			case "partial_manual":
+				manual, automatic = true, true
+			default:
+				automatic = true
+			}
+			continue
+		}
+		if it["manually_reviewed"] == true {
+			manual = true
+			continue
+		}
+		automatic = true
+		if requiresReview(it) {
+			return "need_review"
+		}
+	}
+	if manual && automatic {
+		return "partial_manual"
+	}
+	if manual {
+		return "reviewed"
+	}
+	return "auto_scored"
+}
+
+func requiresReview(it map[string]any) bool {
+	for _, key := range []string{"low_confidence", "need_manual_review"} {
+		if it[key] == true {
+			return true
+		}
+	}
+	switch stringValue(it["review_status"]) {
+	case "low_confidence", "need_review", "unanswered", "open_ended", "pending", "grading":
+		return true
+	}
+	if inner, ok := it["detail"].(map[string]any); ok {
+		return requiresReview(inner)
+	}
+	return false
+}
+
+func stringValue(v any) string {
+	s, _ := v.(string)
+	return s
 }
 
 // isObjectiveQuestion 与 grading.IsObjectiveType 等价的本地轻量判断 (review 包避免引 grading 子依赖).
@@ -298,6 +398,8 @@ func numFloat(v any) float64 {
 // RegradeInput 是 Regrade 入参.
 type RegradeInput struct {
 	SubmissionID int64
+	Actor        string
+	Reason       string
 }
 
 // RegradeResult 返回 {success:true, status:'grading' or 'graded' or 'failed'}.
@@ -314,22 +416,49 @@ type RegradeResult struct {
 // fencing 契约 (graded_generation 守护失效), 改统一走代次切换; 这是按 "并发优先" 核心目的
 // 主动偏离 Python in-place 蓝本的决定 (memory: project-regrade-generation-design).
 func (s *Service) Regrade(ctx context.Context, in RegradeInput) (*RegradeResult, error) {
+	in.Reason = strings.TrimSpace(in.Reason)
+	if len([]rune(in.Reason)) == 0 || len([]rune(in.Reason)) > 2000 {
+		return nil, ErrReasonRequired
+	}
+	if s.jobsRepo == nil {
+		return nil, ErrQueueUnavailable
+	}
+	actor := strings.TrimSpace(in.Actor)
+	if actor == "" {
+		actor = "local-admin"
+	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("review.Regrade: begin tx: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	// Publication locks the run before submissions. Take the job's required
+	// foreign-key run lock first as well, before holding a submission lock;
+	// otherwise inserting the new job can deadlock with publication.
+	var lockedRunID string
+	err = tx.QueryRow(ctx, `SELECT r.id FROM exam_runs r
+JOIN submissions s ON s.run_id=r.id WHERE s.id=$1 FOR KEY SHARE OF r`, in.SubmissionID).Scan(&lockedRunID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrSubmissionNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("lock regrade run: %w", err)
+	}
+
 	// 1) SELECT FOR UPDATE 锁行拿当前 generation + paper_id + run_id (EnqueueTx 入参用).
 	var (
-		curGen  int64
-		paperID string
-		runID   string
+		curGen      int64
+		paperID     string
+		runID       string
+		beforeState []byte
 	)
 	err = tx.QueryRow(ctx, `
-		SELECT grading_generation, paper_id, run_id
+		SELECT grading_generation, paper_id, run_id,
+		jsonb_build_object('grading_status',grading_status,'review_status',review_status,
+		'objective_score',objective_score,'subjective_score_machine',subjective_score_machine,
+		'subjective_score_final',subjective_score_final,'total_score',total_score)
 		FROM submissions WHERE id = $1 FOR UPDATE`,
-		in.SubmissionID).Scan(&curGen, &paperID, &runID)
+		in.SubmissionID).Scan(&curGen, &paperID, &runID, &beforeState)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrSubmissionNotFound
 	} else if err != nil {
@@ -370,9 +499,6 @@ func (s *Service) Regrade(ctx context.Context, in RegradeInput) (*RegradeResult,
 
 	// 4) INSERT 新 generation grading_job (queued), 复用 jobs.EnqueueTx 保证字段集一致.
 	//    主观题由 worker 调 grader 完成回写, HTTP 不阻塞.
-	if s.jobsRepo == nil {
-		return &RegradeResult{Success: true, Status: "grading"}, nil
-	}
 	if err := s.jobsRepo.EnqueueTx(ctx, tx, jobs.JobSpec{
 		SubmissionID: in.SubmissionID,
 		PaperID:      paperID,
@@ -380,6 +506,15 @@ func (s *Service) Regrade(ctx context.Context, in RegradeInput) (*RegradeResult,
 		Generation:   curGen + 1,
 	}); err != nil {
 		return nil, fmt.Errorf("enqueue new-gen job: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO regrade_audit
+(submission_id,actor,reason,from_generation,to_generation,before_state,after_state)
+SELECT $1,$2,$3,$4,$5,$6::jsonb,
+jsonb_build_object('grading_status',grading_status,'review_status',review_status,
+'objective_score',objective_score,'subjective_score_machine',subjective_score_machine,
+'subjective_score_final',subjective_score_final,'total_score',total_score)
+FROM submissions WHERE id=$1 AND grading_generation=$5`, in.SubmissionID, actor, in.Reason, curGen, curGen+1, beforeState); err != nil {
+		return nil, fmt.Errorf("write regrade audit: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {

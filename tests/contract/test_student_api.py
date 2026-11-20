@@ -297,13 +297,15 @@ def test_submit_and_submission_status(client, paper_loaded, paper_smoke):
 
     # Python 基线: 主观评分同步完成, 状态应能轮询到 completed
     sid_sub = d["submission_id"]
+    assert client.get(f"/api/submission/{sid_sub}/status").status_code == 401
+    status_headers = {"Authorization": f"Bearer {stok}"}
     ok = wait_until(lambda: (
-        client.get(f"/api/submission/{sid_sub}/status").json().get("status")
+        client.get(f"/api/submission/{sid_sub}/status", headers=status_headers).json().get("status")
         in ("completed", "reviewed", "done")
     ), timeout=5.0)
     if not ok:
         # 即便没收敛到 completed 也至少能拿到 (Python 基线有时 status="grading")
-        st = client.get(f"/api/submission/{sid_sub}/status")
+        st = client.get(f"/api/submission/{sid_sub}/status", headers=status_headers)
         assert st.status_code == 200
         assert set(st.json()).issuperset(SUBMISSION_STATUS_KEYS)
 

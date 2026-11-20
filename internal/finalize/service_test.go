@@ -2,6 +2,8 @@ package finalize_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -12,6 +14,9 @@ import (
 
 	"github.com/yhwyxy/examSystem/internal/db"
 	"github.com/yhwyxy/examSystem/internal/finalize"
+	"github.com/yhwyxy/examSystem/internal/jobs"
+	"github.com/yhwyxy/examSystem/internal/objective"
+	"github.com/yhwyxy/examSystem/internal/papers"
 	"github.com/yhwyxy/examSystem/internal/runs"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/submissions"
@@ -147,11 +152,12 @@ func TestFinalizeRun_PureObjectiveDoesNotQueueGrading(t *testing.T) {
 		t.Fatalf("write snapshot: %v", err)
 	}
 
+	hash := sha256.Sum256(body)
 	if _, err := pool.Exec(ctx, `INSERT INTO exam_runs
-		(id, paper_id, public_token_hash, status, snapshot_path, round_no, duration_minutes,
+		(id, paper_id, public_token_hash, status, snapshot_path, snapshot_hash, round_no, duration_minutes,
 		 opened_at, finalize_at, closing_started_at, created_at)
-		VALUES ('run-objective-fin', 'objective-finalize', 'tok', 'closing', $1, 1, 60,
-		 $2, $2, $2, $2)`, path, now); err != nil {
+		VALUES ('run-objective-fin', 'objective-finalize', 'tok', 'closing', $1, $3, 1, 60,
+		 $2, $2, $2, $2)`, path, now, hex.EncodeToString(hash[:])); err != nil {
 		t.Fatalf("insert run: %v", err)
 	}
 	if _, err := pool.Exec(ctx, `INSERT INTO exam_sessions
@@ -183,5 +189,196 @@ func TestFinalizeRun_PureObjectiveDoesNotQueueGrading(t *testing.T) {
 	}
 	if jobs != 0 {
 		t.Errorf("grading jobs = %d, want 0", jobs)
+	}
+}
+
+func TestScanExpiredSessionsSubmitsSavedDraftAndIsIdempotent(t *testing.T) {
+	pool := skipIfNoPG(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := map[string]any{
+		"paper_id": "timed-exam",
+		"name":     "Timed exam",
+		"exam_info": map[string]any{
+			"title": "Timed exam", "description": "Timed exam", "total_score": 10, "passing_score": 6,
+		},
+		"questions": []any{map[string]any{
+			"id": "q1", "type": "single_choice", "question": "Question", "score": 10,
+			"options": []any{map[string]any{"key": "A", "text": "A"}, map[string]any{"key": "B", "text": "B"}},
+			"answer":  "A",
+		}},
+	}
+	path := filepath.Join(t.TempDir(), "timed-exam.json")
+	body, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+	hash := sha256.Sum256(body)
+	if _, err := pool.Exec(ctx, `INSERT INTO exam_runs
+		(id, paper_id, public_token_hash, status, snapshot_path, snapshot_hash, round_no, duration_minutes, opened_at, created_at)
+		VALUES ('run-timed-exam', 'timed-exam', 'timed-token-hash', 'open', $1, $2, 1, 60, $3, $3)`,
+		path, hex.EncodeToString(hash[:]), now.Add(-2*time.Hour)); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+	if _, err := pool.Exec(ctx, `INSERT INTO exam_sessions
+		(id, run_id, employee_id, name, session_token_hash, started_at, deadline_at, status, draft_json, draft_revision, created_at, updated_at)
+		VALUES
+		 ('sess-timeout-due', 'run-timed-exam', 'emp-due', 'Due student', 'due-token-hash', $1, $2, 'active', '{"q1":"A"}', 3, $1, $1),
+		 ('sess-timeout-grace', 'run-timed-exam', 'emp-grace', 'Grace student', 'grace-token-hash', $1, $3, 'active', '{"q1":"B"}', 1, $1, $1),
+		 ('sess-timeout-active', 'run-timed-exam', 'emp-active', 'Active student', 'active-token-hash', $1, $4, 'active', '{"q1":"B"}', 1, $1, $1)`,
+		now.Add(-time.Hour), now.Add(-2*time.Minute), now.Add(-10*time.Second), now.Add(time.Hour)); err != nil {
+		t.Fatalf("insert sessions: %v", err)
+	}
+
+	svc := finalize.NewService(pool, runs.NewRepository(), sessions.NewRepository(), submissions.NewRepository(), 30)
+	count, err := svc.ScanExpiredSessions(ctx)
+	if err != nil {
+		t.Fatalf("ScanExpiredSessions: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("auto-submitted = %d, want 1", count)
+	}
+	var dueStatus, graceStatus, activeStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM exam_sessions WHERE id='sess-timeout-due'`).Scan(&dueStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM exam_sessions WHERE id='sess-timeout-grace'`).Scan(&graceStatus); err != nil {
+		t.Fatal(err)
+	}
+	if err := pool.QueryRow(ctx, `SELECT status FROM exam_sessions WHERE id='sess-timeout-active'`).Scan(&activeStatus); err != nil {
+		t.Fatal(err)
+	}
+	if dueStatus != "submitted" || graceStatus != "active" || activeStatus != "active" {
+		t.Fatalf("session statuses due/grace/active = %q/%q/%q", dueStatus, graceStatus, activeStatus)
+	}
+	var answer, reason string
+	var score float64
+	if err := pool.QueryRow(ctx, `SELECT answers_json->>'q1', auto_submit_reason, total_score FROM submissions WHERE run_id='run-timed-exam' AND employee_id='emp-due'`).Scan(&answer, &reason, &score); err != nil {
+		t.Fatalf("query auto-submission: %v", err)
+	}
+	if answer != "A" || reason != "individual_timeout" || score != 10 {
+		t.Fatalf("auto-submission answer/reason/score = %q/%q/%v", answer, reason, score)
+	}
+	count, err = svc.ScanExpiredSessions(ctx)
+	if err != nil {
+		t.Fatalf("repeat ScanExpiredSessions: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("repeat auto-submitted = %d, want 0", count)
+	}
+	var submissionsCount int
+	if err := pool.QueryRow(ctx, `SELECT count(*) FROM submissions WHERE run_id='run-timed-exam'`).Scan(&submissionsCount); err != nil {
+		t.Fatal(err)
+	}
+	if submissionsCount != 1 {
+		t.Fatalf("submissions = %d, want exactly 1", submissionsCount)
+	}
+}
+
+func TestScanExpiredSessionsRacesManualSubmitWithoutDuplicate(t *testing.T) {
+	pool := skipIfNoPG(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	doc := map[string]any{
+		"paper_id": "timed-race",
+		"name":     "Timed race",
+		"exam_info": map[string]any{
+			"title": "Timed race", "description": "Timed race", "total_score": 10, "passing_score": 6,
+		},
+		"questions": []any{map[string]any{
+			"id": "q1", "type": "single_choice", "question": "Question", "score": 10,
+			"options": []any{map[string]any{"key": "A", "text": "A"}, map[string]any{"key": "B", "text": "B"}},
+			"answer":  "A",
+		}},
+	}
+	path := filepath.Join(t.TempDir(), "timed-race.json")
+	body, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal snapshot: %v", err)
+	}
+	if err := os.WriteFile(path, body, 0o644); err != nil {
+		t.Fatalf("write snapshot: %v", err)
+	}
+	hash := sha256.Sum256(body)
+	if _, err := pool.Exec(ctx, `INSERT INTO exam_runs
+		(id, paper_id, public_token_hash, status, snapshot_path, snapshot_hash, round_no, duration_minutes, opened_at, created_at)
+		VALUES ('run-timed-race', 'timed-race', 'timed-race-token-hash', 'open', $1, $2, 1, 60, $3, $3)`,
+		path, hex.EncodeToString(hash[:]), now.Add(-time.Hour)); err != nil {
+		t.Fatalf("insert run: %v", err)
+	}
+	const token = "timed-race-session-token"
+	tokenHash := sha256.Sum256([]byte(token))
+	if _, err := pool.Exec(ctx, `INSERT INTO exam_sessions
+		(id, run_id, employee_id, name, session_token_hash, started_at, deadline_at, status, draft_json, draft_revision, created_at, updated_at)
+		VALUES ('sess-timed-race', 'run-timed-race', 'emp-race', 'Race student',
+		 $1, $2, now() - interval '1 second', 'active', '{"q1":"A"}', 1, $2, $2)`,
+		hex.EncodeToString(tokenHash[:]), now.Add(-time.Minute)); err != nil {
+		t.Fatalf("insert session: %v", err)
+	}
+
+	finalizeSvc := finalize.NewService(pool, runs.NewRepository(), sessions.NewRepository(), submissions.NewRepository(), 0)
+	submitSvc := submissions.NewService(pool, submissions.NewRepository(), papers.LoadSnapshot,
+		func(q map[string]any, answer any, partial bool) (map[string]any, error) {
+			return objective.Grade(q, answer, partial)
+		}, jobs.NewService(nil), 30)
+	start := make(chan struct{})
+	type submitOutcome struct {
+		result *submissions.SubmitResult
+		err    error
+	}
+	manualDone := make(chan submitOutcome, 1)
+	scanDone := make(chan struct {
+		count int
+		err   error
+	}, 1)
+	go func() {
+		<-start
+		answers := map[string]any{"q1": "A"}
+		answerJSON, _ := json.Marshal(answers)
+		result, err := submitSvc.Submit(ctx, submissions.SubmitRequest{
+			SessionToken: token, Answers: answerJSON, AnswersMap: answers,
+		})
+		manualDone <- submitOutcome{result: result, err: err}
+	}()
+	go func() {
+		<-start
+		count, err := finalizeSvc.ScanExpiredSessions(ctx)
+		scanDone <- struct {
+			count int
+			err   error
+		}{count: count, err: err}
+	}()
+	close(start)
+	manual := <-manualDone
+	scan := <-scanDone
+	if manual.err != nil {
+		t.Fatalf("manual Submit: %v", manual.err)
+	}
+	if scan.err != nil {
+		t.Fatalf("ScanExpiredSessions: %v", scan.err)
+	}
+	if manual.result == nil || manual.result.SubmissionID == "" {
+		t.Fatal("manual Submit returned no submission id")
+	}
+	var count int
+	var reason string
+	if err := pool.QueryRow(ctx, `SELECT count(*), COALESCE(max(auto_submit_reason), '') FROM submissions WHERE run_id='run-timed-race'`).Scan(&count, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("concurrent submit paths created %d submissions, want 1", count)
+	}
+	if reason != "" && reason != "individual_timeout" {
+		t.Fatalf("submission reason = %q, want manual or individual timeout", reason)
+	}
+	var sessionStatus string
+	if err := pool.QueryRow(ctx, `SELECT status FROM exam_sessions WHERE id='sess-timed-race'`).Scan(&sessionStatus); err != nil {
+		t.Fatal(err)
+	}
+	if sessionStatus != "submitted" {
+		t.Fatalf("session status = %q, want submitted", sessionStatus)
 	}
 }

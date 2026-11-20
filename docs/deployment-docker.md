@@ -106,13 +106,13 @@ docker compose -f docker-compose.prod.yml build
 
 - 产物: `examsystem:latest` (Go, 多阶段) + `examsystem-worker:latest` (Python 3.12)。
 - worker 基础依赖与 `scoring_worker/pyproject.toml` 对齐; `subjective-scoring`
-  默认安装仓库内置 wheel (`packages/subjective_scoring-0.1.13-py3-none-any.whl`,
-  已入库, 升级库时同步替换), 构建**不需要访问 GitHub**。
+  默认安装仓库内置 wheel（当前工作区为 `packages/subjective_scoring-0.1.14-py3-none-any.whl` 发布候选，尚未提交/发布），构建**不需要访问 GitHub**。开发 Git 依赖仍固定 v0.1.13，待评分库 PR 与真实 tag 完成后同步，详见 [候选发布记录](deployment-scoring-release.md)。
 - worker 构建默认走国内镜像: pip 用清华源 (`PIP_INDEX_URL`, 可通过
   `--build-arg PIP_INDEX_URL=https://pypi.org/simple` 换回官方源)。
 - 需要从 GitHub tag 拉 `subjective-scoring` 时 (构建机能访问 GitHub):
   `--build-arg SUBJECTIVE_SCORING_SOURCE=git` (直连慢可用
   `--build-arg SUBJECTIVE_SCORING_URL=<git 镜像地址>` 指到镜像)。
+- 使用 git 来源前须确认目标 tag 已实际发布；当前 v0.1.14 候选尚不满足此条件。
 - 改 `.env` 里的 `WORKER_EXTRAS` 后需重新 `build worker` 才生效。
 - 后台切到 remote_reranker/llm 不需要重建; 切回 local 前确认镜像带 `WORKER_EXTRAS`
   (否则 worker 会记录切换失败并沿用旧服务)。
@@ -222,38 +222,18 @@ docker compose -f docker-compose.prod.yml up -d --scale worker=3
 推荐用仓库自带脚本 (PG dump + `data/` + 生产配置 + SHA-256 清单, 保留最近 14 份):
 
 ```bash
-./scripts/backup-prod.sh                # 默认输出到 backups/YYYYMMDD-HHMMSS/
+./scripts/backup-prod.sh                # 输出到 backups/YYYYMMDD-HHMMSS-<唯一后缀>/
 # 计划任务 (cron 每日 02:00):
 #   0 2 * * * cd /path/to/examSystem && ./scripts/backup-prod.sh >> backups/backup.log 2>&1
 ```
 
 `.env` 里的密钥不随备份走, 单独用密码管理器/离线介质保存 (`.env` 是部署机唯一凭据源)。
 
-**恢复流程** (先演练一次, 见下):
+备份前暂停答卷写入、人工复核、发布、worker 和检测任务，确保数据库与文件来自同一稳定时点；脚本不负责暂停业务。成功备份包含 `BACKUP_COMPLETE`（`examSystem-backup-v1`）和三个文件的 `SHA256SUMS`，全部成功后才原子移入最终目录。失败备份不参与保留清理；旧式未标记目录也不会自动删除。默认保留 14 份，可用 `BACKUP_KEEP` 调整。若 `.backup.lock` 遗留，先检查其中 pid 对应的实际进程与启动时间，确认没有备份仍运行后才移除锁；不能仅根据 pid 文件判断锁已过期。
 
-```bash
-# 1) 停服务
-docker compose -f docker-compose.prod.yml down
+**恢复流程**：在另一台隔离主机的独立部署目录与全新 Compose project/数据库卷中恢复，保留原部署。`docker compose down` 不会清空数据库卷，不能据此把原卷当作空库。完整步骤见 [备份恢复与本地演练](deployment-restore.md)。恢复前校验完成标记、清单及归档路径；数据库导入使用 `psql -v ON_ERROR_STOP=1`，数据目录必须为空。数据库、`data/` 与配置成组恢复后，先核对历史分数、审计与快照哈希，再应用候选迁移并启动 API；核准队列、凭据和评分配置后才启动 worker。
 
-# 2) 还原 PG: 清掉旧卷数据再起空库, 灌入 dump, 补迁移 (增量跳过已应用)
-docker compose -f docker-compose.prod.yml up -d postgres
-gzip -dc backups/<时间戳>/exam_system.sql.gz | \
-  docker compose -f docker-compose.prod.yml exec -T postgres \
-  psql -U "${PG_USER:-exam_super}" "${PG_DB:-exam_system}"
-
-# 3) 还原业务数据 (data/papers + data/exam_runs + token) 与配置
-rm -rf data && tar xzf backups/<时间戳>/data.tar.gz
-cp backups/<时间戳>/config.production.yaml config.production.yaml
-
-# 4) 目录属主 + 起全栈 (新镜像入口自愈属主; chown 仅旧镜像需要)
-docker compose -f docker-compose.prod.yml up -d
-
-# 5) 校验: /api/health + docker compose ps 全 healthy + 抽查一条 run
-```
-
-**恢复演练** (每季度一次): 在**另一台测试机**上执行上述步骤, 验证 dump 可灌、
-服务可起、能查出历史 run; 用 `sha256sum -c SHA256SUMS` 校验备份文件完整性。
-演练同时验证 `scripts/backup-prod.sh` 的产物齐全 (dump / data / config / 清单)。
+**恢复演练**：每季度在隔离部署中验证 dump、文件、迁移、历史 API 和已批准的版本回退路径。仓库另提供只使用合成数据的原生 PostgreSQL 演练，它验证代码和备份链路，不代替 Docker 部署或生产恢复验收。
 
 ## 10. 升级流程
 
@@ -264,7 +244,7 @@ docker compose -f docker-compose.prod.yml run --rm exam migrate --config /app/co
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-升级前先备份 (见第 9 节); 迁移失败时用旧镜像回滚 (`docker compose up -d --no-build`)。
+升级前先完成一致性备份与隔离演练（见第 9 节）。迁移失败时保持维护状态；只有已验证旧程序兼容当前 schema 才能直接切换旧镜像，否则用成组备份恢复到独立环境及匹配版本。不能假设 `--no-build` 会选择旧镜像或撤销迁移。灰度准入与回退决策见 [发布手册](release-rollout-runbook.md)。
 
 ## 11. 题库维护 (改 data/papers/*.json 后)
 

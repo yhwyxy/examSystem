@@ -68,21 +68,48 @@ func NewService(pool *pgxpool.Pool, repo *Repository, snap SnapshotLoader,
 	}
 }
 
-// GetStatus 实现 GET /api/submission/{id}/status (plan Step 4): 返回最小 4 字段,
-// 不暴露错误 / 身份 / 评分原始数组.
-func (s *Service) GetStatus(ctx context.Context, submissionID string) (*StatusResult, error) {
+// GetStatus 实现 GET /api/submission/{id}/status：校验原 session token 后返回
+// 不含答案和身份的评分进度。不存在的提交与不匹配 token 统一视为无效 token。
+func (s *Service) GetStatus(ctx context.Context, submissionID, sessionToken string) (*StatusResult, error) {
 	if s == nil || s.repo == nil || s.pool == nil {
 		return nil, ErrNoRows
 	}
-	sub, err := s.repo.GetByID(ctx, s.pool, submissionID)
+	if sessionToken == "" {
+		return nil, ErrInvalidSessionToken
+	}
+	sub, err := s.repo.GetByID(ctx, s.pool, submissionID, sessionToken)
 	if err != nil {
+		if errors.Is(err, ErrNoRows) {
+			return nil, ErrInvalidSessionToken
+		}
 		return nil, err
 	}
+	var details []map[string]any
+	if err := json.Unmarshal(sub.GradingDetailJSON, &details); err != nil {
+		details = nil
+	}
+	pendingItems := 0
+	for _, item := range details {
+		if item["grading_method"] == "subjective_pending" {
+			pendingItems++
+		}
+	}
+	gradedItems := len(details) - pendingItems
+	var subjectiveScore *float64
+	if sub.GradingStatus == StatusDone {
+		score := sub.SubjectiveScore
+		subjectiveScore = &score
+	}
 	return &StatusResult{
-		SubmissionID:  sub.ID,
-		Status:        deriveStatus(sub.GradingStatus, sub.ReviewStatus),
-		GradingStatus: sub.GradingStatus,
-		ReviewStatus:  sub.ReviewStatus,
+		SubmissionID:         sub.ID,
+		Status:               deriveStatus(sub.GradingStatus, sub.ReviewStatus),
+		GradingStatus:        sub.GradingStatus,
+		ReviewStatus:         sub.ReviewStatus,
+		GradedItems:          gradedItems,
+		PendingItems:         pendingItems,
+		SubjectivesRemaining: pendingItems,
+		ObjectiveScore:       sub.ObjectiveScore,
+		SubjectiveScore:      subjectiveScore,
 	}, nil
 }
 
@@ -197,6 +224,17 @@ func (s *Service) Submit(ctx context.Context, in SubmitRequest) (*SubmitResult, 
 
 	// (c1) FOR UPDATE session: 校验状态没被并发关闭. 标准模式.
 	if err := lockSessionForUpdate(ctx, tx, sess.SessionTokenHash); err != nil {
+		// 服务端超时扫描可能在事务外预读之后先完成收卷。锁内发现 session 已交卷时，
+		// 复用同一 submission id，让同时到达的手动提交获得幂等结果。
+		if errors.Is(err, ErrSubmissionClosed) {
+			existing, lookupErr := s.repo.FindIDForRunEmployee(ctx, tx, sess.RunID, sess.EmployeeID)
+			if lookupErr == nil && existing != "" {
+				if commitErr := tx.Commit(ctx); commitErr != nil {
+					return nil, fmt.Errorf("submissions.Submit: commit idempotent result: %w", commitErr)
+				}
+				return &SubmitResult{SubmissionID: existing}, nil
+			}
+		}
 		return nil, err
 	}
 	// (c2) FOR UPDATE run: 校验 run 仍 open.

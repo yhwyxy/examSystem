@@ -30,15 +30,15 @@ const (
 
 // Session 是 Submit 编排所需的最小会话读字段（事务外只读用）。
 type Session struct {
-	ID                 string
-	Name               string
-	EmployeeID         string
-	RunID              string
-	Department         *string
-	SessionTokenHash   string
-	StartedAt          time.Time
-	DeadlineAt         *time.Time // 考试截止时间; +grace_period_seconds 之外仍可容许提交.
-	Status             string // active/submitted/closed/expired
+	ID               string
+	Name             string
+	EmployeeID       string
+	RunID            string
+	Department       *string
+	SessionTokenHash string
+	StartedAt        time.Time
+	DeadlineAt       *time.Time // 考试截止时间; +grace_period_seconds 之外仍可容许提交.
+	Status           string     // active/submitted/closed/expired
 }
 
 // RunLite 是 Submit 编排所需的最小 run 读字段（含快照路径与 hash）。
@@ -51,32 +51,32 @@ type RunLite struct {
 
 // SubmitRequest 是 HTTP 层向 Submit 提交的请求体。
 type SubmitRequest struct {
-	SessionToken    string         // 客户端原始 token; 由包内 hash 后比对
-	Answers         []byte         // raw canonical answers json
-	AnswersMap      map[string]any // objective grading input
-	ClientIP        *string
-	UserAgent       *string
-	AutoSubmitReason *string       // 非空表示系统自动提交（exceeded max-timeout）
+	SessionToken     string         // 客户端原始 token; 由包内 hash 后比对
+	Answers          []byte         // raw canonical answers json
+	AnswersMap       map[string]any // objective grading input
+	ClientIP         *string
+	UserAgent        *string
+	AutoSubmitReason *string // 非空表示系统自动提交（exceeded max-timeout）
 }
 
 // PreparedSubmission 是事务外计算得到的事务写输入。短事务内只写它。
 type PreparedSubmission struct {
-	Name              string
-	EmployeeID        string
-	PaperID           string
-	RunID             string
-	PaperName         string
-	Department        *string
-	Answers           []byte         // canonical answers (raw)
-	StartedAt         time.Time
-	SubmittedAt       time.Time
-	ClientIP          *string
-	UserAgent         *string
-	AutoSubmitReason  *string
+	Name             string
+	EmployeeID       string
+	PaperID          string
+	RunID            string
+	PaperName        string
+	Department       *string
+	Answers          []byte // canonical answers (raw)
+	StartedAt        time.Time
+	SubmittedAt      time.Time
+	ClientIP         *string
+	UserAgent        *string
+	AutoSubmitReason *string
 
 	// 客观题即时判分结果 (事务外算好)。主观题请求占位为 0, 待 worker 填充。
 	// float64: 题库存在 1.5 分制单选, int 截断会永久丢 0.5 分 (DB 列 double precision).
-	ObjectiveScore     float64
+	ObjectiveScore      float64
 	ObjectiveMaxScore   float64
 	ObjectiveDetailJSON []byte // 单题判分明细 (array of objective.GradeResult 字段)
 	QuestionTotal       int
@@ -87,20 +87,23 @@ type SubmitResult struct {
 	SubmissionID string
 }
 
-// StatusResult 是 GET /api/submission/{id}/status 的公开 response body.
-// 注意: plan Step 4 要求只露 4 字段 (submission_id, status, grading_status,
-// review_status); 不返回分数 / 错误文本 / 身份 / 答案.
+// StatusResult 是经 session token 鉴权后的提交状态 response body.
+// 返回状态和不含答案/身份的进度计数；评分数值仅供该场考生查看。
 // status 由 grading_status + review_status 派生 (兼容 Python 旧 status):
 //   - pending / grading      -> grading
 //   - done                   -> review_status (submitted/approved/auto_scored/...)
 //   - failed                 -> need_review
 type StatusResult struct {
-	SubmissionID  string      `json:"submission_id"`
-	Status        Status      `json:"status"`
-	GradingStatus Status      `json:"grading_status"`
-	ReviewStatus  ReviewStatus `json:"review_status"`
+	SubmissionID         string       `json:"submission_id"`
+	Status               Status       `json:"status"`
+	GradingStatus        Status       `json:"grading_status"`
+	ReviewStatus         ReviewStatus `json:"review_status"`
+	GradedItems          int          `json:"graded_items"`
+	PendingItems         int          `json:"pending_items"`
+	SubjectivesRemaining int          `json:"subjectives_remaining"`
+	ObjectiveScore       float64      `json:"objective_score"`
+	SubjectiveScore      *float64     `json:"subjective_score,omitempty"`
 }
-
 
 // Submission 是 GetByID 返回的内部持久行 (供 StatusResult 等进一步转换).
 type Submission struct {
@@ -108,6 +111,8 @@ type Submission struct {
 	GradingStatus     Status
 	ReviewStatus      ReviewStatus
 	ObjectiveScore    float64
+	SubjectiveScore   float64
+	GradingDetailJSON []byte
 }
 
 // ErrSubmissionClosed 表示 session / run 已关闭，不允许提交。
@@ -121,7 +126,6 @@ var ErrInvalidSessionToken = errors.New("INVALID_SESSION_TOKEN")
 
 // ErrInvalidAnswers 表示 answers json 解析失败或为空。
 var ErrInvalidAnswers = errors.New("INVALID_ANSWERS")
+
 // ErrInvalidAutoSubmitReason 表示 auto_submit_reason 不在 {third_blur, blur_timeout_30s} 枚举内.
 var ErrInvalidAutoSubmitReason = errors.New("INVALID_AUTO_SUBMIT_REASON")
-
-

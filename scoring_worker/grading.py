@@ -60,7 +60,7 @@ def _grade_objective(question: dict, student_answer: Any,
 
 
 def _grade_subjective(question: dict, student_answer: Any, ssvc: Any,
-                      preserve: dict | None = None) -> dict:
+                      preserve: dict | None = None, multiple_choice_partial: bool = True) -> dict:
     """单主观题评分: 调 subjective-scoring 0.1.7 通过 grader_bridge 完整打分.
 
     ssvc 参数保持位置兼容 (grade_submission 调用方仍传), 但实际桥接 +
@@ -73,13 +73,15 @@ def _grade_subjective(question: dict, student_answer: Any, ssvc: Any,
     """
     from .grader_bridge import grade_subjective as _grade
     final, machine, review_status, entry = _grade(question, student_answer,
-                                                  preserve=preserve)
+                                                  preserve=preserve, service=ssvc,
+                                                  multiple_choice_partial=multiple_choice_partial)
     qid = question.get("id")
     r = {
         "id": qid, "question_id": qid, "type": question.get("type"),
         "question": question.get("question", ""),
-        "student_answer": student_answer,
-        "reference_answer": question.get("answer", ""),
+        "student_answer": entry.get("student_answer", student_answer),
+        "reference_answer": entry.get("reference_answer", question.get("answer", "")),
+        "selected_language": entry.get("selected_language"),
         "max_score": float(question.get("score", 0) or 0),
         "machine_score": machine,
         "score": machine,
@@ -116,7 +118,7 @@ def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any,
         overall_review_status: str,  # 整卷级别 review_status
     }
     """
-    from .grader_bridge import aggregate_review_status
+    from .grader_bridge import aggregate_review_status, _merge_preserved_review
     questions = snapshot_doc.get("questions", []) or []
     detail: List[dict] = []
     obj_score = 0.0
@@ -131,11 +133,13 @@ def grade_submission(snapshot_doc: dict, answers_map: dict, ssvc: Any,
             r = _grade_objective(q, student_answer,
                                  partial=multiple_choice_partial)
             if r is not None:
+                r = _merge_preserved_review(r, (preserve or {}).get(qid))
                 detail.append(r)
-                obj_score += float(r["score"])
+                obj_score += float(r["final_score"])
         else:
             r = _grade_subjective(q, student_answer, ssvc,
-                                  preserve=(preserve or {}).get(qid))
+                                  preserve=(preserve or {}).get(qid),
+                                  multiple_choice_partial=multiple_choice_partial)
             subj_machine += r["machine_score"]
             subj_final += r["final_score"]
             detail.append(r)

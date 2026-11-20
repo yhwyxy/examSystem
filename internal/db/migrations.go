@@ -15,7 +15,8 @@ import (
 // schemaMigrationsTable 是 migrator 自己维护的版本表名.
 //
 // Task 2 规范要求:
-//   schema_migrations(version text primary key, checksum text not null, applied_at timestamptz not null)
+//
+//	schema_migrations(version text primary key, checksum text not null, applied_at timestamptz not null)
 //
 // 由 EnsureTable() 在首次 Migrate 调用前确保存在; 此表自身不算 migration 0001 内容,
 // 因此不会出现在 schema_migrations 行里 (避免 bootstrap 表与表内自指).
@@ -72,13 +73,13 @@ func appliedVersions(ctx context.Context, tx pgx.Tx) (map[string]string, error) 
 // Migrate 应用所有未应用的 migration 文件.
 //
 // 阻塞与互斥:
-//   * pg_advisory_xact_lock 一个固定 lock key, 串行化并发 migrator.
-//   * 锁随事务退出自动释放, 无需显式 unlock.
+//   - pg_advisory_xact_lock 一个固定 lock key, 串行化并发 migrator.
+//   - 锁随事务退出自动释放, 无需显式 unlock.
 //
 // 校验:
-//   * 已应用版本 -> 比对 checksum, 不一致返 ErrChecksumMismatch.
-//   * 未应用版本 -> 在独立事务中执行, 失败回滚并不写 schema_migrations.
-//   * 同一 Migrate 调用内部多次 Begin/Commit, 每个文件一个事务.
+//   - 已应用版本 -> 比对 checksum, 不一致返 ErrChecksumMismatch.
+//   - 未应用版本 -> 在独立事务中执行, 失败回滚并不写 schema_migrations.
+//   - 同一 Migrate 调用内部多次 Begin/Commit, 每个文件一个事务.
 //
 // 返回 Result.Applied 按 version 升序; Skipped 同.
 // 当 Result.Applied 为空时, 调用方可输出 "database schema is current".
@@ -137,6 +138,26 @@ func Migrate(ctx context.Context, target ExecCapable) (*Result, error) {
 		if err != nil {
 			return res, fmt.Errorf("migrate begin tx for %s: %w", f.Version, err)
 		}
+		// The initial version read has released its transaction lock. Recheck
+		// inside the application lock, since another migrator may have applied
+		// this file after that read.
+		if _, err := applyTx.Exec(ctx, "SELECT pg_advisory_xact_lock($1);", advLockKey); err != nil {
+			_ = applyTx.Rollback(ctx)
+			return res, fmt.Errorf("migrate lock %s: %w", f.Version, err)
+		}
+		current, err := appliedVersions(ctx, applyTx)
+		if err != nil {
+			_ = applyTx.Rollback(ctx)
+			return res, fmt.Errorf("migrate recheck %s: %w", f.Version, err)
+		}
+		if checksum, ok := current[f.Version]; ok {
+			_ = applyTx.Rollback(ctx)
+			if checksum != f.Checksum {
+				return res, fmt.Errorf("%w: version=%s", ErrChecksumMismatch, f.Version)
+			}
+			res.Skipped = append(res.Skipped, f.Version)
+			continue
+		}
 		if _, err := applyTx.Exec(ctx, f.Source); err != nil {
 			_ = applyTx.Rollback(ctx)
 			return res, fmt.Errorf("migrate exec %s: %w", f.Version, err)
@@ -160,7 +181,7 @@ func Migrate(ctx context.Context, target ExecCapable) (*Result, error) {
 // ExecCapable 是 Migrate 的最小依赖;
 // 在生产用 *pgxpool.Pool 实现它, 测试可用任意 pgx.Tx 兼容的 stub.
 //
-//此处抽象让 migrator 测试可在 tx 层直接驱动, 或接 *pgxpool.Pool.
+// 此处抽象让 migrator 测试可在 tx 层直接驱动, 或接 *pgxpool.Pool.
 type ExecCapable interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
 }

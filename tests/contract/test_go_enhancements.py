@@ -34,11 +34,46 @@ def wait_until(predicate, timeout: float = 5.0, interval: float = 0.05) -> bool:
     return False
 
 
+def build_full_answers(paper):
+    """Build valid answers without importing another test module by package name."""
+    answers = {}
+    for question in paper.get("questions", []):
+        qid = question["id"]
+        kind = question.get("type")
+        if kind == "single_choice":
+            answer = question["answer"]
+            answers[qid] = [answer] if isinstance(answer, str) else list(answer)
+        elif kind == "multiple_choice":
+            answers[qid] = list(question["answer"])
+        elif kind == "true_false":
+            answers[qid] = ["正确"] if question["answer"] else ["错误"]
+        elif kind == "composite":
+            sub_answers = {}
+            for sub in question.get("subquestions", []):
+                if sub.get("scoring_mode") == "code":
+                    language = (sub.get("allowed_languages") or [sub.get("code_language")])[0]
+                    sub_answers[sub["id"]] = {
+                        "language": language,
+                        "code": sub["answers_by_language"][language],
+                    }
+                else:
+                    sub_answers[sub["id"]] = sub.get("answer") or ""
+            answers[qid] = sub_answers
+        elif kind == "short_answer" and question.get("scoring_mode") == "code":
+            language = (question.get("allowed_languages") or [question.get("code_language")])[0]
+            answers[qid] = {
+                "language": language,
+                "code": question["answers_by_language"][language],
+            }
+        else:
+            answers[qid] = question.get("answer") or ""
+    return answers
+
+
 # ---------------------------------------------------------------------------
 # health
 # ---------------------------------------------------------------------------
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: 健康接口缺 build 结构 (现为 version:{version,build_time})", strict=False)
 def test_health_has_version_and_build(client):
     body = client.get("/api/health").json()
     for k in ("ok", "time", "version", "build"):
@@ -48,7 +83,6 @@ def test_health_has_version_and_build(client):
 
 
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: 健康接口缺 db/worker_alive 字段", strict=False)
 def test_health_reports_db_and_worker(client):
     body = client.get("/api/health").json()
     assert "db" in body and isinstance(body["db"], dict)
@@ -62,7 +96,6 @@ def test_health_reports_db_and_worker(client):
 # draft 节流 + 服务端 revision 乐观锁
 # ---------------------------------------------------------------------------
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: draft 响应缺 server_min_interval_ms/last_draft_at (现有 throttled), 且受 revision 语义缺陷影响", strict=False)
 def test_draft_returns_throttle_fields(client, paper_loaded):
     slug, run = paper_loaded
     s = client.post("/api/exam/start", json={
@@ -83,7 +116,6 @@ def test_draft_returns_throttle_fields(client, paper_loaded):
 
 
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: status 接口缺 server_revision 且返回 PascalCase", strict=False)
 def test_draft_payload_includes_server_revision(client, paper_loaded):
     slug, run = paper_loaded
     s = client.post("/api/exam/start", json={
@@ -104,7 +136,6 @@ def test_draft_payload_includes_server_revision(client, paper_loaded):
 # submission grading_status 深字段
 # ---------------------------------------------------------------------------
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: submission status 缺 graded_items 等深字段; 评分闭环另受快照哈希不一致阻断", strict=False)
 def test_submission_status_reports_grading_progress(client, paper_loaded, paper_smoke):
     slug, run = paper_loaded
     s = client.post("/api/exam/start", json={
@@ -114,32 +145,32 @@ def test_submission_status_reports_grading_progress(client, paper_loaded, paper_
     sid, stok = s["session_id"], s["session_token"]
 
     # 构造 paper_smoke 完整答案 (与 student 同款)
-    from tests.contract.test_student_api import _build_full_answers
-    answers = _build_full_answers(paper_smoke)
+    answers = build_full_answers(paper_smoke)
 
     r = client.post("/api/submit", json={
         "session_id": sid, "session_token": stok, "answers": answers,
     })
-    assert r.status_code == 200
+    assert r.status_code in (200, 201)
     sid_sub = r.json()["submission_id"]
+    status_headers = {"Authorization": f"Bearer {stok}"}
 
     # 轮询直到 grading_status 出现深字段
     def _got():
-        body = client.get(f"/api/submission/{sid_sub}/status").json()
+        body = client.get(f"/api/submission/{sid_sub}/status", headers=status_headers).json()
         return all(k in body for k in (
             "graded_items", "pending_items", "subjectives_remaining",
             "objective_score",
         ))
     assert wait_until(_got, timeout=10.0), "Go 未能产出 grading_status 深字段"
-    body = client.get(f"/api/submission/{sid_sub}/status").json()
+    body = client.get(f"/api/submission/{sid_sub}/status", headers=status_headers).json()
     assert body["subjectives_remaining"] >= 0
     assert isinstance(body["objective_score"], (int, float))
     # 主观题全部完成后, subjective_score 也应填上
     if wait_until(lambda: (
-        client.get(f"/api/submission/{sid_sub}/status").json()
+        client.get(f"/api/submission/{sid_sub}/status", headers=status_headers).json()
         .get("subjectives_remaining") == 0
     ), timeout=10.0):
-        body = client.get(f"/api/submission/{sid_sub}/status").json()
+        body = client.get(f"/api/submission/{sid_sub}/status", headers=status_headers).json()
         assert "subjective_score" in body
         assert isinstance(body["subjective_score"], (int, float))
 
@@ -148,7 +179,6 @@ def test_submission_status_reports_grading_progress(client, paper_loaded, paper_
 # close 幂等: 重复 close 返回同一 round_no
 # ---------------------------------------------------------------------------
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: close 响应缺 round_no/status (审计问题#13)", strict=False)
 def test_close_is_idempotent_with_round_no(client, paper_loaded):
     slug, _ = paper_loaded
     r1 = client.post(f"/api/admin/papers/{slug}/close", json={})
@@ -166,7 +196,6 @@ def test_close_is_idempotent_with_round_no(client, paper_loaded):
 # admin/stats 新增字段: active_workers / scoring_queue_depth
 # ---------------------------------------------------------------------------
 @pexpect_go
-@pytest.mark.xfail(reason="计划契约未实现: stats 缺 active_workers/scoring_queue_depth", strict=False)
 def test_admin_stats_go_fields(client, paper_loaded):
     body = client.get("/api/admin/stats").json()
     for k in ("active_workers", "scoring_queue_depth"):

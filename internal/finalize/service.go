@@ -80,6 +80,8 @@ func NewService(pool *pgxpool.Pool, runsRepo *runs.Repository,
 // finalizeRawReason 是 admin_closed 时复用的 reason 字面值.
 const finalizeRawReason = "admin_closed"
 
+const individualTimeoutReason = "individual_timeout"
+
 // FinalizeRun 在单事务内: lock run (closing) -> 对剩余 active sessions 调
 // Task 6 CreateFromSessionTx (auto_submit_reason=admin_closed) -> run status
 // closing->closed -> commit. 任一错全滚, run 保持 closing 由下次 ScanDue 重试.
@@ -290,3 +292,122 @@ func (s *Service) ScanDue(ctx context.Context) (int, int, error) {
 	}
 	return nRuns, nSess, nil
 }
+
+// ScanExpiredSessions 自动提交个人截止时间已过且仍处于 active 的会话。
+// 为保留客户端在提交宽限期内的补提机会，截止时间按 deadline_at + grace 计算。
+// 每个 session 使用独立事务，session 行锁与提交入口串行化，确保并发扫描或手动提交
+// 最多创建一份 submission。每次最多检查 100 个候选，剩余记录由下一轮轮询处理。
+func (s *Service) ScanExpiredSessions(ctx context.Context) (int, error) {
+	if s == nil || s.pool == nil || s.alloc == nil {
+		return 0, ErrNotConfigured
+	}
+	grace := s.GraceDurationSec
+	if grace < 0 {
+		grace = 0
+	}
+	rows, err := s.pool.Query(ctx, `
+SELECT s.id
+FROM exam_sessions s
+JOIN exam_runs r ON r.id = s.run_id
+WHERE s.status = 'active'
+  AND s.deadline_at <= now() - ($1::double precision * interval '1 second')
+  AND r.status IN ('open', 'closing')
+ORDER BY s.deadline_at, s.id
+LIMIT 100`, grace)
+	if err != nil {
+		return 0, fmt.Errorf("finalize.ScanExpiredSessions candidates: %w", err)
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return 0, fmt.Errorf("finalize.ScanExpiredSessions candidate: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("finalize.ScanExpiredSessions rows: %w", err)
+	}
+
+	count := 0
+	var firstErr error
+	for _, id := range ids {
+		done, err := s.autoSubmitExpiredSession(ctx, id, grace)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if done {
+			count++
+		}
+	}
+	return count, firstErr
+}
+
+func (s *Service) autoSubmitExpiredSession(ctx context.Context, sessionID string, grace int) (bool, error) {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return false, fmt.Errorf("finalize.autoSubmitExpiredSession begin: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var sess activeRow
+	err = tx.QueryRow(ctx, `
+SELECT s.id, s.run_id, s.employee_id, s.name, s.department, s.session_token_hash,
+       s.started_at, s.deadline_at, s.status, s.draft_json, s.draft_revision, s.draft_saved_at,
+       r.paper_id, r.snapshot_path, r.snapshot_hash
+FROM exam_sessions s
+JOIN exam_runs r ON r.id = s.run_id
+WHERE s.id = $1 AND s.status = 'active'
+  AND s.deadline_at <= now() - ($2::double precision * interval '1 second')
+  AND r.status IN ('open', 'closing')
+FOR UPDATE OF s SKIP LOCKED`, sessionID, grace).Scan(
+		&sess.ID, &sess.RunID, &sess.EmployeeID, &sess.Name, &sess.Department,
+		&sess.SessionTokenHash, &sess.StartedAt, &sess.DeadlineAt, &sess.Status,
+		&sess.DraftJSON, &sess.DraftRevision, &sess.DraftSavedAt,
+		&sess.PaperID, &sess.SnapshotPath, &sess.SnapshotHash)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil // 手动提交、整场收卷或另一扫描器已处理。
+	}
+	if err != nil {
+		return false, fmt.Errorf("finalize.autoSubmitExpiredSession lock %s: %w", sessionID, err)
+	}
+
+	input := buildAutoSubmitted(sess)
+	input.AutoSubmitReason = stringPointer(individualTimeoutReason)
+	subID, needsGrading, err := s.alloc.CreateFromSessionTx(ctx, tx, input)
+	if err != nil {
+		return false, fmt.Errorf("finalize.autoSubmitExpiredSession submit %s: %w", sessionID, err)
+	}
+	if needsGrading {
+		submissionID, err := strconv.ParseInt(subID, 10, 64)
+		if err != nil {
+			return false, fmt.Errorf("finalize.autoSubmitExpiredSession invalid submission id %q: %w", subID, err)
+		}
+		if err := jobs.NewRepository().EnqueueTx(ctx, tx, jobs.JobSpec{
+			SubmissionID: submissionID,
+			PaperID:      sess.PaperID,
+			RunID:        sess.RunID,
+			Generation:   1,
+		}); err != nil {
+			return false, fmt.Errorf("finalize.autoSubmitExpiredSession enqueue %s: %w", sessionID, err)
+		}
+	}
+	if tag, err := tx.Exec(ctx, `
+UPDATE exam_sessions SET status = 'submitted', updated_at = now()
+WHERE id = $1 AND status = 'active'`, sessionID); err != nil {
+		return false, fmt.Errorf("finalize.autoSubmitExpiredSession mark submitted %s: %w", sessionID, err)
+	} else if tag.RowsAffected() != 1 {
+		return false, fmt.Errorf("finalize.autoSubmitExpiredSession mark submitted %s: session changed while locked", sessionID)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return false, fmt.Errorf("finalize.autoSubmitExpiredSession commit %s: %w", sessionID, err)
+	}
+	return true, nil
+}
+
+func stringPointer(value string) *string { return &value }

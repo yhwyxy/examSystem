@@ -1,8 +1,10 @@
 const API = '/api/admin';
 const PAGE_SIZE = 50;
-const ADMIN_VIEWS = ['overview', 'papers', 'publish', 'submissions', 'settings'];
+const ADMIN_VIEWS = ['overview', 'papers', 'question-bank', 'answer-similarity', 'score-anomalies', 'publish', 'review-queue', 'grade-publication', 'submissions', 'settings'];
 
 let authToken = localStorage.getItem('admin_token') || '';
+let currentAdminRole = localStorage.getItem('admin_role') || '';
+let currentAdminUsername = localStorage.getItem('admin_username') || '';
 let currentPage = 1;
 let currentView = localStorage.getItem('admin_current_view') || 'overview';
 
@@ -16,6 +18,41 @@ const STATUS_META = {
   high_confidence: { className: 'badge-high-confidence', label: '高置信' },
   grading: { className: 'badge-grading', label: '评分中' },
 };
+
+const ROLE_VIEWS = {
+  admin: ADMIN_VIEWS,
+  question_bank_editor: ['overview', 'papers', 'question-bank', 'publish'],
+  reviewer: ['overview', 'answer-similarity', 'score-anomalies', 'review-queue', 'grade-publication', 'submissions'],
+  publisher: ['overview', 'grade-publication'],
+};
+
+function roleCanView(view) {
+  return (ROLE_VIEWS[currentAdminRole] || []).includes(view);
+}
+
+function applyRoleNavigation() {
+  document.querySelectorAll('.nav-item[data-view]').forEach(item => {
+    item.hidden = !roleCanView(item.dataset.view);
+  });
+  document.querySelectorAll('[data-view-jump]').forEach(item => {
+    item.hidden = !roleCanView(item.dataset.viewJump);
+  });
+  const reviewer = currentAdminRole === 'reviewer' || currentAdminRole === 'admin';
+  const administrator = currentAdminRole === 'admin';
+  const canReview = currentAdminRole === 'reviewer' || administrator;
+  document.querySelectorAll('#deleteSelBtn, .del-btn, #checkAll, #selectAllBtn').forEach(item => {
+    item.hidden = !administrator;
+  });
+  document.querySelectorAll('#exportBtn, #exportBtnSub').forEach(item => {
+    item.hidden = !canReview;
+  });
+  const publishButton = $('publicationPublishBtn');
+  if (publishButton) publishButton.hidden = !['publisher', 'admin'].includes(currentAdminRole);
+  const deleteHeader = $('submissionsDeleteHeader');
+  if (deleteHeader) deleteHeader.hidden = !administrator;
+  const roleLabel = $('adminIdentity');
+  if (roleLabel) roleLabel.textContent = `${currentAdminUsername || '管理员'} · ${currentAdminRole || 'admin'}`;
+}
 
 // effectiveStatus 把 grading_status + review_status 合一成有效展示状态.
 // plan Task 11 Step 4: admin 视图需要区分 "grading 中" 与 "已评完毕待复核" 等组合态.
@@ -83,6 +120,8 @@ function setTableState(message, visible = true) {
 
 function showView(view, options = {}) {
   if (!ADMIN_VIEWS.includes(view)) view = 'overview';
+  applyRoleNavigation();
+  if (!roleCanView(view)) view = 'overview';
   currentView = view;
   localStorage.setItem('admin_current_view', view);
 
@@ -116,10 +155,27 @@ function showView(view, options = {}) {
     if (window.PapersAdmin) {
       window.PapersAdmin.loadPapersList().catch(e => toast(e.message));
     }
+  } else if (view === 'question-bank') {
+    if (window.QuestionBankAdmin) {
+      window.QuestionBankAdmin.load().catch(e => toast(e.message));
+    }
+  } else if (view === 'answer-similarity') {
+    if (window.AnswerSimilarityAdmin) {
+      window.AnswerSimilarityAdmin.load().catch(e => toast(e.message));
+    }
+  } else if (view === 'score-anomalies') {
+    if (window.ScoreAnomalyAdmin) {
+      window.ScoreAnomalyAdmin.load().catch(e => toast(e.message));
+    }
   } else if (view === 'settings') {
     if (window.SettingsAdmin) {
       window.SettingsAdmin.loadSettings().catch(e => toast(e.message));
     }
+    if (window.AdminUsersAdmin) window.AdminUsersAdmin.load().catch(e => toast(e.message));
+  } else if (view === 'grade-publication') {
+    if (window.PublicationAdmin) window.PublicationAdmin.load().catch(e => toast(e.message));
+  } else if (view === 'review-queue') {
+    if (window.ReviewQueueAdmin) window.ReviewQueueAdmin.load().catch(e => toast(e.message));
   }
 }
 
@@ -147,25 +203,12 @@ function showLoginPanel() {
 function showMainContent() {
   $('loginPanel').style.display = 'none';
   $('mainContent').style.display = 'grid';
-  showView(currentView || 'overview', { refresh: false });
-  const tasks = [loadStats(), loadRows()];
-  if (window.PapersAdmin) {
-    tasks.push(window.PapersAdmin.loadPapersList());
-    // publish 视图需要加载考试卡片列表; showView 因 {refresh:false} 跳过了
-    if ((currentView || 'overview') === 'publish' && window.PapersAdmin.loadExams) {
-      tasks.push(window.PapersAdmin.loadExams());
-    }
-  } else {
-    tasks.push(loadExamLink());
-  }
-  // settings 视图同样需要加载设置数据 (showView {refresh:false} 跳过了)
-  if ((currentView || 'overview') === 'settings' && window.SettingsAdmin) {
-    tasks.push(window.SettingsAdmin.loadSettings());
-  }
-  Promise.all(tasks).catch(e => toast(e.message));
+  applyRoleNavigation();
+  showView(currentView || 'overview');
 }
 
 async function doLogin() {
+  const username = $('loginUsername').value.trim();
   const password = $('loginPassword').value;
   const errorEl = $('loginError');
   errorEl.style.display = 'none';
@@ -174,7 +217,7 @@ async function doLogin() {
     const resp = await fetch('/api/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await resp.json().catch(() => ({}));
 
@@ -185,7 +228,11 @@ async function doLogin() {
     }
 
     authToken = data.token;
+    currentAdminRole = data.role || 'admin';
+    currentAdminUsername = data.username || username || 'admin';
     localStorage.setItem('admin_token', authToken);
+    localStorage.setItem('admin_role', currentAdminRole);
+    localStorage.setItem('admin_username', currentAdminUsername);
     showMainContent();
   } catch (e) {
     errorEl.textContent = e.message || '网络错误';
@@ -195,8 +242,13 @@ async function doLogin() {
 
 async function checkAuth() {
   try {
-    const resp = await authFetch('/api/admin/stats');
+    const resp = await authFetch('/api/admin/me');
     if (resp.ok) {
+      const identity = await resp.json();
+      currentAdminRole = identity.role || 'admin';
+      currentAdminUsername = identity.username || 'admin';
+      localStorage.setItem('admin_role', currentAdminRole);
+      localStorage.setItem('admin_username', currentAdminUsername);
       showMainContent();
       return;
     }
@@ -212,20 +264,92 @@ async function loadStats() {
   if (!resp.ok) throw new Error(apiErrorMessage(data, '统计加载失败'));
 
   const metrics = [
-    ['提交人数', data.submitted_count],
-    ['平均分', data.avg_score],
-    ['最高分', data.max_score],
-    ['最低分', data.min_score],
-    ['待复核', data.pending_review],
-    ['低置信', data.low_confidence_count],
+    ['提交人数', data.submitted_count, '全部提交'],
+    ['平均分', data.avg_score, '当前最终分口径'],
+    ['最高分', data.max_score, '当前最终分口径'],
+    ['最低分', data.min_score, '当前最终分口径'],
+    ['机器总分均值', data.scores?.machine?.avg_total_score, `${data.scores?.machine?.count ?? 0} 份已完成评分`],
+    ['人工复核总分均值', data.scores?.reviewed_final?.avg_total_score ?? '—', `${data.scores?.reviewed_final?.count ?? 0} 份已完成整卷复核`],
+    ['已发布总分均值', data.scores?.published?.avg_total_score ?? '—', data.scores?.published?.available ? `${data.scores.published.count} 份发布成绩` : '暂无版本化发布批次'],
+    ['待复核', data.pending_review, '当前复核状态'],
+    ['低置信', data.low_confidence_count, '至少含一道低置信题'],
+    ['活动评分 worker', data.active_workers, '持有未过期租约'],
+    ['待评分任务', data.scoring_queue_depth, '已到可领取时间'],
   ];
 
-  $('stats').innerHTML = metrics.map(([label, value]) => `
+  $('stats').innerHTML = metrics.map(([label, value, detail]) => `
     <div class="stat">
       <div class="muted">${esc(label)}</div>
       <h2>${esc(value ?? 0)}</h2>
+      <div class="muted stat-detail">${esc(detail || '')}</div>
     </div>
   `).join('');
+  await loadStatisticsBreakdown();
+}
+
+function statisticNumber(value) {
+  return value == null || !Number.isFinite(Number(value)) ? '—' : Number(value).toFixed(2);
+}
+
+function statisticPercent(value) {
+  return value == null || !Number.isFinite(Number(value)) ? '—' : `${(Number(value) * 100).toFixed(1)}%`;
+}
+
+function statisticDistribution(distribution) {
+  if (!distribution) return '—';
+  return Object.entries(distribution)
+    .filter(([, count]) => Number(count) > 0)
+    .map(([band, count]) => `${band}: ${count}`)
+    .map(esc)
+    .join(' · ') || '—';
+}
+
+function renderBreakdownTable(title, rows, labelFor, isQuestion = false) {
+  if (!rows?.length) return `<section class="stats-report-group"><h3>${esc(title)}</h3><p class="muted">暂无数据</p></section>`;
+  if (isQuestion) {
+    return `<section class="stats-report-group">
+      <h3>${esc(title)}</h3>
+      <div class="table-wrap"><table class="stats-detail-table"><thead><tr>
+        <th>考试轮次</th><th>题目 ID</th><th>已评分次数</th><th>机器得分率</th><th>审核后得分率</th>
+      </tr></thead><tbody>${rows.map(row => `<tr>
+        <td>${esc(`${row.paper_id} · 第 ${row.round_no} 轮`)}</td>
+        <td>${esc(row.question_id)}</td><td>${esc(row.attempt_count)}</td>
+        <td>${esc(statisticPercent(row.machine_score_rate))}</td>
+        <td>${esc(statisticPercent(row.reviewed_score_rate))}</td>
+      </tr>`).join('')}</tbody></table></div>
+    </section>`;
+  }
+  return `<section class="stats-report-group">
+    <h3>${esc(title)}</h3>
+    <div class="table-wrap"><table class="stats-detail-table"><thead><tr>
+      <th>范围</th><th>提交</th><th>已评分</th><th>机器均分</th><th>机器及格率</th>
+      <th>复核进度</th><th>审核后均分</th><th>审核后及格率</th><th>机器分布</th><th>审核后分布</th>
+    </tr></thead><tbody>${rows.map(row => `<tr>
+      <td>${esc(labelFor(row))}</td><td>${esc(row.submitted_count)}</td><td>${esc(row.scored_count)}</td>
+      <td>${esc(statisticNumber(row.machine?.avg_total_score))}</td>
+      <td>${esc(statisticPercent(row.machine?.pass_rate))}</td>
+      <td>${esc(`${row.review?.completed_count ?? 0} / ${row.review?.required_count ?? 0} · ${statisticPercent(row.review?.progress_rate)}`)}</td>
+      <td>${esc(statisticNumber(row.reviewed_final?.avg_total_score))}</td>
+      <td>${esc(statisticPercent(row.reviewed_final?.pass_rate))}</td>
+      <td>${statisticDistribution(row.machine?.distribution_percent)}</td>
+      <td>${statisticDistribution(row.reviewed_final?.distribution_percent)}</td>
+    </tr>`).join('')}</tbody></table></div>
+  </section>`;
+}
+
+async function loadStatisticsBreakdown() {
+  const container = $('stats-breakdown');
+  if (!container) return;
+  const resp = await authFetch(`${API}/stats/breakdown`);
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(apiErrorMessage(data, '统计明细加载失败'));
+  const roundLabel = row => `${row.paper_id} · 第 ${row.round_no ?? '—'} 轮`;
+  container.innerHTML = [
+    renderBreakdownTable('按专业', data.by_profession, row => row.key),
+    renderBreakdownTable('按部门', data.by_department, row => row.key),
+    renderBreakdownTable('按考试轮次', data.by_round, roundLabel),
+    renderBreakdownTable('按题目得分率', data.by_question, row => row.question_id, true),
+  ].join('');
 }
 
 function renderPagination(hasMore) {
@@ -259,11 +383,12 @@ function formatAutoSubmitReason(reason) {
   if (reason === 'third_blur') return '切屏达到 3 次，自动交卷';
   if (reason === 'blur_timeout_30s') return '单次切屏达到 30 秒，自动交卷';
   if (reason === 'admin_closed') return '管理员收卷自动提交';
+  if (reason === 'individual_timeout') return '个人答题时间到，系统自动收卷';
   return '';
 }
 
 function formatRound(r) {
-  if (r.run_is_legacy) return '历史数据';
+  if (r.run_is_legacy || r.historical_grade) return '历史成绩（未按新流程发布）';
   if (r.round_no != null) return `第${r.round_no}轮`;
   return '';
 }
@@ -285,7 +410,7 @@ function renderRows(rows) {
     <td>${fmtTime(r.submitted_at)}</td>
     <td class="toolbar">
       <a class="btn secondary" href="/detail?id=${encodeURIComponent(r.id)}">复核</a>
-      <button class="btn danger del-btn" type="button" data-id="${esc(r.id)}">删除</button>
+      ${currentAdminRole === 'admin' ? `<button class="btn danger del-btn" type="button" data-id="${esc(r.id)}">删除</button>` : ''}
     </td>
   </tr>`).join('');
 }
@@ -415,6 +540,9 @@ async function exportData() {
 
 function bindEvents() {
   $('loginBtn').addEventListener('click', doLogin);
+$('loginUsername').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doLogin();
+});
   $('loginPassword').addEventListener('keydown', e => {
     if (e.key === 'Enter') doLogin();
   });
@@ -535,6 +663,12 @@ const SettingsAdmin = {
       ? `已配置：${s.llm_api_key_masked || '****'}`
       : '输入 API Key';
     $('settingsLLMModel').value = s.llm_model || '';
+    $('settingsEmbeddingUrl').value = s.embedding_api_url || '';
+    $('settingsEmbeddingKey').value = '';
+    $('settingsEmbeddingKey').placeholder = s.embedding_api_key_set
+      ? `已配置：${s.embedding_api_key_masked || '****'}；留空保留当前密钥`
+      : '输入 API Key';
+    $('settingsEmbeddingModel').value = s.embedding_model || '';
     this.toggleMethodBlocks(s.method || 'local');
   },
 
@@ -585,6 +719,9 @@ const SettingsAdmin = {
       llm_api_url: $('settingsLLMUrl').value.trim(),
       llm_api_key: $('settingsLLMKey').value.trim(),
       llm_model: $('settingsLLMModel').value.trim(),
+      embedding_api_url: $('settingsEmbeddingUrl').value.trim(),
+      embedding_api_key: $('settingsEmbeddingKey').value.trim(),
+      embedding_model: $('settingsEmbeddingModel').value.trim(),
     };
     try {
       const resp = await authFetch(`${API}/settings/scoring`, {
@@ -617,3 +754,82 @@ function bindSettingsEvents() {
 
 bindSettingsEvents();
 window.SettingsAdmin = SettingsAdmin;
+
+// AdminUsersAdmin: named accounts and role assignment (admin-only API).
+const ADMIN_ROLE_LABELS = {
+  admin: '管理员',
+  question_bank_editor: '题库与考试编辑',
+  reviewer: '成绩复核',
+  publisher: '成绩发布',
+};
+
+const AdminUsersAdmin = {
+  async load() {
+    const resp = await authFetch(`${API}/users`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiErrorMessage(data, '账号列表加载失败'));
+    this.render(Array.isArray(data.users) ? data.users : []);
+  },
+
+  render(users) {
+    const rows = $('adminUsersRows');
+    rows.innerHTML = users.map(user => `<tr data-username="${esc(user.username)}">
+      <td>${esc(user.username)}</td>
+      <td><select class="admin-user-role" aria-label="${esc(user.username)} 的角色">${Object.entries(ADMIN_ROLE_LABELS).map(([role, label]) => `<option value="${role}" ${role === user.role ? 'selected' : ''}>${label}</option>`).join('')}</select></td>
+      <td><label class="admin-user-active-label"><input class="admin-user-active" type="checkbox" ${user.active ? 'checked' : ''}> 启用</label></td>
+      <td><input class="admin-user-password" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="留空不修改" aria-label="重设 ${esc(user.username)} 的密码"></td>
+      <td><button class="btn secondary admin-user-save" type="button">保存</button></td>
+    </tr>`).join('');
+    $('adminUsersState').textContent = `共 ${users.length} 个账号。修改角色、状态或密码后，该账号需要重新登录。`;
+  },
+
+  async create(event) {
+    event.preventDefault();
+    const username = $('adminUserCreateUsername').value.trim();
+    const password = $('adminUserCreatePassword').value;
+    const role = $('adminUserCreateRole').value;
+    const resp = await authFetch(`${API}/users`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, role }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiErrorMessage(data, '创建账号失败'));
+    $('adminUserCreateForm').reset();
+    $('adminUserCreateRole').value = 'question_bank_editor';
+    toast(`已创建账号 ${username}`);
+    await this.load();
+  },
+
+  async save(button) {
+    const row = button.closest('tr');
+    const username = row.dataset.username;
+    const password = row.querySelector('.admin-user-password').value;
+    const body = {
+      role: row.querySelector('.admin-user-role').value,
+      active: row.querySelector('.admin-user-active').checked,
+    };
+    if (password) body.password = password;
+    const resp = await authFetch(`${API}/users/${encodeURIComponent(username)}`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiErrorMessage(data, '账号更新失败'));
+    if (username === currentAdminUsername) {
+      localStorage.removeItem('admin_token');
+      authToken = '';
+      showLoginPanel();
+      toast('当前账号已更新，请重新登录');
+      return;
+    }
+    toast(`已更新账号 ${username}`);
+    await this.load();
+  },
+};
+
+$('adminUsersRefreshBtn')?.addEventListener('click', () => AdminUsersAdmin.load().catch(error => toast(error.message)));
+$('adminUserCreateForm')?.addEventListener('submit', event => AdminUsersAdmin.create(event).catch(error => toast(error.message)));
+$('adminUsersRows')?.addEventListener('click', event => {
+  const button = event.target.closest('.admin-user-save');
+  if (button) AdminUsersAdmin.save(button).catch(error => toast(error.message));
+});
+window.AdminUsersAdmin = AdminUsersAdmin;

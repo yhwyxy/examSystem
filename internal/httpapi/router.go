@@ -7,12 +7,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/yhwyxy/examSystem/internal/adminusers"
+	"github.com/yhwyxy/examSystem/internal/answersimilarity"
 	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/publication"
+	"github.com/yhwyxy/examSystem/internal/questionbank"
 	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
+	"github.com/yhwyxy/examSystem/internal/scoreanomaly"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/settings"
 	"github.com/yhwyxy/examSystem/internal/submissions"
@@ -38,9 +43,10 @@ type Dependencies struct {
 	SubmissionsService *submissions.Service
 
 	// Task 9 admin 路径.
-	Auth   *auth.Store      // nil 时所有 admin 路由放行 (与 Python enable_auth=false parity)
-	Papers *papers.Store    // 试卷文件写入入口 (per-slug mutex + atomic write)
-	Runs   *runs.Repository // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
+	Auth         *auth.Store         // nil 时所有 admin 路由放行 (与 Python enable_auth=false parity)
+	Papers       *papers.Store       // 试卷文件写入入口 (per-slug mutex + atomic write)
+	QuestionBank *questionbank.Store // 独立版本化题库
+	Runs         *runs.Repository    // 用作 exam-link/reset-rounds/auth CHECK 等的 PG 关系校验
 	// RunService 是 admin "开考/关考/exam-link" 路径的真业务依赖, Open/BeginClose
 	// + token 侧车文件管理. nil 时对应路由返 503.
 	RunService *runs.Service
@@ -58,6 +64,12 @@ type Dependencies struct {
 	// Settings 是管理端设置存储 (app_settings 表): admin.password bcrypt hash +
 	// 评分方式选择. nil 时 settings 路由返 503.
 	Settings *settings.Store
+
+	// AnswerSimilarity persists, queues, and reviews similarity reports.
+	AnswerSimilarity *answersimilarity.Service
+	ScoreAnomaly     *scoreanomaly.Service
+	Publication      *publication.Service
+	AdminUsers       *adminusers.Store
 }
 
 // NewRouter 构造 examSystem 的 HTTP router。
@@ -90,11 +102,10 @@ func NewRouter(deps Dependencies) http.Handler {
 
 	// /api/* 子树: API 行为
 	r.Route("/api", func(api chi.Router) {
-		api.Get("/health", healthHandler())
-		// reload-config 是运维操作, 不得匿名可达: Auth 注入时套 RequireAdmin
-		// (enable_auth=false 的开发态 RequireAdmin 本身放行, 行为不变).
+		api.Get("/health", healthHandler(deps))
+		// reload-config 是运维操作, 只允许管理员账号调用.
 		if deps.Auth != nil {
-			api.With(deps.Auth.RequireAdmin).Post("/reload-config", reloadConfigHandler(deps))
+			api.With(deps.Auth.RequireRole(auth.RoleAdmin)).Post("/reload-config", reloadConfigHandler(deps))
 		} else {
 			api.Post("/reload-config", reloadConfigHandler(deps))
 		}
@@ -139,15 +150,31 @@ func NewRouter(deps Dependencies) http.Handler {
 	return r
 }
 
-// healthHandler 返回 {ok, time, version, build}。
-// Task 1 极简版: ok=true, time=RFC3339, version 待 main 注入。
-// Go 专属深字段 (db.connected / worker_alive / grading_status) 由后续 Task 加。
-func healthHandler() http.HandlerFunc {
+// healthHandler 返回进程构建信息、数据库可达性和当前持有的 worker 租约。
+func healthHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), time.Second)
+		defer cancel()
+		dbStatus := map[string]any{"connected": false, "latency_ms": nil}
+		workerAlive := false
+		if deps.Pool != nil {
+			started := time.Now()
+			if err := deps.Pool.Ping(ctx); err == nil {
+				dbStatus["connected"] = true
+				dbStatus["latency_ms"] = time.Since(started).Milliseconds()
+				_ = deps.Pool.QueryRow(ctx, `SELECT EXISTS (
+					SELECT 1 FROM grading_jobs
+					WHERE status = 'leased' AND lease_until > now()
+				)`).Scan(&workerAlive)
+			}
+		}
 		WriteJSON(w, http.StatusOK, map[string]any{
-			"ok":      true,
-			"time":    time.Now().UTC().Format(time.RFC3339),
-			"version": versionInfo(),
+			"ok":           true,
+			"time":         time.Now().UTC().Format(time.RFC3339),
+			"version":      versionInfo(),
+			"build":        map[string]string{"commit": buildCommit, "build_time": buildTimeRaw},
+			"db":           dbStatus,
+			"worker_alive": workerAlive,
 		})
 	}
 }

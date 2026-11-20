@@ -3,59 +3,32 @@ package review
 import (
 	"context"
 	"fmt"
-	"os"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yhwyxy/examSystem/internal/db"
+	"github.com/yhwyxy/examSystem/internal/testutil"
 )
 
-// testDB 单测连接池 (TEST_DATABASE_URL env 注入). 连不上 skip 即不挂 CI.
-var (
-	testDBOnce sync.Once
-	testDBPool *pgxpool.Pool
-	testDBErr  error
-)
-
-// testPool 返回单测用 pgxpool; 缺 env / 连不上 -> t.Skip (而非 fail).
+// Each test owns a schema; packages may run concurrently without truncating each other.
 func testPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
-	testDBOnce.Do(func() {
-		dsn := os.Getenv("TEST_DATABASE_URL")
-		if dsn == "" {
-			testDBErr = fmt.Errorf("TEST_DATABASE_URL unset")
-			return
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		p, err := pgxpool.New(ctx, dsn)
-		if err != nil {
-			testDBErr = err
-			return
-		}
-		if err := p.Ping(ctx); err != nil {
-			testDBErr = err
-			p.Close()
-			return
-		}
-		testDBPool = p
-	})
-	if testDBErr != nil {
-		t.Skipf("review integration test skipped: %v", testDBErr)
+	pool, _ := testutil.NewSchema(t)
+	if _, err := db.Migrate(context.Background(), pool); err != nil {
+		t.Fatalf("Migrate: %v", err)
 	}
-	return testDBPool
+	return pool
 }
 
 // truncate 测试前清表 (CASCADE 链路: review_logs, submissions, grading_jobs).
 // 在每个测试函数开头 defer 调用清理.
 func truncate(ctx context.Context, pool *pgxpool.Pool) {
 	for _, t := range []string{
-		"review_logs",        // 依赖 submissions.id
-		"grading_jobs",       // 依赖 submissions.id
-		"submissions",        // 依赖 exam_sessions.id
-		"exam_sessions",      // 依赖 exam_runs.id
-		"exam_runs",          // 顶层 paper_slug
+		"review_logs",   // 依赖 submissions.id
+		"grading_jobs",  // 依赖 submissions.id
+		"submissions",   // 依赖 exam_sessions.id
+		"exam_sessions", // 依赖 exam_runs.id
+		"exam_runs",     // 顶层 paper_slug
 	} {
 		if _, err := pool.Exec(ctx, "TRUNCATE TABLE "+t+" RESTART IDENTITY CASCADE"); err != nil {
 			// 不 fail, 仅记 log; 顺序错误容忍
@@ -128,4 +101,3 @@ func seedSubmission(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
 	}
 	return 5001, nil
 }
-

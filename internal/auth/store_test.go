@@ -73,6 +73,26 @@ func TestRequireAdmin_DisabledStorePassesRequest(t *testing.T) {
 	}
 }
 
+func TestRequireAdminProvidesAuthenticatedUsernameForAudit(t *testing.T) {
+	s := NewStore(true, func() (string, error) { return "secret", nil })
+	token, err := s.Login(context.Background(), "secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var username string
+	h := s.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		username = UsernameFromContext(r.Context())
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp := httptest.NewRecorder()
+	h.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNoContent || username != "admin" {
+		t.Fatalf("status=%d username=%q", resp.Code, username)
+	}
+}
+
 func TestRequireAdmin_EnabledMissingBearerReturns401(t *testing.T) {
 	s := NewStore(true, func() (string, error) { return "x", nil })
 	h := s.RequireAdmin(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
@@ -80,6 +100,49 @@ func TestRequireAdmin_EnabledMissingBearerReturns401(t *testing.T) {
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/", nil))
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+}
+
+func TestLoginUserRecordsRoleAndRequireRoleRejectsOtherRoles(t *testing.T) {
+	s := NewStore(true, nil)
+	s.SetPasswordProvider(PasswordProvider{Authenticate: func(_ context.Context, username, password string) (string, error) {
+		if username != "reviewer01" || password != "review-password" {
+			return "", ErrInvalidCredentials
+		}
+		return RoleReviewer, nil
+	}})
+	token, role, err := s.LoginUser(context.Background(), "reviewer01", "review-password")
+	if err != nil || role != RoleReviewer {
+		t.Fatalf("login role=%q err=%v", role, err)
+	}
+
+	called := false
+	h := s.RequireRole(RolePublisher)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if got := RoleFromContext(r.Context()); got != RoleReviewer {
+			t.Errorf("context role=%q, want reviewer", got)
+		}
+	}))
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	h.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden || called {
+		t.Fatalf("status=%d called=%v, want forbidden", response.Code, called)
+	}
+
+	allowed := s.RequireRole(RoleReviewer)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	response = httptest.NewRecorder()
+	allowed.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent || !called {
+		t.Fatalf("allowed status=%d called=%v", response.Code, called)
+	}
+	s.InvalidateUser("reviewer01")
+	if err := s.VerifyToken(token); err != ErrInvalidToken {
+		t.Fatalf("invalidated user token err=%v, want ErrInvalidToken", err)
 	}
 }
 

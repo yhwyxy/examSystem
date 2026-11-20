@@ -179,6 +179,46 @@ func TestSettings_SaveScoring_Roundtrip(t *testing.T) {
 	}
 }
 
+func TestSettings_AnswerEmbeddingSecretRoundtripAndPreservation(t *testing.T) {
+	pool := testSubmPool(t)
+	ctx := context.Background()
+	_, _ = pool.Exec(ctx, `DELETE FROM app_settings WHERE key = 'scoring'`)
+	defer pool.Exec(ctx, `DELETE FROM app_settings WHERE key = 'scoring'`)
+	r := newSettingsRouter(t, pool)
+	token := loginGetToken(t, r, "config-pass")
+	post := func(body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodPost, "/api/admin/settings/scoring", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/json")
+		rr := httptest.NewRecorder()
+		r.ServeHTTP(rr, req)
+		return rr
+	}
+	created := post(`{"method":"local","embedding_api_url":"https://embed.example/v1","embedding_api_key":"embed-secret-value","embedding_model":"embed-v1"}`)
+	if created.Code != http.StatusOK {
+		t.Fatalf("save embedding config status=%d body=%s", created.Code, created.Body.String())
+	}
+	updated := post(`{"method":"local","embedding_api_url":"https://embed.example/v1","embedding_api_key":"","embedding_model":"embed-v1"}`)
+	if updated.Code != http.StatusOK {
+		t.Fatalf("save with retained secret status=%d body=%s", updated.Code, updated.Body.String())
+	}
+	if strings.Contains(updated.Body.String(), "embed-secret-value") {
+		t.Fatal("embedding API key leaked in save response")
+	}
+	var response struct {
+		Scoring settingsScoringView `json:"scoring"`
+	}
+	if err := json.Unmarshal(updated.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.Scoring.EmbeddingAPIKeySet || response.Scoring.EmbeddingModel != "embed-v1" {
+		t.Fatalf("embedding config was not retained: %+v", response.Scoring)
+	}
+	if got := response.Scoring.EmbeddingAPIKey; got != "em****ue" {
+		t.Fatalf("embedding API key mask=%q", got)
+	}
+}
+
 func TestSettings_ChangePassword_Flow(t *testing.T) {
 	pool := testSubmPool(t)
 	ctx := context.Background()

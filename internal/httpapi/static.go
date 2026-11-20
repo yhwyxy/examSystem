@@ -25,12 +25,13 @@ type StaticConfig struct {
 // 不 fallback 到 exam.html (避免 leak / 安全风险)。
 //
 // 静态请命中表:
-//   GET /                    -> frontend/index.html? 没 index 时 404 (Task 1 Play型 -> 仅 SPA root)
-//   GET /exam                -> frontend/exam.html
-//   GET /admin               -> frontend/admin.html
-//   GET /detail              -> frontend/detail.html
-//   GET /js/*, /css/*        -> frontend/{js,css}/* (SPA assets)
-//   其它 GET                 -> 404 (不 fallback)
+//
+//	GET /                    -> frontend/index.html? 没 index 时 404 (Task 1 Play型 -> 仅 SPA root)
+//	GET /exam                -> frontend/exam.html
+//	GET /admin               -> frontend/admin.html
+//	GET /detail              -> frontend/detail.html
+//	GET /js/*, /css/*        -> frontend/{js,css}/* (SPA assets)
+//	其它 GET                 -> 404 (不 fallback)
 //
 // 与产品当前 FastAPI 后端行为保持等价。
 func MountStatic(r chi.Router, cfg StaticConfig) {

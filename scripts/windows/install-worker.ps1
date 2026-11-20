@@ -1,5 +1,5 @@
 ﻿# install-worker.ps1: Windows 部署机离线安装 scoring_worker 依赖.
-# 全部 wheel 自带于 packages/ (subjective-scoring v0.1.13 + 依赖 + psycopg),
+# 全部 wheel 自带于 packages/ (subjective-scoring v0.1.14 候选 + 依赖 + psycopg),
 # 全程 --no-index --find-links 本地解析, 不访问 GitHub / PyPI.
 [CmdletBinding()]
 param(
@@ -34,7 +34,7 @@ $deps = @(
     "psycopg[binary]>=3.2,<4",
     "pyyaml>=6.0,<7",
     "python-dotenv>=1.0,<2",
-    "subjective-scoring[text,sql,code,remote]"
+    "subjective-scoring[text,sql,code,remote]==0.1.14"
 )
 if ($WithLocalModel) {
     $deps += "sentence-transformers>=3.0", "torch>=2.2,<3"

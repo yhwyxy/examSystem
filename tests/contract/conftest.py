@@ -22,6 +22,7 @@ from __future__ import annotations
 import itertools
 import json
 import os
+import secrets
 import socket
 import subprocess
 import time
@@ -34,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[2]
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "contract"
 
 DEFAULT_DSN = "postgres://exam_app:exam_app_dev@127.0.0.1:5432/exam_system?sslmode=disable"
-CONTRACT_SCHEMA = "contract_test"
+CONTRACT_SCHEMA = "contract_test_" + secrets.token_hex(6)
 
 _slug_counter = itertools.count(1)
 
@@ -49,7 +50,7 @@ def _free_port() -> int:
 
 
 def _reset_schema(dsn: str) -> None:
-    """DROP + CREATE contract_test schema, 保证每个测试会话从空库开始。"""
+    """Every test process owns a schema, including concurrent compatibility runs."""
     import psycopg
 
     with psycopg.connect(dsn, autocommit=True) as conn:
@@ -147,6 +148,9 @@ def go_base_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
         except subprocess.TimeoutExpired:
             proc.kill()
         log.close()
+        import psycopg
+        with psycopg.connect(base_dsn, autocommit=True) as conn:
+            conn.execute(f"DROP SCHEMA IF EXISTS {CONTRACT_SCHEMA} CASCADE")
 
 
 # ---------------------------------------------------------------------------

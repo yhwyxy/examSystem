@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/skip2/go-qrcode"
+	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/export"
 	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/review"
@@ -52,53 +53,77 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 	authMW := deps.Auth.RequireAdmin
 	api.Route("/admin", func(admin chi.Router) {
 		admin.Use(authMW)
+		editors := admin.With(deps.Auth.RequireRole(auth.RoleQuestionBankEditor))
+		adminOnly := admin.With(deps.Auth.RequireRole(auth.RoleAdmin))
 		// /api/admin/reload-config (Task 9 移入 admin group)
-		admin.Post("/reload-config", reloadConfigHandler(deps))
+		adminOnly.Post("/reload-config", reloadConfigHandler(deps))
 		// /api/admin/papers/{slug}  CRUD
-		admin.Get("/papers", listPapersHandler(deps))
+		editors.Get("/papers", listPapersHandler(deps))
 		// UI papers.js createPaper() 真 调 POST /papers (裸路径, 无 slug) 创建新专业.
-		admin.Post("/papers", createPaperHandler(deps))
-		admin.Get("/papers/{slug}", getPaperHandler(deps))
+		editors.Post("/papers", createPaperHandler(deps))
+		// 独立题库：题目版本内容只增不改，当前版本状态控制人工审核与组卷资格。
+		editors.Post("/question-bank/scoring-points/extract", extractScoringPointsHandler(deps))
+		mountAnswerSimilarity(admin, deps)
+		mountScoreAnomaly(admin, deps)
+		mountScorePublication(admin, deps)
+		mountAdminUsers(admin, deps)
+		admin.With(deps.Auth.RequireRole(auth.RoleReviewer)).Get("/review-queue", reviewQueueHandler(deps))
+		editors.Get("/question-bank", listQuestionBankHandler(deps))
+		editors.Post("/question-bank", createQuestionBankHandler(deps))
+		editors.Get("/question-bank/export", exportQuestionBankHandler(deps))
+		editors.Post("/question-bank/import", importQuestionBankHandler(deps))
+		editors.Post("/question-bank/assembly-snapshot", assembleQuestionBankHandler(deps))
+		editors.Post("/question-bank/sample", sampleQuestionBankHandler(deps))
+		editors.Get("/question-bank/{id}/versions", questionBankVersionsHandler(deps))
+		editors.Get("/question-bank/{id}", getQuestionBankHandler(deps))
+		editors.Put("/question-bank/{id}", updateQuestionBankHandler(deps))
+		editors.Post("/question-bank/{id}/review", questionBankTransitionHandler(deps, "review"))
+		editors.Post("/question-bank/{id}/enable", questionBankTransitionHandler(deps, "enable"))
+		editors.Post("/question-bank/{id}/disable", questionBankTransitionHandler(deps, "disable"))
+		editors.Delete("/question-bank/{id}", questionBankTransitionHandler(deps, "archive"))
+		editors.Get("/papers/{slug}", getPaperHandler(deps))
 		// UI papers.js savePaper() 真 用 PUT; 保留 POST 向后兼容.
-		admin.Put("/papers/{slug}", savePaperHandler(deps))
-		admin.Post("/papers/{slug}", savePaperHandler(deps))
-		admin.Delete("/papers/{slug}", deletePaperHandler(deps))
-		admin.Get("/papers/{slug}/preview", previewPaperHandler(deps))
-		admin.Post("/papers/{slug}/batch", batchReorderHandler(deps))
+		editors.Put("/papers/{slug}", savePaperHandler(deps))
+		editors.Post("/papers/{slug}", savePaperHandler(deps))
+		editors.Delete("/papers/{slug}", deletePaperHandler(deps))
+		editors.Get("/papers/{slug}/preview", previewPaperHandler(deps))
+		editors.Post("/papers/{slug}/batch", batchReorderHandler(deps))
 		// 单 paper 开/关: 保留向后兼容, UI 实际用 batch/open-批量
-		admin.Post("/papers/{slug}/open", openRunHandler(deps))
-		admin.Post("/papers/{slug}/close", closeRunHandler(deps))
+		editors.Post("/papers/{slug}/open", openRunHandler(deps))
+		editors.Post("/papers/{slug}/close", closeRunHandler(deps))
 		// UI 真 调用 (papers.js): 批量开/关, body={slug: list[str]}
-		admin.Post("/papers/batch/open", batchOpenHandler(deps))
-		admin.Post("/papers/batch/close", batchCloseHandler(deps))
+		editors.Post("/papers/batch/open", batchOpenHandler(deps))
+		editors.Post("/papers/batch/close", batchCloseHandler(deps))
 		// /api/admin/exams*
-		admin.Get("/exams", listExamsHandler(deps))
+		editors.Get("/exams", listExamsHandler(deps))
 		// UI 用 GET, Python 旧栈也用 GET (main.py 行 520); 兼容旧 POST 保留
-		admin.Get("/exam-link", examLinkHandlerGET(deps))
+		editors.Get("/exam-link", examLinkHandlerGET(deps))
 		// UI papers.js:546 / 779 实际调 GET /papers/{slug}/exam-link (路径形态).
 		// handler 内自动识别 chi.URLParam(slug) 优先, 回退 query paper_slug (旧式),
 		// 复用 examLinkHandlerGET, 两种形态同 handler.
-		admin.Get("/papers/{slug}/exam-link", examLinkHandlerGET(deps))
-		admin.Post("/exam-link", examLinkHandler(deps))
+		editors.Get("/papers/{slug}/exam-link", examLinkHandlerGET(deps))
+		editors.Post("/exam-link", examLinkHandler(deps))
 		// UI papers.js:1027 真 调用 POST /exams/reset-rounds
-		admin.Post("/exams/reset-rounds", resetRoundsHandler(deps))
+		editors.Post("/exams/reset-rounds", resetRoundsHandler(deps))
 		// 保留向后兼容旧路径 (exam-link/{run}/reset-rounds), 实际指向同 handler
-		admin.Post("/exam-link/{run}/reset-rounds", resetRoundsHandler(deps))
+		editors.Post("/exam-link/{run}/reset-rounds", resetRoundsHandler(deps))
 		// Task 10 (path C 修正): stats / regrade 是顶层 admin 路径 (与 Python 基线
 		// test_admin_api.py 契约一致), 不挂在 /submissions 子树下.
 		if deps.Pool == nil {
 			admin.Get("/stats", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-			admin.Post("/regrade/{id}", serviceNotReady("REVIEW_NOT_CONFIGURED"))
+			admin.Get("/stats/breakdown", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+			admin.With(deps.Auth.RequireRole(auth.RoleReviewer)).Post("/regrade/{id}", serviceNotReady("REVIEW_NOT_CONFIGURED"))
 		} else {
 			admin.Get("/stats", statsSubmissionsHandler(deps))
-			admin.Post("/regrade/{id}", regradeSubmissionHandler(deps))
+			admin.Get("/stats/breakdown", adminStatisticsBreakdownHandler(deps.Pool))
+			admin.With(deps.Auth.RequireRole(auth.RoleReviewer)).Post("/regrade/{id}", regradeSubmissionHandler(deps))
 		}
 		// Task 10 admin submissions 子树 (list/detail/export/review/delete).
 		MountAdminSubmissions(admin, deps)
 		// 管理端设置: 密码修改 + 评分方式切换.
-		admin.Get("/settings", getSettingsHandler(deps))
-		admin.Post("/settings/password", changePasswordHandler(deps))
-		admin.Post("/settings/scoring", saveScoringHandler(deps))
+		adminOnly.Get("/settings", getSettingsHandler(deps))
+		adminOnly.Post("/settings/password", changePasswordHandler(deps))
+		adminOnly.Post("/settings/scoring", saveScoringHandler(deps))
 	})
 }
 
@@ -107,6 +132,7 @@ func MountAdmin(api chi.Router, deps Dependencies) {
 func adminLoginHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
+			Username string `json:"username"`
 			Password string `json:"password"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
@@ -118,13 +144,17 @@ func adminLoginHandler(deps Dependencies) http.HandlerFunc {
 				"auth store not configured")
 			return
 		}
-		tok, err := deps.Auth.Login(r.Context(), body.Password)
+		tok, role, err := deps.Auth.LoginUser(r.Context(), body.Username, body.Password)
 		if err != nil {
 			writeAdminError(w, http.StatusUnauthorized, "UNAUTHORIZED",
 				"invalid credentials")
 			return
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"token": tok})
+		username := strings.TrimSpace(body.Username)
+		if username == "" {
+			username = "admin"
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{"token": tok, "username": username, "role": role})
 	}
 }
 
@@ -207,8 +237,33 @@ func getPaperHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusNotFound, "PAPER_NOT_FOUND", err.Error())
 			return
 		}
+		status, err := paperRunStatus(r.Context(), deps, slug)
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "PAPER_STATUS_FAILED", "paper status unavailable")
+			return
+		}
+		doc["status"] = status
+		doc["editable"] = status != "open" && status != "closing"
 		WriteJSON(w, http.StatusOK, doc)
 	}
+}
+
+func paperRunStatus(ctx context.Context, deps Dependencies, slug string) (string, error) {
+	if deps.Pool == nil || deps.Runs == nil {
+		return "unpublished", nil
+	}
+	status := "unpublished"
+	err := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
+		items, err := deps.Runs.ListExamsOverview(ctx, tx, []string{slug})
+		if err != nil {
+			return err
+		}
+		if len(items) > 0 {
+			status = items[0].Status
+		}
+		return nil
+	})
+	return status, err
 }
 
 // writeAdminError 输出 JSON 错误: {"error":{"code":..,"message":..},"detail":{...}}.
@@ -429,15 +484,24 @@ func closeRunHandler(deps Dependencies) http.HandlerFunc {
 			grace = 30 * time.Second // 与 Python 默认 30s 一致
 		}
 		ctx := r.Context()
+		var run *runs.Run
 		err := withTx(ctx, deps.Pool, func(tx pgx.Tx) error {
-			run, rerr := deps.RunService.FindOpenBySlug(ctx, tx, slug)
+			var rerr error
+			run, rerr = deps.RunService.FindOpenBySlug(ctx, tx, slug)
 			if rerr != nil {
 				return rerr
 			}
 			if run == nil {
-				return errRunNotOpen
+				run, rerr = deps.RunService.FindLatestBySlug(ctx, tx, slug)
+				return rerr
 			}
-			_, rerr = deps.RunService.BeginClose(ctx, tx, run.ID, grace)
+			if run.Status != runs.StatusOpen {
+				return nil // closing retry: keep its original finalize_at.
+			}
+			run, rerr = deps.RunService.BeginClose(ctx, tx, run.ID, grace)
+			if errors.Is(rerr, runs.ErrAlreadyClosed) {
+				run, rerr = deps.RunService.FindLatestBySlug(ctx, tx, slug)
+			}
 			return rerr
 		})
 		if err != nil {
@@ -445,7 +509,17 @@ func closeRunHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, status, code, err.Error())
 			return
 		}
-		WriteJSON(w, http.StatusOK, map[string]any{"ok": true, "slug": slug})
+		if run == nil {
+			WriteJSON(w, http.StatusOK, map[string]any{
+				"ok": true, "success": true, "slug": slug, "status": "unpublished",
+			})
+			return
+		}
+		WriteJSON(w, http.StatusOK, map[string]any{
+			"ok": true, "success": true, "slug": slug,
+			"run_id": run.ID, "round_no": run.RoundNo, "status": string(run.Status),
+			"finalize_at": run.FinalizeAt, "closed_at": run.ClosedAt,
+		})
 	}
 }
 
@@ -533,6 +607,9 @@ func batchCloseHandler(deps Dependencies) http.HandlerFunc {
 					return nil // 已关闭, 幂等成功
 				}
 				_, rerr = deps.RunService.BeginClose(ctx, tx, run.ID, grace)
+				if errors.Is(rerr, runs.ErrAlreadyClosed) {
+					return nil // finalization won the race; the requested end state already holds.
+				}
 				return rerr
 			})
 			if err != nil {
@@ -917,19 +994,25 @@ WHERE r.paper_id = $1
 //	POST   /api/admin/submissions/{id}/review   apply 改分 (Body: question_id / sub_qid / new_score / note)
 //	DELETE /api/admin/submissions            批量删 (Body: ids=[1,2,3])
 func MountAdminSubmissions(admin chi.Router, deps Dependencies) {
+	reader, reviewer, adminOnly := admin, admin, admin
+	if deps.Auth != nil {
+		reader = admin.With(deps.Auth.RequireRole(auth.RoleReviewer))
+		reviewer = admin.With(deps.Auth.RequireRole(auth.RoleReviewer))
+		adminOnly = admin.With(deps.Auth.RequireRole(auth.RoleAdmin))
+	}
 	if deps.Pool == nil {
-		admin.Get("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-		admin.Get("/submissions/export", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-		admin.Delete("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-		admin.Get("/submissions/{id}", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
-		admin.Post("/submissions/{id}/review", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+		reader.Get("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+		reader.Get("/submissions/export", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+		adminOnly.Delete("/submissions", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+		reader.Get("/submissions/{id}", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
+		reviewer.Post("/submissions/{id}/review", serviceNotReady("SUBMISSIONS_POOL_NOT_CONFIGURED"))
 		return
 	}
-	admin.Get("/submissions", listSubmissionsHandler(deps))
-	admin.Get("/submissions/export", exportSubmissionsHandler(deps))
-	admin.Delete("/submissions", deleteSubmissionsHandler(deps))
-	admin.Get("/submissions/{id}", detailSubmissionHandler(deps))
-	admin.Post("/submissions/{id}/review", reviewSubmissionHandler(deps))
+	reader.Get("/submissions", listSubmissionsHandler(deps))
+	reader.Get("/submissions/export", exportSubmissionsHandler(deps))
+	adminOnly.Delete("/submissions", deleteSubmissionsHandler(deps))
+	reader.Get("/submissions/{id}", detailSubmissionHandler(deps))
+	reviewer.Post("/submissions/{id}/review", reviewSubmissionHandler(deps))
 }
 
 // serviceNotReady 返 503 + JSON error body. Task 10 admin 子树/MountAdminSubmissions 专用 handler factory.
@@ -946,7 +1029,7 @@ func serviceNotReady(code string) http.HandlerFunc {
 //	order_by=in(submitted_at|grading_generation|total_score) / order=asc|desc /
 //	limit=200 (max 1000) / offset=0.
 //
-// LEFT JOIN exam_runs 取 round_no; run 行缺失 (旧栈遗留数据) -> run_is_legacy=true.
+// LEFT JOIN exam_runs 取 round_no 和旧轮次标识，历史成绩独立标记。
 // 返回字段与前端 admin.js renderRows 一一对应 (轮次/部门/客观分/主观分等列).
 func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -979,7 +1062,7 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			s.grading_status, s.grading_generation, s.review_status,
 			s.objective_score, s.subjective_score_final, s.total_score,
 			s.auto_submit_reason, s.submitted_at,
-			r.round_no, (r.id IS NULL) AS run_is_legacy
+			r.round_no, (r.id IS NULL OR r.is_legacy) AS run_is_legacy, ` + historicalGradeSQL + ` AS historical_grade
 		FROM submissions s
 		LEFT JOIN exam_runs r ON r.id = s.run_id`)
 		sb.WriteString(" WHERE 1=1")
@@ -1034,6 +1117,7 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			SubmittedAt          time.Time `json:"submitted_at"`
 			RoundNo              *int      `json:"round_no"`
 			RunIsLegacy          bool      `json:"run_is_legacy"`
+			HistoricalGrade      bool      `json:"historical_grade"`
 		}
 		items := make([]item, 0, limit)
 		for rows.Next() {
@@ -1043,7 +1127,7 @@ func listSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 				&it.GradingStatus, &it.Generation, &it.ReviewStatus,
 				&it.ObjectiveScore, &it.SubjectiveScoreFinal, &it.TotalScore,
 				&it.AutoSubmitReason, &it.SubmittedAt,
-				&it.RoundNo, &it.RunIsLegacy); err != nil {
+				&it.RoundNo, &it.RunIsLegacy, &it.HistoricalGrade); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED",
 					"scan submission: "+err.Error())
 				return
@@ -1075,6 +1159,14 @@ func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			minScore           float64
 			pendingReview      int64
 			lowConfidenceCount int64
+			scoredCount        int64
+			machineAvgScore    float64
+			reviewedCount      int64
+			reviewedAvgScore   float64
+			activeWorkers      int64
+			scoringQueueDepth  int64
+			publishedCount     int64
+			publishedAvg       float64
 		)
 		err := deps.Pool.QueryRow(r.Context(), `
 			SELECT COUNT(*),
@@ -1091,13 +1183,32 @@ func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 					SELECT 1 FROM jsonb_array_elements(grading_detail_json) e
 					WHERE (e ->> 'low_confidence')::boolean IS TRUE
 					   OR (e ->> 'lowest_confidence_flagged')::boolean IS TRUE
-					   OR e ->> 'review_status' = 'low_confidence'))
+					   OR e ->> 'review_status' = 'low_confidence')),
+				COUNT(*) FILTER (WHERE grading_status = 'done'),
+				COALESCE(ROUND(AVG(objective_score + subjective_score_machine)
+					FILTER (WHERE grading_status = 'done')::numeric, 2)::float8, 0),
+				COUNT(*) FILTER (WHERE grading_status = 'done' AND reviewed_at IS NOT NULL
+					AND review_status = 'reviewed'),
+				COALESCE(ROUND(AVG(objective_score + subjective_score_final)
+					FILTER (WHERE grading_status = 'done' AND reviewed_at IS NOT NULL
+						AND review_status = 'reviewed')::numeric, 2)::float8, 0),
+				(SELECT COUNT(DISTINCT lease_owner) FROM grading_jobs
+				 WHERE status='leased' AND lease_owner IS NOT NULL AND lease_owner<>'' AND lease_until > now()),
+				(SELECT COUNT(*) FROM grading_jobs WHERE status='queued' AND available_at <= now())
 			FROM submissions`).Scan(
 			&submittedCount, &avgScore, &maxScore, &minScore,
-			&pendingReview, &lowConfidenceCount)
+			&pendingReview, &lowConfidenceCount, &scoredCount, &machineAvgScore,
+			&reviewedCount, &reviewedAvgScore, &activeWorkers, &scoringQueueDepth)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
 				"stats: "+err.Error())
+			return
+		}
+		if err := deps.Pool.QueryRow(r.Context(), `WITH latest AS (
+SELECT DISTINCT ON (run_id) id FROM score_publication_batches ORDER BY run_id,version DESC
+) SELECT count(*),coalesce(round(avg(g.total_score)::numeric,2)::float8,0)
+FROM latest b JOIN score_publication_grades g ON g.batch_id=b.id`).Scan(&publishedCount, &publishedAvg); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", "published stats are unavailable")
 			return
 		}
 
@@ -1134,6 +1245,28 @@ func statsSubmissionsHandler(deps Dependencies) http.HandlerFunc {
 			"low_confidence_count": lowConfidenceCount,
 			"counts":               counts,
 			"total":                submittedCount,
+			// Published scores are read only from the latest immutable publication per run.
+			"scores": map[string]any{
+				"machine": map[string]any{
+					"count": scoredCount, "avg_total_score": trunc2(machineAvgScore),
+				},
+				"reviewed_final": map[string]any{
+					"count": reviewedCount, "avg_total_score": trunc2(reviewedAvgScore),
+				},
+				"published": map[string]any{
+					"available": publishedCount > 0, "count": publishedCount,
+					"avg_total_score": func() any {
+						if publishedCount == 0 {
+							return nil
+						}
+						return trunc2(publishedAvg)
+					}(),
+				},
+			},
+			// active_workers counts distinct owners of unexpired leases, which is the
+			// worker activity the database can observe; idle worker processes are unknown.
+			"active_workers":      activeWorkers,
+			"scoring_queue_depth": scoringQueueDepth,
 		})
 	}
 }
@@ -1157,15 +1290,17 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 			submittedAt                                   time.Time
 			gradingDetail                                 []byte
 			gradingErr                                    string
+			roundNo                                       *int
+			runIsLegacy, historicalGrade                  bool
 		)
 		err = deps.Pool.QueryRow(r.Context(),
-			`SELECT paper_id, run_id, employee_id, name, grading_status,
-				grading_generation, review_status, total_score, submitted_at,
-				coalesce(grading_error, ''),
-				coalesce(grading_detail_json, '[]'::jsonb)
-			 FROM submissions WHERE id = $1`, id).Scan(
+			`SELECT s.paper_id, s.run_id, s.employee_id, s.name, s.grading_status,
+				s.grading_generation, s.review_status, s.total_score, s.submitted_at,
+				coalesce(s.grading_error, ''), coalesce(s.grading_detail_json, '[]'::jsonb),
+				r.round_no,(r.id IS NULL OR r.is_legacy), `+historicalGradeSQL+`
+			 FROM submissions s LEFT JOIN exam_runs r ON r.id=s.run_id WHERE s.id = $1`, id).Scan(
 			&paperID, &runID, &empID, &name, &gstatus, &gen, &rstatus, &totScore,
-			&submittedAt, &gradingErr, &gradingDetail)
+			&submittedAt, &gradingErr, &gradingDetail, &roundNo, &runIsLegacy, &historicalGrade)
 		if err != nil {
 			if strings.Contains(err.Error(), "no rows") {
 				writeAdminError(w, http.StatusNotFound, "SUBMISSION_NOT_FOUND",
@@ -1180,7 +1315,7 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 		// review_logs.
 		logRows, err := deps.Pool.Query(r.Context(),
 			`SELECT id, question_id, old_score, new_score,
-				coalesce(note, ''), created_at
+				coalesce(note, ''), created_at,coalesce(actor,''),coalesce(sub_question_id,''),grading_generation
 			 FROM review_logs WHERE submission_id = $1 ORDER BY id`, id)
 		if err != nil {
 			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED",
@@ -1189,23 +1324,92 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 		}
 		defer logRows.Close()
 		type reviewLog struct {
-			ID         int64     `json:"id"`
-			QuestionID string    `json:"question_id"`
-			OldScore   float64   `json:"old_score"`
-			NewScore   float64   `json:"new_score"`
-			Note       string    `json:"note"`
-			CreatedAt  time.Time `json:"created_at"`
+			ID            int64     `json:"id"`
+			QuestionID    string    `json:"question_id"`
+			OldScore      float64   `json:"old_score"`
+			NewScore      float64   `json:"new_score"`
+			Note          string    `json:"note"`
+			CreatedAt     time.Time `json:"created_at"`
+			Actor         string    `json:"actor"`
+			SubQuestionID string    `json:"sub_question_id"`
+			Generation    *int64    `json:"grading_generation"`
 		}
 		logs := []reviewLog{}
 		for logRows.Next() {
 			var l reviewLog
 			if err := logRows.Scan(&l.ID, &l.QuestionID, &l.OldScore, &l.NewScore,
-				&l.Note, &l.CreatedAt); err != nil {
+				&l.Note, &l.CreatedAt, &l.Actor, &l.SubQuestionID, &l.Generation); err != nil {
 				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED",
 					"scan review_log: "+err.Error())
 				return
 			}
 			logs = append(logs, l)
+		}
+		if err := logRows.Err(); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", "review logs unavailable")
+			return
+		}
+		type regradeEvent struct {
+			ID             int64           `json:"id"`
+			Actor          string          `json:"actor"`
+			Reason         string          `json:"reason"`
+			FromGeneration int64           `json:"from_generation"`
+			ToGeneration   int64           `json:"to_generation"`
+			Before         json.RawMessage `json:"before_state"`
+			After          json.RawMessage `json:"after_state"`
+			CreatedAt      time.Time       `json:"created_at"`
+		}
+		regradeEvents := []regradeEvent{}
+		events, err := deps.Pool.Query(r.Context(), `SELECT id,actor,reason,from_generation,to_generation,before_state,after_state,created_at
+FROM regrade_audit WHERE submission_id=$1 ORDER BY id`, id)
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", "regrade audit unavailable")
+			return
+		}
+		for events.Next() {
+			var event regradeEvent
+			if err := events.Scan(&event.ID, &event.Actor, &event.Reason, &event.FromGeneration, &event.ToGeneration, &event.Before, &event.After, &event.CreatedAt); err != nil {
+				events.Close()
+				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", "regrade audit unavailable")
+				return
+			}
+			regradeEvents = append(regradeEvents, event)
+		}
+		events.Close()
+		if err := events.Err(); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", "regrade audit unavailable")
+			return
+		}
+		type historyItem struct {
+			Generation int64           `json:"generation"`
+			Detail     json.RawMessage `json:"grading_detail"`
+			Machine    float64         `json:"subjective_score_machine"`
+			Final      float64         `json:"subjective_score_final"`
+			Total      float64         `json:"total_score"`
+			Status     string          `json:"review_status"`
+			CreatedAt  time.Time       `json:"created_at"`
+		}
+		history := []historyItem{}
+		historyRows, err := deps.Pool.Query(r.Context(), `
+			SELECT generation, grading_detail_json, subjective_score_machine,
+			       subjective_score_final, total_score, review_status, created_at
+			FROM grading_history WHERE submission_id = $1 ORDER BY generation DESC`, id)
+		if err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", "grading history unavailable")
+			return
+		}
+		defer historyRows.Close()
+		for historyRows.Next() {
+			var h historyItem
+			if err := historyRows.Scan(&h.Generation, &h.Detail, &h.Machine, &h.Final, &h.Total, &h.Status, &h.CreatedAt); err != nil {
+				writeAdminError(w, http.StatusInternalServerError, "DB_SCAN_FAILED", "grading history unavailable")
+				return
+			}
+			history = append(history, h)
+		}
+		if err := historyRows.Err(); err != nil {
+			writeAdminError(w, http.StatusInternalServerError, "DB_QUERY_FAILED", "grading history unavailable")
+			return
 		}
 		// grading_detail JSON 返回为 raw json (不要 base64).
 		var dj any
@@ -1220,10 +1424,13 @@ func detailSubmissionHandler(deps Dependencies) http.HandlerFunc {
 				"employee_id": empID, "name": name,
 				"grading_status": gstatus, "grading_generation": gen,
 				"review_status": rstatus, "total_score": totScore,
+				"round_no": roundNo, "run_is_legacy": runIsLegacy, "historical_grade": historicalGrade,
 				"grading_error": gradingErr,
 				"submitted_at":  submittedAt, "grading_detail": dj,
 			},
-			"review_logs": logs,
+			"review_logs":     logs,
+			"regrade_events":  regradeEvents,
+			"grading_history": history,
 		})
 	}
 }
@@ -1243,18 +1450,22 @@ func reviewSubmissionHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			QuestionID string  `json:"question_id"`
-			SubQID     string  `json:"sub_question_id"`
-			NewScore   float64 `json:"new_score"`
-			Note       string  `json:"note"`
+			QuestionID string   `json:"question_id"`
+			SubQID     string   `json:"sub_question_id"`
+			NewScore   *float64 `json:"new_score"`
+			Note       string   `json:"note"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_BODY", err.Error())
+			return
+		}
+		if body.NewScore == nil {
+			writeAdminError(w, http.StatusBadRequest, "SCORE_REQUIRED", "请明确填写复核分数")
 			return
 		}
 		res, err := deps.Review.Apply(r.Context(), review.ApplyInput{
 			SubmissionID: id, QuestionID: body.QuestionID, SubQID: body.SubQID,
-			NewScore: body.NewScore, Note: body.Note,
+			NewScore: *body.NewScore, Note: body.Note, Actor: auditActor(r),
 		})
 		if err != nil {
 			code, msg := mapReviewErr(err)
@@ -1280,7 +1491,14 @@ func regradeSubmissionHandler(deps Dependencies) http.HandlerFunc {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_ID", "submission id invalid")
 			return
 		}
-		res, err := deps.Review.Regrade(r.Context(), review.RegradeInput{SubmissionID: id})
+		var body struct {
+			Reason string `json:"reason"`
+		}
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
+			writeAdminError(w, http.StatusBadRequest, "REVIEW_REASON_REQUIRED", "请填写重新评分原因")
+			return
+		}
+		res, err := deps.Review.Regrade(r.Context(), review.RegradeInput{SubmissionID: id, Actor: auditActor(r), Reason: body.Reason})
 		if err != nil {
 			code, msg := mapReviewErr(err)
 			writeAdminError(w, code, msg.code, msg.msg)
@@ -1816,6 +2034,18 @@ func mapReviewErr(err error) (int, reviewErr) {
 		return http.StatusNotFound, reviewErr{"QUESTION_NOT_FOUND", err.Error()}
 	case errors.Is(err, review.ErrScoreOutOfRange):
 		return http.StatusBadRequest, reviewErr{"SCORE_OUT_OF_RANGE", err.Error()}
+	case errors.Is(err, review.ErrReasonRequired):
+		return http.StatusBadRequest, reviewErr{"REVIEW_REASON_REQUIRED", "请填写1至2000字的审核或重评原因"}
+	case errors.Is(err, review.ErrQueueUnavailable):
+		return http.StatusServiceUnavailable, reviewErr{"REGRADE_QUEUE_UNAVAILABLE", err.Error()}
 	}
 	return http.StatusInternalServerError, reviewErr{"REVIEW_INTERNAL", err.Error()}
+}
+
+func auditActor(r *http.Request) string {
+	actor := auth.UsernameFromContext(r.Context())
+	if actor == "" {
+		return "local-admin"
+	}
+	return actor
 }

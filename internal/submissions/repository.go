@@ -122,7 +122,7 @@ type SubmissionRead interface {
 	FindRunByID(ctx context.Context, q PoolExec, runID string) (*RunLite, error)
 	DuplicateExists(ctx context.Context, q PoolExec, runID, employeeID string) (bool, error)
 	FindIDForRunEmployee(ctx context.Context, q PoolExec, runID, employeeID string) (string, error)
-	GetByID(ctx context.Context, q PoolExec, submissionID string) (*Submission, error)
+	GetByID(ctx context.Context, q PoolExec, submissionID, sessionToken string) (*Submission, error)
 }
 
 // DuplicateExists 查 (run_id, employee_id) 是否已有 submissions 行.
@@ -156,16 +156,23 @@ func (r *Repository) FindIDForRunEmployee(ctx context.Context, q PoolExec,
 	return id, nil
 }
 
-// GetByID 取单行; 不存在返回 ErrNoRows.字段精简到 StatusResult 所需.
-func (r *Repository) GetByID(ctx context.Context, q PoolExec, submissionID string) (*Submission, error) {
+// GetByID 按 submission ID 和 session token hash 取公开状态所需字段.
+func (r *Repository) GetByID(ctx context.Context, q PoolExec, submissionID, sessionToken string) (*Submission, error) {
 	const sql = `SELECT id::text, grading_status, review_status,
-		COALESCE(objective_score, 0)::float8
-		FROM submissions WHERE id = $1::bigint`
+		COALESCE(objective_score, 0)::float8,
+		COALESCE(subjective_score_machine, 0)::float8, grading_detail_json
+		FROM submissions s
+		WHERE s.id = $1::bigint AND EXISTS (
+			SELECT 1 FROM exam_sessions es
+			WHERE es.run_id = s.run_id AND es.employee_id = s.employee_id
+			  AND es.session_token_hash = $2
+		)`
 	var s Submission
-	if err := q.QueryRow(ctx, sql, submissionID).Scan(
-		&s.ID, &s.GradingStatus, &s.ReviewStatus, &s.ObjectiveScore); err != nil {
+	if err := q.QueryRow(ctx, sql, submissionID, hashToken(sessionToken)).Scan(
+		&s.ID, &s.GradingStatus, &s.ReviewStatus, &s.ObjectiveScore,
+		&s.SubjectiveScore, &s.GradingDetailJSON); err != nil {
 		if isPgNoRows(err) {
-			return nil, fmt.Errorf("%w: submission %s not found", ErrNoRows, submissionID)
+			return nil, fmt.Errorf("%w: submission status unavailable", ErrNoRows)
 		}
 		return nil, fmt.Errorf("submissions.GetByID: %w", err)
 	}

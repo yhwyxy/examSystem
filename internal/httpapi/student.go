@@ -1,7 +1,8 @@
 // Package httpapi - student.go
 // Task 6 学生提交 HTTP 路径:
-//   POST /api/session/submit         -> submitHandler (调 submissions.Service.Submit)
-//   GET  /api/submission/{id}/status -> submissionStatusHandler (调 GetByID)
+//
+//	POST /api/session/submit         -> submitHandler (调 submissions.Service.Submit)
+//	GET  /api/submission/{id}/status -> submissionStatusHandler (调 GetByID)
 //
 // 编排权威在 submissions.Service.Submit; handler 仅做 request/response + façade-level
 // 错误映射 (validation / 未注入 -> 400/503; 业务错误按 submissions.* 错).
@@ -46,12 +47,12 @@ func submitHandler(deps Dependencies) http.HandlerFunc {
 		ua := userAgentFromRequest(r)
 
 		res, err := svc.Submit(r.Context(), submissions.SubmitRequest{
-			SessionToken:      body.SessionToken,
-			Answers:           body.Answers,
-			AnswersMap:        answersMap,
-			ClientIP:          clientIP,
-			UserAgent:         ua,
-			AutoSubmitReason:  body.AutoSubmitReason,
+			SessionToken:     body.SessionToken,
+			Answers:          body.Answers,
+			AnswersMap:       answersMap,
+			ClientIP:         clientIP,
+			UserAgent:        ua,
+			AutoSubmitReason: body.AutoSubmitReason,
 		})
 		if err != nil {
 			submitErrorToHTTP(w, err)
@@ -65,9 +66,8 @@ func submitHandler(deps Dependencies) http.HandlerFunc {
 	}
 }
 
-// submissionStatusHandler 处理 GET /api/submission/{id}/status (plan Step 4: 仅 4 字段).
-// 响应: { submission_id, grading_status, review_status, objective_score }.
-// 不暴露评分原始数组 / 错误 / 身份.
+// submissionStatusHandler 处理 GET /api/submission/{id}/status.
+// 通过 Authorization Bearer session-token 鉴权；只返回进度及分数，不暴露答案、身份或原始评分细节.
 func submissionStatusHandler(deps Dependencies) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		svc := deps.SubmissionsService
@@ -80,7 +80,13 @@ func submissionStatusHandler(deps Dependencies) http.HandlerFunc {
 			writeStudentError(w, http.StatusBadRequest, "INVALID_ID", "submission id missing")
 			return
 		}
-		status, err := svc.GetStatus(r.Context(), id)
+		token := strings.TrimSpace(r.Header.Get("Authorization"))
+		if scheme, value, found := strings.Cut(token, " "); found && strings.EqualFold(scheme, "Bearer") {
+			token = strings.TrimSpace(value)
+		} else {
+			token = ""
+		}
+		status, err := svc.GetStatus(r.Context(), id, token)
 		if err != nil {
 			submitErrorToHTTP(w, err)
 			return
@@ -166,4 +172,3 @@ func writeStudentError(w http.ResponseWriter, status int, code, message string) 
 		},
 	})
 }
-

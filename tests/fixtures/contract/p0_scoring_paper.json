@@ -1,0 +1,13 @@
+{
+  "paper_id": "p0-scoring",
+  "name": "P0 固定评分验收卷",
+  "exam_info": {"title": "P0 验收", "description": "文本、计算、SQL、编程和复合题", "total_score": 55, "passing_score": 33},
+  "questions": [
+    {"id":"choice","type":"single_choice","question":"选择 A","score":5,"options":[{"key":"A","text":"正确"},{"key":"B","text":"错误"}],"answer":"A"},
+    {"id":"text","type":"short_answer","scoring_mode":"text","question":"地球和太阳的运动关系是什么？","score":10,"answer":"地球围绕太阳运行。","scoring_points":[{"id":"orbit","text":"地球绕太阳公转","score":10,"required":true,"critical":true,"conflict_policy":"zero_total"}]},
+    {"id":"calc","type":"short_answer","scoring_mode":"calculation","question":"计算 2+3，写出过程与结果。","score":10,"answer":"2+3=5","calculation":{"strategy":"static_values","steps":[{"id":"addition","description":"加法步骤","expected":5,"score":4,"tolerance":0}],"final_answers":[{"id":"value","description":"结果 5","expected":5,"score":6,"tolerance":0}]}},
+    {"id":"sql","type":"short_answer","scoring_mode":"sql","question":"查询 users 表的 id，按 id 升序。","score":10,"answer":"SELECT id FROM users ORDER BY id"},
+    {"id":"code","type":"short_answer","scoring_mode":"code","code_language":"python","allowed_languages":["python","javascript"],"question":"实现 add(a,b) 返回两数之和。","score":10,"answer":"def add(a,b): return a+b","answers_by_language":{"python":"def add(a,b): return a+b","javascript":"function add(a,b) { return a+b; }"},"scoring_points_by_language":{"python":[{"id":"py-add","text":"return a+b","score":10}],"javascript":[{"id":"js-add","text":"return a+b","score":10}]}},
+    {"id":"composite","type":"composite","question":"分别说明公转关系并查询用户编号。","score":10,"subquestions":[{"id":"explain","type":"short_answer","scoring_mode":"text","question":"说明地球公转。","score":4,"answer":"地球围绕太阳运行。","scoring_points":[{"id":"sub-orbit","text":"地球绕太阳公转","score":4}]},{"id":"query","type":"short_answer","scoring_mode":"sql","question":"查询 users.id。","score":6,"answer":"SELECT id FROM users"}]}
+  ]
+}

@@ -3,16 +3,16 @@
 //   - types.go: 共享类型 (Document / Question / Answer / Option) + 允许集合常量
 //   - sanitize.go: SanitizeForStudent 100% 对齐 Python sanitize_for_student
 //   - validate.go: ValidateDocument 100% 对齐 Python validate_questions +
-//                  slug 安全正则 + 路径防逃逸
+//     slug 安全正则 + 路径防逃逸
 //   - snapshot.go: LoadSnapshot(path, sha256) 必须校哈希
 //   - store.go: 文件存储 + 原子写 + per-slug mutex
 //
 // 设计要点 (Task 4):
-//   * Document 是 JSON 加载钝化的 map 形态, 字段松: 与 Python 端 dict 等价,
+//   - Document 是 JSON 加载钝化的 map 形态, 字段松: 与 Python 端 dict 等价,
 //     保留所有原 key (含 exam_info / questions) ; 不用结构体硬绑 schema,
 //     便于向后兼容 Python paper.json 任意版本.
-//   * 路径安全: 所有相对路径以可配 data root 解析, 再用 filepath.Rel 二次确认无逃逸.
-//   * 写入: 同目录 tmp 文件 + fsync + rename; per-slug sync.Mutex 串行化写入,
+//   - 路径安全: 所有相对路径以可配 data root 解析, 再用 filepath.Rel 二次确认无逃逸.
+//   - 写入: 同目录 tmp 文件 + fsync + rename; per-slug sync.Mutex 串行化写入,
 //     避免 paper 同时被两线程改写不一致.
 package papers
 
@@ -49,8 +49,8 @@ var (
 	}
 	subjectiveTypes = map[string]struct{}{
 		"short_answer": {},
-		"essay":         {},
-		"composite":     {},
+		"essay":        {},
+		"composite":    {},
 	}
 
 	allowedScoringModes = map[string]struct{}{
@@ -80,12 +80,15 @@ var (
 	}
 
 	sensitiveFields = map[string]struct{}{
-		"answer":                       {},
-		"answers_by_language":          {},
-		"calculation":                  {},
-		"scoring_points":               {},
-		"scoring_points_by_language":   {},
-		"scoring_rubric":               {},
+		"answer":                     {},
+		"answers_by_language":        {},
+		"calculation":                {},
+		"sql_test_datasets":          {},
+		"sql_execution":              {},
+		"code_test_cases":            {},
+		"scoring_points":             {},
+		"scoring_points_by_language": {},
+		"scoring_rubric":             {},
 	}
 )
 

@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 )
@@ -45,17 +46,39 @@ func ParseScoringMethod(s string) (ScoringMethod, error) {
 
 // ScoringConfig 是评分方式的完整配置 (DB 存储形态).
 type ScoringConfig struct {
-	Method       ScoringMethod `json:"method"`
-	RerankAPIURL string        `json:"rerank_api_url,omitempty"`
-	RerankAPIKey string        `json:"rerank_api_key,omitempty"`
-	RerankModel  string        `json:"rerank_model,omitempty"`
-	LLMAPIURL    string        `json:"llm_api_url,omitempty"`
-	LLMAPIPKey   string        `json:"llm_api_key,omitempty"`
-	LLMModel     string        `json:"llm_model,omitempty"`
+	Method          ScoringMethod `json:"method"`
+	RerankAPIURL    string        `json:"rerank_api_url,omitempty"`
+	RerankAPIKey    string        `json:"rerank_api_key,omitempty"`
+	RerankModel     string        `json:"rerank_model,omitempty"`
+	LLMAPIURL       string        `json:"llm_api_url,omitempty"`
+	LLMAPIPKey      string        `json:"llm_api_key,omitempty"`
+	LLMModel        string        `json:"llm_model,omitempty"`
+	EmbeddingAPIURL string        `json:"embedding_api_url,omitempty"`
+	EmbeddingAPIKey string        `json:"embedding_api_key,omitempty"`
+	EmbeddingModel  string        `json:"embedding_model,omitempty"`
 }
 
 // Validate 校验配置完整性: remote_reranker/llm 必须有对应 url+key+model.
 func (c *ScoringConfig) Validate() error {
+	embeddingValues := []string{strings.TrimSpace(c.EmbeddingAPIURL), strings.TrimSpace(c.EmbeddingAPIKey), strings.TrimSpace(c.EmbeddingModel)}
+	embeddingCount := 0
+	for _, value := range embeddingValues {
+		if value != "" {
+			embeddingCount++
+		}
+	}
+	if embeddingCount != 0 && embeddingCount != len(embeddingValues) {
+		return fmt.Errorf("语义向量配置需要同时提供 embedding_api_url、embedding_api_key 和 embedding_model")
+	}
+	if len(c.EmbeddingAPIURL) > 2048 || len(c.EmbeddingAPIKey) > 4096 || len(c.EmbeddingModel) > 200 {
+		return fmt.Errorf("语义向量配置字段超出长度限制")
+	}
+	if embeddingCount == len(embeddingValues) {
+		parsed, err := url.Parse(strings.TrimSpace(c.EmbeddingAPIURL))
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil || parsed.Fragment != "" {
+			return fmt.Errorf("embedding_api_url 必须是有效的 HTTP(S) 地址")
+		}
+	}
 	switch c.Method {
 	case MethodLocal:
 		return nil
@@ -99,13 +122,16 @@ func (c *ScoringConfig) Validate() error {
 // 新增 SCORING_METHOD 显式指定 (local/remote_reranker/llm), 优先于 RERANK_USE_REMOTE.
 func LoadScoringFromEnv() *ScoringConfig {
 	cfg := &ScoringConfig{
-		Method:       MethodLocal,
-		RerankAPIURL: strings.TrimSpace(os.Getenv("RERANK_API_URL")),
-		RerankAPIKey: strings.TrimSpace(os.Getenv("RERANK_API_KEY")),
-		RerankModel:  strings.TrimSpace(os.Getenv("RERANK_MODEL")),
-		LLMAPIURL:    strings.TrimSpace(os.Getenv("LLM_API_URL")),
-		LLMAPIPKey:   strings.TrimSpace(os.Getenv("LLM_API_KEY")),
-		LLMModel:     strings.TrimSpace(os.Getenv("LLM_MODEL")),
+		Method:          MethodLocal,
+		RerankAPIURL:    strings.TrimSpace(os.Getenv("RERANK_API_URL")),
+		RerankAPIKey:    strings.TrimSpace(os.Getenv("RERANK_API_KEY")),
+		RerankModel:     strings.TrimSpace(os.Getenv("RERANK_MODEL")),
+		LLMAPIURL:       strings.TrimSpace(os.Getenv("LLM_API_URL")),
+		LLMAPIPKey:      strings.TrimSpace(os.Getenv("LLM_API_KEY")),
+		LLMModel:        strings.TrimSpace(os.Getenv("LLM_MODEL")),
+		EmbeddingAPIURL: strings.TrimSpace(os.Getenv("ANSWER_EMBEDDING_API_URL")),
+		EmbeddingAPIKey: strings.TrimSpace(os.Getenv("ANSWER_EMBEDDING_API_KEY")),
+		EmbeddingModel:  strings.TrimSpace(os.Getenv("ANSWER_EMBEDDING_MODEL")),
 	}
 	if m := strings.TrimSpace(os.Getenv("SCORING_METHOD")); m != "" {
 		if parsed, err := ParseScoringMethod(m); err == nil {

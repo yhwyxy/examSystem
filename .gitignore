@@ -52,6 +52,7 @@ models/
 # (worker 镜像离线构建依赖它, 见 Dockerfile.worker; 升级版本时同步改这里)
 packages/*
 !packages/subjective_scoring-0.1.13-py3-none-any.whl
+!packages/subjective_scoring-0.1.14-py3-none-any.whl
 benchmarks/
 logs/
 
@@ -59,6 +60,7 @@ logs/
 docs/*
 # 例外: 部署文档保持入库 (DEPLOY.md / README 引用, 需随代码演进)
 !docs/deployment-*.md
+!docs/release-rollout-runbook.md
 评分系统迭代流程.md
 主观题评分误差分析.md
 

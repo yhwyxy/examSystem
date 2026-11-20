@@ -38,9 +38,9 @@ def run_one_job(conn, cfg, snapshot_cache, ssvc: object) -> bool:
     -> fail_job + conn.rollback 后续再退. 返回 idle (False) / processed (True).
     """
     job = repo.claim_job(conn, cfg.worker_id, cfg.lease_seconds)
+    conn.commit()  # Also persist exhausted-lease cleanup when no job remains.
     if job is None:
         return False
-    conn.commit()
 
     try:
         payload = repo.load_job_payload(conn, job.id)
@@ -109,7 +109,10 @@ def _load_preserve_index(conn, submission_id: int) -> dict | None:
             continue
         # 条目键兼容: 规范格式 question_id, worker 旧格式仅 id.
         qid = str(e.get("question_id") or e.get("id"))
-        if e.get("manually_reviewed") is not True:
+        if e.get("manually_reviewed") is not True and not any(
+            s.get("manually_reviewed") for s in (e.get("sub_results") or [])
+            if isinstance(s, dict)
+        ):
             # keep only manual preserved entries
             if e.get("review_status") in {"approved_manual", "rejected_manual"}:
                 out[qid] = e

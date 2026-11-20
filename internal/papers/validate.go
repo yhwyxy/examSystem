@@ -18,7 +18,9 @@ package papers
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
+	"unicode/utf8"
 )
 
 // ValidationError 是单条校验失败. Code 用于 i18n / cause; Msg 人类可读.
@@ -94,6 +96,29 @@ func ValidateDocument(doc Document) error {
 	validateDocument(mu, doc)
 	mu.dedup()
 	return mu.asCallerError()
+}
+
+// ValidateStandaloneQuestion applies the same question contract used by paper files,
+// without requiring callers to manufacture a paper document.
+func ValidateStandaloneQuestion(question Question) error {
+	if question == nil {
+		return fmt.Errorf("question is nil")
+	}
+	score := anyNumber(question["score"])
+	if score == nil {
+		return fmt.Errorf("question score is required")
+	}
+	return ValidateDocument(Document{
+		"paper_id": "question-bank-validation",
+		"name":     "Question bank validation",
+		"exam_info": map[string]any{
+			"title":         "Question bank validation",
+			"description":   "Question bank validation",
+			"total_score":   *score,
+			"passing_score": 0,
+		},
+		"questions": []any{question},
+	})
 }
 
 // validateDocument 是真正的实现, 收集 type/option/subjective_mode/composite sub
@@ -203,7 +228,7 @@ func validateOne(mu *MultiError, q Question, i int) {
 	}
 	if score := anyNumber(q["score"]); score == nil {
 		mu.add("missing", prefix+": score required")
-	} else if *score <= 0 {
+	} else if *score <= 0 || math.IsNaN(*score) || math.IsInf(*score, 0) {
 		mu.add("score", prefix+": score must be > 0")
 	}
 	if stringOr(q, "question") == "" {
@@ -220,6 +245,325 @@ func validateOne(mu *MultiError, q Question, i int) {
 		validateAnswerTextOrList(mu, q, prefix)
 	case "composite":
 		validateSubQuestions(mu, q, prefix)
+	}
+	validateScoringPoints(mu, q, prefix)
+	validateSQLTestDatasets(mu, q, prefix)
+	validateCodeTestCases(mu, q, prefix)
+}
+
+func validateCodeTestCases(mu *MultiError, q Question, prefix string) {
+	rawCases, exists := q["code_test_cases"]
+	if !exists {
+		return
+	}
+	cases, ok := rawCases.([]any)
+	if !ok {
+		mu.add("code_execution", prefix+": code_test_cases must be a list")
+		return
+	}
+	if len(cases) == 0 {
+		return
+	}
+	if len(cases) < 2 || len(cases) > 12 {
+		mu.add("code_execution", prefix+": code_test_cases must contain 2 to 12 cases")
+	}
+	if stringOr(q, "scoring_mode") != "code" {
+		mu.add("code_execution", prefix+": code_test_cases require scoring_mode=code")
+	}
+	if stringOr(q, "code_language") == "" {
+		mu.add("code_execution", prefix+": code_test_cases require code_language")
+	}
+	names := make(map[string]bool, len(cases))
+	visibilities := make(map[string]bool, 2)
+	for i, rawCase := range cases {
+		path := fmt.Sprintf("%s.code_test_cases[%d]", prefix, i)
+		item, ok := rawCase.(map[string]any)
+		if !ok {
+			mu.add("code_execution", path+": test case must be an object")
+			continue
+		}
+		name := stringOr(item, "name")
+		if strings.TrimSpace(name) == "" || utf8.RuneCountInString(name) > 80 {
+			mu.add("code_execution", path+": name must be a non-empty string up to 80 characters")
+		}
+		nameKey := strings.ToLower(strings.TrimSpace(name))
+		if names[nameKey] {
+			mu.add("code_execution", path+": test case names must be unique")
+		}
+		names[nameKey] = true
+		visibility := stringOr(item, "visibility")
+		if visibility != "public" && visibility != "hidden" {
+			mu.add("code_execution", path+": visibility must be public or hidden")
+		} else {
+			visibilities[visibility] = true
+		}
+		for _, key := range []string{"input", "expected_output"} {
+			value, ok := item[key].(string)
+			if !ok || utf8.RuneCountInString(value) > 16384 || strings.ContainsRune(value, 0) {
+				mu.add("code_execution", path+": input and expected_output must be strings up to 16384 characters")
+			}
+		}
+	}
+	if !visibilities["public"] || !visibilities["hidden"] {
+		mu.add("code_execution", prefix+": code_test_cases must include public and hidden cases")
+	}
+}
+
+func validateSQLTestDatasets(mu *MultiError, q Question, prefix string) {
+	mutationTables := validateSQLExecutionPolicy(mu, q, prefix)
+	dialect, hasDialect := q["sql_dialect"]
+	if hasDialect {
+		name, ok := dialect.(string)
+		if !ok || strings.TrimSpace(name) == "" || len(name) > 32 {
+			mu.add("sql_execution", prefix+": sql_dialect must be a non-empty string")
+		}
+	}
+	rawDatasets, exists := q["sql_test_datasets"]
+	if !exists {
+		return
+	}
+	datasets, ok := rawDatasets.([]any)
+	if !ok {
+		mu.add("sql_execution", prefix+": sql_test_datasets must be a list")
+		return
+	}
+	if len(datasets) > 20 {
+		mu.add("sql_execution", prefix+": sql_test_datasets must contain at most 20 datasets")
+	}
+	if len(datasets) > 0 && !hasDialect {
+		mu.add("sql_execution", prefix+": sql_dialect is required when sql_test_datasets are configured")
+	}
+	datasetNames := make(map[string]bool, len(datasets))
+	for i, rawDataset := range datasets {
+		path := fmt.Sprintf("%s.sql_test_datasets[%d]", prefix, i)
+		dataset, ok := rawDataset.(map[string]any)
+		if !ok {
+			mu.add("sql_execution", path+": dataset must be an object")
+			continue
+		}
+		name := stringOr(dataset, "name")
+		if strings.TrimSpace(name) == "" || len(name) > 80 {
+			mu.add("sql_execution", path+": name must be a non-empty string up to 80 characters")
+		}
+		if datasetNames[strings.ToLower(name)] {
+			mu.add("sql_execution", path+": dataset names must be unique")
+		}
+		datasetNames[strings.ToLower(name)] = true
+		visibility := stringOr(dataset, "visibility")
+		if visibility != "" && visibility != "public" && visibility != "hidden" {
+			mu.add("sql_execution", path+": visibility must be public or hidden")
+		}
+		rawTables, ok := dataset["tables"]
+		if !ok {
+			rawTables = []any{}
+		}
+		tables, ok := rawTables.([]any)
+		if !ok || len(tables) > 50 {
+			mu.add("sql_execution", path+": tables must be a list with at most 50 entries")
+			continue
+		}
+		tableNames := make(map[string]bool, len(tables))
+		totalRows, totalCells := 0, 0
+		for tableIndex, rawTable := range tables {
+			tablePath := fmt.Sprintf("%s.tables[%d]", path, tableIndex)
+			table, ok := rawTable.(map[string]any)
+			if !ok {
+				mu.add("sql_execution", tablePath+": table must be an object")
+				continue
+			}
+			tableName := stringOr(table, "name")
+			if !validSQLIdentifier(tableName) || tableNames[strings.ToLower(tableName)] {
+				mu.add("sql_execution", tablePath+": table name must be a unique SQL identifier")
+			}
+			tableNames[strings.ToLower(tableName)] = true
+			rawColumns, ok := table["columns"].([]any)
+			if !ok || len(rawColumns) == 0 || len(rawColumns) > 50 {
+				mu.add("sql_execution", tablePath+": columns must be a non-empty list with at most 50 entries")
+				continue
+			}
+			columnNames := make(map[string]bool, len(rawColumns))
+			for columnIndex, rawColumn := range rawColumns {
+				columnPath := fmt.Sprintf("%s.columns[%d]", tablePath, columnIndex)
+				column, ok := rawColumn.(map[string]any)
+				if !ok {
+					mu.add("sql_execution", columnPath+": column must be an object")
+					continue
+				}
+				columnName := stringOr(column, "name")
+				if !validSQLIdentifier(columnName) || columnNames[strings.ToLower(columnName)] {
+					mu.add("sql_execution", columnPath+": column name must be a unique SQL identifier")
+				}
+				columnNames[strings.ToLower(columnName)] = true
+				columnType := strings.ToUpper(stringOr(column, "type"))
+				if columnType == "" {
+					columnType = "TEXT"
+				}
+				if columnType != "INTEGER" && columnType != "REAL" && columnType != "TEXT" && columnType != "BLOB" && columnType != "NUMERIC" {
+					mu.add("sql_execution", columnPath+": unsupported SQLite column type")
+				}
+			}
+			rawRows, ok := table["rows"]
+			if !ok {
+				rawRows = []any{}
+			}
+			rows, ok := rawRows.([]any)
+			if !ok || len(rows) > 1000 {
+				mu.add("sql_execution", tablePath+": rows must be a list with at most 1000 entries")
+				continue
+			}
+			totalRows += len(rows)
+			totalCells += len(rows) * len(rawColumns)
+			for rowIndex, rawRow := range rows {
+				row, ok := rawRow.([]any)
+				if !ok || len(row) != len(rawColumns) {
+					mu.add("sql_execution", fmt.Sprintf("%s.rows[%d]: row width must match columns", tablePath, rowIndex))
+					continue
+				}
+				for _, cell := range row {
+					if !validSQLTestCell(cell) {
+						mu.add("sql_execution", tablePath+": cells must be finite JSON scalars up to 4096 characters")
+					}
+				}
+			}
+		}
+		for _, table := range mutationTables {
+			if !tableNames[table] {
+				mu.add("sql_execution", path+": allowed mutation table must exist in every fixture: "+table)
+			}
+		}
+		if totalRows > 2000 || totalCells > 20000 {
+			mu.add("sql_execution", path+": dataset exceeds row or cell limits")
+		}
+	}
+}
+
+func validSQLIdentifier(value string) bool {
+	if value == "" || len(value) > 63 {
+		return false
+	}
+	for i, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || char == '_' || (i > 0 && char >= '0' && char <= '9') {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func validSQLTestCell(value any) bool {
+	switch cell := value.(type) {
+	case nil, bool, int, int64:
+		return true
+	case float64:
+		return !math.IsNaN(cell) && !math.IsInf(cell, 0)
+	case string:
+		return utf8.RuneCountInString(cell) <= 4096
+	default:
+		return false
+	}
+}
+
+func validateScoringPoints(mu *MultiError, q Question, prefix string) {
+	validatePointList := func(raw any, path string) {
+		points, ok := raw.([]any)
+		if !ok {
+			mu.add("scoring_points", path+": must be a list")
+			return
+		}
+		ids := map[string]bool{}
+		for i, rawPoint := range points {
+			p, ok := rawPoint.(map[string]any)
+			if !ok {
+				mu.add("scoring_points", path+": point must be an object")
+				continue
+			}
+			id := stringOr(p, "id")
+			if id == "" {
+				id = fmt.Sprintf("p%d", i+1) // Legacy points without an ID.
+			}
+			if ids[id] {
+				mu.add("scoring_points", path+": duplicate point ID "+id)
+			}
+			ids[id] = true
+			pointText := stringOr(p, "text")
+			if strings.TrimSpace(pointText) == "" {
+				mu.add("scoring_points", path+": point text required")
+			} else if utf8.RuneCountInString(pointText) > 500 {
+				mu.add("scoring_points", path+": point text must contain at most 500 characters")
+			}
+			if score := anyNumber(p["score"]); score == nil || *score < 0 || math.IsNaN(*score) || math.IsInf(*score, 0) {
+				mu.add("scoring_points", path+": point score must be finite and nonnegative")
+			}
+			for _, key := range []string{"required", "critical"} {
+				if value, exists := p[key]; exists {
+					if _, ok := value.(bool); !ok {
+						mu.add("scoring_points", path+": "+key+" must be boolean")
+					}
+				}
+			}
+			if policy, exists := p["conflict_policy"]; exists && policy != "point_zero" && policy != "cap_total" && policy != "zero_total" {
+				mu.add("scoring_points", path+": invalid conflict_policy")
+			}
+			if ratio, exists := p["conflict_score_cap_ratio"]; exists {
+				if cap := anyNumber(ratio); cap == nil || *cap < 0 || *cap > 1 || math.IsNaN(*cap) || math.IsInf(*cap, 0) {
+					mu.add("scoring_points", path+": conflict_score_cap_ratio must be in [0, 1]")
+				}
+			}
+			for _, key := range []string{"accepted_expressions", "key_conditions"} {
+				rawValues, exists := p[key]
+				if !exists {
+					continue
+				}
+				values, ok := rawValues.([]any)
+				if !ok {
+					mu.add("scoring_points", path+": "+key+" must be a list")
+					continue
+				}
+				if len(values) > 30 {
+					mu.add("scoring_points", path+": "+key+" must contain at most 30 entries")
+				}
+				seen := make(map[string]bool, len(values))
+				for _, rawValue := range values {
+					value, ok := rawValue.(string)
+					if !ok || strings.TrimSpace(value) == "" {
+						mu.add("scoring_points", path+": "+key+" entries must be non-empty strings")
+						continue
+					}
+					value = strings.TrimSpace(value)
+					if utf8.RuneCountInString(value) > 500 {
+						mu.add("scoring_points", path+": "+key+" entries must contain at most 500 characters")
+					}
+					if seen[value] {
+						mu.add("scoring_points", path+": "+key+" entries must be unique")
+					}
+					seen[value] = true
+				}
+			}
+			if rawEvidence, exists := p["source_evidence"]; exists {
+				evidence, ok := rawEvidence.(string)
+				if !ok || strings.TrimSpace(evidence) == "" {
+					mu.add("scoring_points", path+": source_evidence must be a non-empty string")
+				} else if utf8.RuneCountInString(evidence) > 2000 {
+					mu.add("scoring_points", path+": source_evidence must contain at most 2000 characters")
+				}
+			}
+		}
+	}
+	if points, exists := q["scoring_points"]; exists {
+		validatePointList(points, prefix+".scoring_points")
+	}
+	if raw, exists := q["scoring_points_by_language"]; exists {
+		values, ok := raw.(map[string]any)
+		if !ok {
+			mu.add("scoring_points", prefix+": scoring_points_by_language must be an object")
+			return
+		}
+		for language, points := range values {
+			if _, ok := allowedCodeLanguages[language]; !ok {
+				mu.add("code_language", prefix+": invalid scoring point language "+language)
+			}
+			validatePointList(points, prefix+".scoring_points_by_language."+language)
+		}
 	}
 }
 
@@ -411,6 +755,9 @@ func validateSubQuestions(mu *MultiError, q Question, prefix string) {
 			// 子题无 type -> 默认 short_answer (与 Python 一致)
 			validateSubjectiveModeAndLanguage(mu, s, sp)
 			validateAnswerTextOrList(mu, s, sp)
+			validateScoringPoints(mu, s, sp)
+			validateSQLTestDatasets(mu, s, sp)
+			validateCodeTestCases(mu, s, sp)
 		} else if _, ok := allowedTypes[stype]; !ok {
 			mu.add("type", sp+": invalid subquestion type "+stype)
 		} else {

@@ -32,10 +32,11 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/crypto/bcrypt"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/yhwyxy/examSystem/internal/adminusers"
+	"github.com/yhwyxy/examSystem/internal/answersimilarity"
 	"github.com/yhwyxy/examSystem/internal/auth"
 	"github.com/yhwyxy/examSystem/internal/config"
 	"github.com/yhwyxy/examSystem/internal/db"
@@ -44,9 +45,12 @@ import (
 	"github.com/yhwyxy/examSystem/internal/jobs"
 	"github.com/yhwyxy/examSystem/internal/objective"
 	"github.com/yhwyxy/examSystem/internal/papers"
+	"github.com/yhwyxy/examSystem/internal/publication"
+	"github.com/yhwyxy/examSystem/internal/questionbank"
 	"github.com/yhwyxy/examSystem/internal/ratelimit"
 	"github.com/yhwyxy/examSystem/internal/review"
 	"github.com/yhwyxy/examSystem/internal/runs"
+	"github.com/yhwyxy/examSystem/internal/scoreanomaly"
 	"github.com/yhwyxy/examSystem/internal/sessions"
 	"github.com/yhwyxy/examSystem/internal/settings"
 	"github.com/yhwyxy/examSystem/internal/submissions"
@@ -188,7 +192,7 @@ func cmdServe(args []string) error {
 		cfg.Exam.GracePeriodSeconds)
 
 	// Task 9: auth + papers + 注入 admin 路由. enable_auth=false -> RequireAdmin 放行.
-	// 密码校验优先级: settings DB bcrypt hash > config.yaml 明文 (secretFn 兜底).
+	// named admin account authenticates each administrator independently.
 	authStore := auth.NewStore(cfg.Admin.EnableAuth,
 		func() (string, error) {
 			if cfg.Admin.Password == nil {
@@ -198,19 +202,39 @@ func cmdServe(args []string) error {
 		})
 	// 管理端设置存储 (app_settings 表): 密码 + 评分方式. DB 可用时注入密码 provider.
 	settingsStore := settings.NewStore(pool)
+	adminUsersStore := adminusers.NewStore(pool)
+	bootstrapPassword := ""
+	if cfg.Admin.Password != nil {
+		bootstrapPassword = *cfg.Admin.Password
+	}
+	existingPasswordHash, err := settingsStore.LoadPasswordHash(context.Background())
+	if err != nil && !errors.Is(err, settings.ErrNotFound) {
+		return fmt.Errorf("load bootstrap admin password: %w", err)
+	}
+	passwordHash := ""
+	if existingPasswordHash != nil {
+		passwordHash = existingPasswordHash.Hash
+	}
+	ctxBootstrap, cancelBootstrap := context.WithTimeout(context.Background(), 15*time.Second)
+	if err := adminUsersStore.EnsureBootstrapAdmin(ctxBootstrap, bootstrapPassword, passwordHash); err != nil {
+		cancelBootstrap()
+		return fmt.Errorf("bootstrap named admin account: %w", err)
+	}
+	cancelBootstrap()
 	authStore.SetPasswordProvider(auth.PasswordProvider{
 		Check: func(ctx context.Context, password string) (bool, error) {
-			// DB bcrypt hash 优先; 未设置时回退 secretFn (config 明文, 兼容首改场景).
-			doc, err := settingsStore.LoadPasswordHash(ctx)
-			if err != nil {
-				return false, err
+			// Password changes are account-scoped; validate against the named admin record.
+			_, err := adminUsersStore.Authenticate(ctx, "admin", password)
+			if errors.Is(err, auth.ErrInvalidCredentials) {
+				return false, nil
 			}
-			if doc != nil && doc.Hash != "" {
-				return bcrypt.CompareHashAndPassword([]byte(doc.Hash), []byte(password)) == nil, nil
-			}
-			return authStore.VerifyLegacyPassword(password)
+			return err == nil, err
 		},
+		Authenticate: adminUsersStore.Authenticate,
 		Set: func(ctx context.Context, newPassword string) error {
+			if err := adminUsersStore.SetAdminPassword(ctx, newPassword); err != nil {
+				return err
+			}
 			return settingsStore.SavePasswordHash(ctx, newPassword)
 		},
 	})
@@ -247,6 +271,19 @@ func cmdServe(args []string) error {
 		runService = runService.WithTokenDir(examRunsDir)
 	}
 	runService = runService.WithExamAutoSubmit(cfg.Exam.AutoSubmit) // 2026-07-26 不硬编码
+	answerSimilaritySvc := answersimilarity.NewService(pool, nil).WithEmbedderLoader(func(ctx context.Context) (answersimilarity.Embedder, error) {
+		scoringConfig, err := settingsStore.LoadScoring(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if scoringConfig == nil || (scoringConfig.EmbeddingAPIURL == "" && scoringConfig.EmbeddingAPIKey == "" && scoringConfig.EmbeddingModel == "") {
+			return nil, nil
+		}
+		return answersimilarity.NewHTTPEmbedder(scoringConfig.EmbeddingAPIURL,
+			scoringConfig.EmbeddingAPIKey, scoringConfig.EmbeddingModel)
+	})
+	scoreAnomalySvc := scoreanomaly.NewService(pool)
+	publicationSvc := publication.NewService(pool, scoreAnomalySvc)
 
 	// 热点路由限流器 (login/submit/start/draft/status); 进程退出时停 sweep goroutine.
 	limiter := ratelimit.NewLimiter()
@@ -260,12 +297,17 @@ func cmdServe(args []string) error {
 		SubmissionsService: subSvc,
 		Auth:               authStore,
 		Papers:             papersStore,
+		QuestionBank:       questionbank.NewStore(pool),
 		Runs:               runsRepo,
 		RunService:         runService, // Task 14: 真 admin 开考 / 关考 / exam-link
 		Review:             reviewSvc,
 		Sessions:           sessionsSvc,
 		RateLimiter:        limiter,
 		Settings:           settingsStore,
+		AnswerSimilarity:   answerSimilaritySvc,
+		ScoreAnomaly:       scoreAnomalySvc,
+		Publication:        publicationSvc,
+		AdminUsers:         adminUsersStore,
 	})
 
 	srv := &http.Server{
@@ -297,9 +339,58 @@ func cmdServe(args []string) error {
 				if ferr != nil && !errors.Is(ferr, context.Canceled) {
 					fmt.Fprintf(os.Stderr, "finalize.ScanDue err: %v\n", ferr)
 				}
-				if nR > 0 || nS > 0 {
-					fmt.Fprintf(os.Stdout, "finalize: closed %d runs, auto-submitted %d sessions\n", nR, nS)
+				nTimedOut, terr := finalizeSvc.ScanExpiredSessions(ctx)
+				if terr != nil && !errors.Is(terr, context.Canceled) {
+					fmt.Fprintf(os.Stderr, "finalize.ScanExpiredSessions err: %v\n", terr)
 				}
+				nS += nTimedOut
+				if nR > 0 || nS > 0 {
+					fmt.Fprintf(os.Stdout, "finalize: closed %d runs, auto-submitted %d sessions (%d individual timeouts)\n", nR, nS, nTimedOut)
+				}
+			}
+		}
+	}()
+
+	// 相似性分析是独立、持久化的后台队列。每轮取一个租约任务；进程中断后
+	// 由数据库租约超时回收，分析失败会留下明确的 failed 批次状态。
+	doneSimilarity := make(chan struct{})
+	go func() {
+		defer close(doneSimilarity)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			worked, err := answerSimilaritySvc.ProcessNext(ctx)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Fprintf(os.Stderr, "answer-similarity worker: %v\n", err)
+			}
+			if worked && err == nil {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
+
+	doneScoreAnomaly := make(chan struct{})
+	go func() {
+		defer close(doneScoreAnomaly)
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
+		for {
+			worked, err := scoreAnomalySvc.ProcessNext(ctx)
+			if err != nil && !errors.Is(err, context.Canceled) {
+				fmt.Fprintf(os.Stderr, "score-anomaly worker: %v\n", err)
+			}
+			if worked && err == nil {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
 			}
 		}
 	}()
@@ -324,6 +415,16 @@ func cmdServe(args []string) error {
 	case <-doneFinalize:
 	case <-time.After(7 * time.Second):
 		fmt.Fprintln(os.Stderr, "finalize ticker did not stop within 7s")
+	}
+	select {
+	case <-doneSimilarity:
+	case <-time.After(7 * time.Second):
+		fmt.Fprintln(os.Stderr, "answer-similarity worker did not stop within 7s")
+	}
+	select {
+	case <-doneScoreAnomaly:
+	case <-time.After(7 * time.Second):
+		fmt.Fprintln(os.Stderr, "score-anomaly worker did not stop within 7s")
 	}
 	fmt.Fprintln(os.Stdout, "exam-server stopped.")
 	return nil

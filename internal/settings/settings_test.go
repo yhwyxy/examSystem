@@ -52,6 +52,16 @@ func TestScoringConfigValidate(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("complete llm should be valid: %v", err)
 	}
+	cfg.EmbeddingAPIURL = "https://embed.example/v1"
+	cfg.EmbeddingAPIKey = "embedding-key"
+	cfg.EmbeddingModel = "embed-v1"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("complete embedding config should be valid: %v", err)
+	}
+	cfg.EmbeddingAPIKey = ""
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("partial embedding config should error")
+	}
 }
 
 func TestLoadScoringFromEnv(t *testing.T) {
@@ -63,6 +73,9 @@ func TestLoadScoringFromEnv(t *testing.T) {
 	t.Setenv("LLM_API_URL", "http://l")
 	t.Setenv("LLM_API_KEY", "lk")
 	t.Setenv("LLM_MODEL", "lm")
+	t.Setenv("ANSWER_EMBEDDING_API_URL", "https://embed.example/v1")
+	t.Setenv("ANSWER_EMBEDDING_API_KEY", "ek")
+	t.Setenv("ANSWER_EMBEDDING_MODEL", "em")
 
 	// 默认 local
 	cfg := LoadScoringFromEnv()
@@ -86,6 +99,9 @@ func TestLoadScoringFromEnv(t *testing.T) {
 	}
 	if cfg.LLMAPIPKey != "lk" || cfg.LLMAPIURL != "http://l" || cfg.LLMModel != "lm" {
 		t.Fatalf("llm env not read: %+v", cfg)
+	}
+	if cfg.EmbeddingAPIURL != "https://embed.example/v1" || cfg.EmbeddingAPIKey != "ek" || cfg.EmbeddingModel != "em" {
+		t.Fatalf("embedding env not read: %+v", cfg)
 	}
 	// 非法 SCORING_METHOD -> 回退 RERANK_USE_REMOTE
 	t.Setenv("SCORING_METHOD", "garbage")

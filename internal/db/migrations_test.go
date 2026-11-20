@@ -173,3 +173,22 @@ func TestMigrate_AdvisoryLockConcurrent(t *testing.T) {
 		t.Errorf("both migrators should complete; done1=%v done2=%v", done1, done2)
 	}
 }
+
+func TestMigrate_ConcurrentEmptySchema(t *testing.T) {
+	pool, _ := testutil.NewSchema(t)
+	start := make(chan struct{})
+	results := make(chan error, 2)
+	for i := 0; i < 2; i++ {
+		go func() {
+			<-start
+			_, err := Migrate(context.Background(), pool)
+			results <- err
+		}()
+	}
+	close(start)
+	for i := 0; i < 2; i++ {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+}

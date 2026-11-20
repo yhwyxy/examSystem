@@ -13,6 +13,10 @@
       <h1>考试管理后台</h1>
       <p class="muted">登录后查看提交、复核主观题并导出成绩。</p>
       <label>
+        管理员账号
+        <input type="text" id="loginUsername" value="admin" autocomplete="username">
+      </label>
+      <label>
         管理员密码
         <input type="password" id="loginPassword" placeholder="请输入管理员密码" autocomplete="current-password">
       </label>
@@ -26,12 +30,18 @@
       <div class="brand">
         <div class="brand-title">考试系统</div>
         <div class="brand-subtitle">内部考试管理</div>
+        <div class="brand-subtitle" id="adminIdentity"></div>
       </div>
       <nav class="nav-list" aria-label="后台导航">
         <button class="nav-item active" type="button" data-view="overview">总览</button>
         <button class="nav-item" type="button" data-view="papers">试卷</button>
+        <button class="nav-item" type="button" data-view="question-bank">题库</button>
         <button class="nav-item" type="button" data-view="publish">考试管理</button>
+        <button class="nav-item" type="button" data-view="review-queue">待复核</button>
         <button class="nav-item" type="button" data-view="submissions">成绩列表</button>
+        <button class="nav-item" type="button" data-view="answer-similarity">相似性核查</button>
+        <button class="nav-item" type="button" data-view="score-anomalies">评分异常</button>
+        <button class="nav-item" type="button" data-view="grade-publication">成绩发布</button>
         <button class="nav-item" type="button" data-tryout-open>考试端</button>
       </nav>
       <div class="sidebar-footer">
@@ -54,6 +64,16 @@
             </div>
           </header>
           <section class="stats-grid" id="stats" aria-live="polite"></section>
+          <section class="panel stats-report" aria-live="polite">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">SCORE REPORT</p>
+                <h2>统计明细</h2>
+                <p class="muted">分布按试卷总分归一化；及格率使用该考试轮次快照中的及格线。审核后数据只计入已完成整卷复核的提交。</p>
+              </div>
+            </div>
+            <div id="stats-breakdown" class="stats-report-content">统计加载中…</div>
+          </section>
           <section class="panel overview-summary">
             <div class="section-head">
               <div>
@@ -158,7 +178,10 @@
                 <p class="eyebrow">QUESTIONS</p>
                 <h2>题目列表</h2>
               </div>
-              <button class="btn secondary" id="addQuestionBtn" type="button">新增题目</button>
+              <div class="toolbar">
+                <button class="btn secondary" id="pickFromBankBtn" type="button">从题库组卷</button>
+                <button class="btn secondary" id="addQuestionBtn" type="button">新增题目</button>
+              </div>
             </div>
             <div id="questionList" class="question-editor-list"></div>
 
@@ -219,6 +242,11 @@
                       <option value="sql">SQL</option>
                       <option value="code">代码</option>
                       <option value="calculation">计算题</option>
+                      <option value="enumeration">枚举</option>
+                      <option value="translation">翻译</option>
+                      <option value="table">表格</option>
+                      <option value="ledger">账簿</option>
+                      <option value="case_analysis">案例分析</option>
                     </select>
                   </label>
                   <label>代码语言
@@ -233,6 +261,11 @@
                   <button class="btn secondary" id="addPointBtn" type="button">加评分点</button>
                 </div>
                 <div id="qPointsList"></div>
+                <details>
+                  <summary>计算、SQL、运行测试与多语言评分配置</summary>
+                  <p class="muted">填写 JSON：calculation 配置计算步骤与容差；多语言字段配置各语言标准；sql_dialect、sql_test_datasets 配置 SQL 测试，sql_execution 明确查询或允许修改的表；code_test_cases 配置公开与隐藏运行测试。保存后仍须审核启用。</p>
+                  <textarea id="qAdvancedScoring" rows="6" class="code-answer" aria-label="高级评分与执行配置"></textarea>
+                </details>
                 <div id="qSubQuestionsBlock" class="q-block" style="margin-top:1rem">
                   <div class="section-head">
                     <h3>子题（复合题，可选）</h3>
@@ -248,6 +281,119 @@
               </div>
             </div>
           </section>
+        </section>
+
+        <section class="view-panel" id="view-question-bank" data-view="question-bank">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">QUESTION BANK / REFERENCE DESK</p>
+              <h1>独立题库</h1>
+              <p class="muted">每道题有稳定 ID 和内容版本。只有人工审核并启用的当前版本可以加入试卷；组卷会把题干、答案和评分标准固定在试卷快照里。</p>
+            </div>
+            <div class="toolbar qbank-primary-actions">
+              <button class="btn secondary" id="questionBankImportBtn" type="button">导入 JSON</button>
+              <button class="btn secondary" id="questionBankExportBtn" type="button">导出筛选结果</button>
+              <button class="btn" id="questionBankCreateBtn" type="button">新建题目</button>
+              <input id="questionBankFileInput" type="file" accept="application/json,.json" class="is-hidden">
+            </div>
+          </header>
+          <section class="panel qbank-filter-panel">
+            <div class="qbank-filter-heading">
+              <span class="qbank-index">01</span>
+              <div><strong>题目索引</strong><small>按专业、知识点和审核状态筛选</small></div>
+              <span class="qbank-count" id="questionBankCount">加载中…</span>
+            </div>
+            <div class="qbank-filters">
+              <label>专业<input id="questionBankDiscipline" type="text" placeholder="如：机械工程"></label>
+              <label>知识点<input id="questionBankKnowledgePoint" type="text" placeholder="精确知识点"></label>
+              <label>难度<select id="questionBankDifficulty"><option value="">全部难度</option><option value="easy">基础</option><option value="medium">中等</option><option value="hard">进阶</option></select></label>
+              <label>题型<select id="questionBankType"><option value="">全部题型</option><option value="single_choice">单选</option><option value="multiple_choice">多选</option><option value="true_false">判断</option><option value="short_answer">简答</option><option value="essay">论述</option><option value="composite">复合</option></select></label>
+              <label>状态<select id="questionBankStatus"><option value="">全部状态</option><option value="draft">草稿</option><option value="reviewed">已审核</option><option value="enabled">已启用</option><option value="disabled">已停用</option><option value="archived">已归档</option></select></label>
+              <label class="qbank-search-label">题干或 ID<input id="questionBankSearch" type="search" placeholder="输入关键词"></label>
+              <button class="btn" id="questionBankSearchBtn" type="button">筛选</button>
+            </div>
+          </section>
+          <section class="panel qbank-table-panel">
+            <div class="qbank-table-wrap">
+              <table class="qbank-table">
+                <thead><tr><th>题目 / 稳定 ID</th><th>专业与知识点</th><th>难度</th><th>题型 / 分值</th><th>当前版本</th><th>状态</th><th>操作</th></tr></thead>
+                <tbody id="questionBankRows"></tbody>
+              </table>
+            </div>
+            <p class="muted" id="questionBankState" role="status"></p>
+            <div class="qbank-pagination"><button class="btn secondary" id="questionBankPrev" type="button">上一页</button><span id="questionBankPage"></span><button class="btn secondary" id="questionBankNext" type="button">下一页</button></div>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-answer-similarity" data-view="answer-similarity">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">ANSWER SIMILARITY</p>
+              <h1>答案相似性核查</h1>
+              <p class="muted">仅比较同一已关闭考试轮次和固定题目快照中的提交答案。报告只提供人工核查线索，不会改动评分或成绩。</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn secondary" id="similarityRefreshBtn" type="button">刷新轮次</button>
+            </div>
+          </header>
+          <section class="panel similarity-controls">
+            <label for="similarityRunSelect">已关闭轮次</label>
+            <select id="similarityRunSelect"><option value="">加载中…</option></select>
+            <button class="btn" id="similarityStartBtn" type="button" disabled>开始相似性检测</button>
+            <p class="muted" id="similarityRunState" role="status"></p>
+          </section>
+          <section class="panel">
+            <div class="section-head similarity-batch-head">
+              <div>
+                <p class="eyebrow">VERSIONED REPORTS</p>
+                <h2>检测批次</h2>
+              </div>
+              <select id="similarityBatchSelect" aria-label="选择检测批次" disabled><option value="">选择考试轮次</option></select>
+            </div>
+            <p class="muted" id="similarityBatchState" role="status">选择已关闭轮次以查看检测记录。</p>
+            <div id="similarityBatchSummary" class="similarity-summary"></div>
+            <div id="similarityFindings" class="similarity-findings"></div>
+            <div id="similarityPaging" class="similarity-paging is-hidden">
+              <button class="btn secondary" id="similarityPrevPage" type="button">上一页</button>
+              <span id="similarityPageLabel" class="muted"></span>
+              <button class="btn secondary" id="similarityNextPage" type="button">下一页</button>
+            </div>
+          </section>
+          <p class="similarity-method-note">未配置语义向量时使用文本与题型专用规范化规则；配置后可补充语义向量线索。共同错误和风险阈值尚未经过真实标注集校准，报告只用于人工核查。</p>
+        </section>
+
+        <section class="view-panel" id="view-score-anomalies" data-view="score-anomalies">
+          <header class="topbar">
+            <div>
+              <p class="eyebrow">SCORING QUALITY</p>
+              <h1>评分异常检测</h1>
+              <p class="muted">核验评分边界、依据、相同或相似答案的分差，以及重新评分前后的变化。</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn secondary" id="scoreAnomalyRefreshBtn" type="button">刷新轮次</button>
+            </div>
+          </header>
+          <section class="panel similarity-controls">
+            <label for="scoreAnomalyRunSelect">已完成相似性检测和评分的关闭轮次</label>
+            <select id="scoreAnomalyRunSelect"><option value="">加载中…</option></select>
+            <button class="btn" id="scoreAnomalyStartBtn" type="button" disabled>生成评分异常报告</button>
+            <p class="muted" id="scoreAnomalyRunState" role="status"></p>
+          </section>
+          <section class="panel">
+            <div class="section-head similarity-batch-head">
+              <div><p class="eyebrow">VERSIONED REPORTS</p><h2>评分质量批次</h2></div>
+              <select id="scoreAnomalyBatchSelect" aria-label="选择评分异常批次" disabled><option value="">选择考试轮次</option></select>
+            </div>
+            <p class="muted" id="scoreAnomalyBatchState" role="status">选择已关闭轮次以查看检测记录。</p>
+            <div id="scoreAnomalyBatchSummary" class="similarity-summary"></div>
+            <div id="scoreAnomalyFindings" class="score-anomaly-findings"></div>
+            <div id="scoreAnomalyPaging" class="similarity-paging is-hidden">
+              <button class="btn secondary" id="scoreAnomalyPrevPage" type="button">上一页</button>
+              <span id="scoreAnomalyPageLabel" class="muted"></span>
+              <button class="btn secondary" id="scoreAnomalyNextPage" type="button">下一页</button>
+            </div>
+          </section>
+          <p class="similarity-method-note">“阻断”表示规则初筛出的高风险数据质量问题，当前尚未接入 P5 成绩发布门槛。阈值未经 P6 标注集校准；所有差异需结合答案、评分点和模型版本人工判断。检测报告不修改分数。</p>
         </section>
 
         <section class="view-panel" id="view-publish" data-view="publish">
@@ -273,6 +419,50 @@
             <button id="openExamBtn" class="is-hidden" type="button"></button>
             <button id="closeExamBtn" class="is-hidden" type="button"></button>
             <button id="copyLinkBtn" class="is-hidden" type="button"></button>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-grade-publication" data-view="grade-publication">
+          <header class="topbar">
+            <div><p class="eyebrow">VERSIONED GRADES</p><h1>成绩发布与更正</h1><p class="muted">发布不可变成绩版本。每次更正都会创建新版本并保留历史。</p></div>
+          </header>
+          <section class="panel grade-publication-panel">
+            <div class="section-head">
+              <div><p class="eyebrow">PUBLICATION GATES</p><h2>考试轮次</h2></div>
+              <button class="btn secondary" id="publicationRefreshBtn" type="button">刷新轮次</button>
+            </div>
+            <div class="publication-controls">
+              <label for="publicationRunSelect">已关闭考试轮次</label>
+              <select id="publicationRunSelect"><option value="">加载中…</option></select>
+              <label for="publicationCorrectionReason">更正原因（已有发布版本时必填）</label>
+              <input id="publicationCorrectionReason" type="text" maxlength="2000" placeholder="说明需要生成新发布版本的原因">
+              <button class="btn" id="publicationPublishBtn" type="button" disabled>检查门槛并发布成绩</button>
+            </div>
+            <p class="muted" id="publicationRunState" role="status">发布前需要评分完成、必要复核结束、当前检测报告完成并处理阻断级候选。</p>
+            <div class="section-head publication-batch-head">
+              <h3>不可变发布版本</h3>
+              <select id="publicationBatchSelect" aria-label="选择成绩发布版本" disabled><option value="">选择考试轮次</option></select>
+            </div>
+            <div id="publicationBatchSummary" class="similarity-summary"></div>
+            <div class="table-wrap"><table class="stats-detail-table">
+              <thead><tr><th>提交 ID</th><th>姓名</th><th>员工号</th><th>复核状态</th><th>机器主观分</th><th>最终主观分</th><th>发布总分</th><th>满分</th><th>评分代次</th></tr></thead>
+              <tbody id="publicationGradeRows"></tbody>
+            </table></div>
+            <p class="muted" id="publicationBatchState" role="status">选择轮次以查看已发布版本。</p>
+          </section>
+        </section>
+
+        <section class="view-panel" id="view-review-queue" data-view="review-queue">
+          <header class="topbar">
+            <div><p class="eyebrow">REVIEW WORKLIST</p><h1>待复核任务</h1><p class="muted">汇总人工评分复核、答案相似性线索核查和当前阻断级评分异常处置。相似性线索只供核查，不自动影响分数，也不作为发布阻断门槛。</p></div>
+            <div class="toolbar"><button class="btn secondary" id="reviewQueueRefreshBtn" type="button">刷新任务</button></div>
+          </header>
+          <section class="panel">
+            <p class="muted" id="reviewQueueState" role="status">待复核任务加载中…</p>
+            <div class="table-wrap"><table class="stats-detail-table">
+              <thead><tr><th>任务类型</th><th>考试轮次</th><th>对象</th><th>状态</th><th>事项</th><th>处理入口</th></tr></thead>
+              <tbody id="reviewQueueRows"></tbody>
+            </table></div>
           </section>
         </section>
 
@@ -405,14 +595,104 @@
                 <input id="settingsLLMModel" type="text" placeholder="模型名称">
               </label>
             </div>
+            <div class="settings-embedding-block">
+              <div>
+                <h3>答案相似性语义向量（可选）</h3>
+                <p class="muted">配置后，闭卷轮次中的考生答案和参考答案会发送到此 embedding 服务生成向量，用于补充文本重合检测。未配置时只运行本地文本规则。请使用获准处理考试答案的服务。</p>
+              </div>
+              <div class="form-grid settings-form-grid">
+                <label>Embedding API 地址
+                  <input id="settingsEmbeddingUrl" type="text" placeholder="https://.../v1 或完整 /embeddings">
+                </label>
+                <label>Embedding API Key
+                  <input id="settingsEmbeddingKey" type="password" placeholder="输入 API Key">
+                </label>
+                <label>Embedding 模型名
+                  <input id="settingsEmbeddingModel" type="text" placeholder="模型名称">
+                </label>
+              </div>
+            </div>
             <div class="toolbar" style="margin-top:1rem">
-              <button class="btn" id="settingsSaveScoringBtn" type="button">保存评分方式</button>
+              <button class="btn" id="settingsSaveScoringBtn" type="button">保存设置</button>
               <span id="settingsScoringHint" class="muted settings-hint"></span>
             </div>
+          </section>
+
+          <section class="panel admin-user-management" style="margin-top:1.2rem">
+            <div class="section-head">
+              <div><p class="eyebrow">ACCOUNTS</p><h2>管理后台账号</h2><p class="muted">按职责分配题库编辑、成绩复核和成绩发布权限。密码至少 8 位。</p></div>
+              <button class="btn secondary" id="adminUsersRefreshBtn" type="button">刷新账号</button>
+            </div>
+            <form id="adminUserCreateForm" class="form-grid settings-form-grid">
+              <label>用户名<input id="adminUserCreateUsername" minlength="3" maxlength="64" autocomplete="off" required></label>
+              <label>初始密码<input id="adminUserCreatePassword" type="password" minlength="8" maxlength="72" autocomplete="new-password" required></label>
+              <label>角色<select id="adminUserCreateRole"><option value="question_bank_editor">题库与考试编辑</option><option value="reviewer">成绩复核</option><option value="publisher">成绩发布</option><option value="admin">管理员</option></select></label>
+              <div class="toolbar"><button class="btn" type="submit">创建账号</button></div>
+            </form>
+            <p id="adminUsersState" class="muted" role="status"></p>
+            <div class="table-wrap"><table class="stats-detail-table">
+              <thead><tr><th>用户名</th><th>角色</th><th>状态</th><th>重设密码（可选）</th><th>操作</th></tr></thead>
+              <tbody id="adminUsersRows"></tbody>
+            </table></div>
           </section>
         </section>
       </div>
     </main>
+  </div>
+
+  <div class="modal-mask is-hidden" id="questionBankEditorModal">
+    <section class="modal qbank-editor-modal" role="dialog" aria-modal="true" aria-labelledby="questionBankEditorTitle">
+      <div class="section-head">
+        <div><p class="eyebrow">QUESTION VERSION</p><h2 id="questionBankEditorTitle">新建题目</h2><p class="muted" id="questionBankEditorHint"></p></div>
+        <button class="btn secondary" id="questionBankEditorClose" type="button">关闭</button>
+      </div>
+      <div class="qbank-metadata-grid">
+        <label>稳定 ID<input id="questionBankEditID" type="text" placeholder="留空自动生成" autocomplete="off"></label>
+        <label>专业<input id="questionBankEditDiscipline" type="text" required></label>
+        <label>难度<select id="questionBankEditDifficulty"><option value="easy">基础</option><option value="medium">中等</option><option value="hard">进阶</option></select></label>
+        <label>知识点（逗号分隔）<input id="questionBankEditPoints" type="text" placeholder="传动, 安全规范" required></label>
+      </div>
+      <div class="qbank-ai-tools">
+        <button class="btn secondary" id="questionBankExtractPointsBtn" type="button">AI 起草评分点候选</button>
+        <span class="muted">只生成待审草稿；核对来源摘录后，明确确认才会填入下方 JSON。</span>
+      </div>
+      <section class="qbank-candidate-panel is-hidden" id="questionBankCandidatePanel" aria-live="polite">
+        <div class="section-head">
+          <div><h3>评分点候选 · 需要教师确认</h3><p class="muted" id="questionBankCandidateDiagnostics"></p></div>
+          <button class="btn" id="questionBankApplyCandidatesBtn" type="button" disabled>确认并填入题目 JSON</button>
+        </div>
+        <pre id="questionBankCandidatePreview"></pre>
+      </section>
+      <label class="qbank-json-label">完整题目 JSON
+        <textarea id="questionBankEditJSON" rows="17" spellcheck="false" class="code-answer" aria-label="完整题目 JSON"></textarea>
+      </label>
+      <p class="muted qbank-version-note">编辑已存在题目会创建新草稿版本。保存后需人工审核、启用，才能用于新组卷；已有试卷快照不会变化。</p>
+      <div class="section-head qbank-editor-footer">
+        <button class="btn secondary" id="questionBankHistoryBtn" type="button">查看版本记录</button>
+        <div class="toolbar"><button class="btn secondary" id="questionBankEditorCancel" type="button">取消</button><button class="btn" id="questionBankEditorSave" type="button">保存版本</button></div>
+      </div>
+      <div class="qbank-history is-hidden" id="questionBankHistory" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <div class="modal-mask is-hidden" id="questionBankPickerModal">
+    <section class="modal qbank-picker-modal" role="dialog" aria-modal="true" aria-labelledby="questionBankPickerTitle">
+      <div class="section-head">
+        <div><p class="eyebrow">ASSEMBLY / ENABLED VERSIONS</p><h2 id="questionBankPickerTitle">从题库组卷</h2><p class="muted">筛选当前已启用题目，勾选后加入当前试卷。加入时会重新校验版本状态并复制完整题目内容。</p></div>
+        <button class="btn secondary" id="questionBankPickerClose" type="button">关闭</button>
+      </div>
+      <div class="qbank-picker-filters">
+        <label>专业<input id="bankPickDiscipline" type="text"></label>
+        <label>知识点<input id="bankPickKnowledgePoint" type="text"></label>
+        <label>难度<select id="bankPickDifficulty"><option value="">全部</option><option value="easy">基础</option><option value="medium">中等</option><option value="hard">进阶</option></select></label>
+        <label>题型<select id="bankPickType"><option value="">全部</option><option value="single_choice">单选</option><option value="multiple_choice">多选</option><option value="true_false">判断</option><option value="short_answer">简答</option><option value="essay">论述</option><option value="composite">复合</option></select></label>
+        <label>关键词<input id="bankPickSearch" type="search"></label>
+        <button class="btn secondary" id="bankPickSearchBtn" type="button">筛选</button>
+      </div>
+      <div class="qbank-picker-toolbar"><button class="btn secondary" id="bankPickSelectPageBtn" type="button">选中本页</button><label>抽题数量 <input id="bankPickSampleCount" type="number" min="1" max="200" value="10" style="width:5rem"></label><button class="btn secondary" id="bankPickSampleBtn" type="button">按当前条件随机抽题</button><span id="questionBankPickerPage"></span></div>
+      <div id="questionBankPickerRows" class="qbank-picker-list"></div>
+      <div class="section-head qbank-picker-footer"><div class="toolbar"><button class="btn secondary" id="bankPickPrev" type="button">上一页</button><button class="btn secondary" id="bankPickNext" type="button">下一页</button></div><span class="muted" id="questionBankPickerState" aria-live="polite"></span><button class="btn" id="questionBankAssembleBtn" type="button" disabled>加入试卷（0）</button></div>
+    </section>
   </div>
 
   <div class="modal-mask is-hidden" id="tryoutModal">
@@ -431,6 +711,11 @@
 
   <div class="toast" id="toast"></div>
   <script src="/js/papers.js"></script>
+  <script src="/js/question-bank.js"></script>
+  <script src="/js/answer-similarity.js"></script>
+  <script src="/js/score-anomaly.js"></script>
+  <script src="/js/score-publication.js"></script>
+  <script src="/js/review-queue.js"></script>
   <script src="/js/admin.js"></script>
 </body>
 </html>

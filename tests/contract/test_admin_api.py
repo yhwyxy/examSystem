@@ -24,8 +24,6 @@ from __future__ import annotations
 import os
 import time
 
-import pytest
-
 EXPECT_GO = os.environ.get("EXAM_CONTRACT_EXPECT_GO", "0") == "1"
 
 
@@ -87,9 +85,6 @@ def test_admin_papers_crud(client):
     assert all(p["slug"] != "crud-smoke" for p in items)
 
 
-@pytest.mark.xfail(reason="已知缺陷: GET /api/admin/papers/{slug} 缺 status/editable 字段, "
-                          "前端 papers.js:188 依赖其实现'考试中锁定编辑器' (审计问题#11)",
-                   strict=False)
 def test_admin_paper_detail_reports_lock_status(client, paper_loaded):
     slug, _run = paper_loaded
     full = client.get(f"/api/admin/papers/{slug}").json()

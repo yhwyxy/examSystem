@@ -37,28 +37,36 @@ func setConfigured(s string) bool { return s != "" }
 
 // settingsScoringView 是 GET 返回给前端的评分方式视图 (API key 打码).
 type settingsScoringView struct {
-	Method          string `json:"method"`
-	RerankAPIURL    string `json:"rerank_api_url"`
-	RerankAPIKey    string `json:"rerank_api_key_masked"`
-	RerankAPIKeySet bool   `json:"rerank_api_key_set"`
-	RerankModel     string `json:"rerank_model"`
-	LLMAPIURL       string `json:"llm_api_url"`
-	LLMAPIPKey      string `json:"llm_api_key_masked"`
-	LLMAPIPKeySet   bool   `json:"llm_api_key_set"`
-	LLMModel        string `json:"llm_model"`
+	Method             string `json:"method"`
+	RerankAPIURL       string `json:"rerank_api_url"`
+	RerankAPIKey       string `json:"rerank_api_key_masked"`
+	RerankAPIKeySet    bool   `json:"rerank_api_key_set"`
+	RerankModel        string `json:"rerank_model"`
+	LLMAPIURL          string `json:"llm_api_url"`
+	LLMAPIPKey         string `json:"llm_api_key_masked"`
+	LLMAPIPKeySet      bool   `json:"llm_api_key_set"`
+	LLMModel           string `json:"llm_model"`
+	EmbeddingAPIURL    string `json:"embedding_api_url"`
+	EmbeddingAPIKey    string `json:"embedding_api_key_masked"`
+	EmbeddingAPIKeySet bool   `json:"embedding_api_key_set"`
+	EmbeddingModel     string `json:"embedding_model"`
 }
 
 func scoringView(cfg *settings.ScoringConfig) settingsScoringView {
 	return settingsScoringView{
-		Method:          string(cfg.Method),
-		RerankAPIURL:    cfg.RerankAPIURL,
-		RerankAPIKey:    maskKey(cfg.RerankAPIKey),
-		RerankAPIKeySet: setConfigured(cfg.RerankAPIKey),
-		RerankModel:     cfg.RerankModel,
-		LLMAPIURL:       cfg.LLMAPIURL,
-		LLMAPIPKey:      maskKey(cfg.LLMAPIPKey),
-		LLMAPIPKeySet:   setConfigured(cfg.LLMAPIPKey),
-		LLMModel:        cfg.LLMModel,
+		Method:             string(cfg.Method),
+		RerankAPIURL:       cfg.RerankAPIURL,
+		RerankAPIKey:       maskKey(cfg.RerankAPIKey),
+		RerankAPIKeySet:    setConfigured(cfg.RerankAPIKey),
+		RerankModel:        cfg.RerankModel,
+		LLMAPIURL:          cfg.LLMAPIURL,
+		LLMAPIPKey:         maskKey(cfg.LLMAPIPKey),
+		LLMAPIPKeySet:      setConfigured(cfg.LLMAPIPKey),
+		LLMModel:           cfg.LLMModel,
+		EmbeddingAPIURL:    cfg.EmbeddingAPIURL,
+		EmbeddingAPIKey:    maskKey(cfg.EmbeddingAPIKey),
+		EmbeddingAPIKeySet: setConfigured(cfg.EmbeddingAPIKey),
+		EmbeddingModel:     cfg.EmbeddingModel,
 	}
 }
 
@@ -158,13 +166,16 @@ func saveScoringHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		var body struct {
-			Method       string `json:"method"`
-			RerankAPIURL string `json:"rerank_api_url"`
-			RerankAPIKey string `json:"rerank_api_key"`
-			RerankModel  string `json:"rerank_model"`
-			LLMAPIURL    string `json:"llm_api_url"`
-			LLMAPIPKey   string `json:"llm_api_key"`
-			LLMModel     string `json:"llm_model"`
+			Method          string `json:"method"`
+			RerankAPIURL    string `json:"rerank_api_url"`
+			RerankAPIKey    string `json:"rerank_api_key"`
+			RerankModel     string `json:"rerank_model"`
+			LLMAPIURL       string `json:"llm_api_url"`
+			LLMAPIPKey      string `json:"llm_api_key"`
+			LLMModel        string `json:"llm_model"`
+			EmbeddingAPIURL string `json:"embedding_api_url"`
+			EmbeddingAPIKey string `json:"embedding_api_key"`
+			EmbeddingModel  string `json:"embedding_model"`
 		}
 		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<16)).Decode(&body); err != nil {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_JSON", err.Error())
@@ -176,13 +187,34 @@ func saveScoringHandler(deps Dependencies) http.HandlerFunc {
 			return
 		}
 		cfg := &settings.ScoringConfig{
-			Method:       method,
-			RerankAPIURL: body.RerankAPIURL,
-			RerankAPIKey: body.RerankAPIKey,
-			RerankModel:  body.RerankModel,
-			LLMAPIURL:    body.LLMAPIURL,
-			LLMAPIPKey:   body.LLMAPIPKey,
-			LLMModel:     body.LLMModel,
+			Method:          method,
+			RerankAPIURL:    body.RerankAPIURL,
+			RerankAPIKey:    body.RerankAPIKey,
+			RerankModel:     body.RerankModel,
+			LLMAPIURL:       body.LLMAPIURL,
+			LLMAPIPKey:      body.LLMAPIPKey,
+			LLMModel:        body.LLMModel,
+			EmbeddingAPIURL: body.EmbeddingAPIURL,
+			EmbeddingAPIKey: body.EmbeddingAPIKey,
+			EmbeddingModel:  body.EmbeddingModel,
+		}
+		// Blank password fields keep an existing secret while still allowing an
+		// administrator to update the endpoint or model without retyping keys.
+		previous, loadErr := deps.Settings.LoadScoring(r.Context())
+		if loadErr != nil {
+			writeAdminError(w, http.StatusInternalServerError, "SETTINGS_LOAD_FAILED", "scoring settings could not be loaded")
+			return
+		}
+		if previous != nil {
+			if cfg.RerankAPIKey == "" {
+				cfg.RerankAPIKey = previous.RerankAPIKey
+			}
+			if cfg.LLMAPIPKey == "" {
+				cfg.LLMAPIPKey = previous.LLMAPIPKey
+			}
+			if cfg.EmbeddingAPIKey == "" && cfg.EmbeddingAPIURL != "" && cfg.EmbeddingModel != "" {
+				cfg.EmbeddingAPIKey = previous.EmbeddingAPIKey
+			}
 		}
 		if err := cfg.Validate(); err != nil {
 			writeAdminError(w, http.StatusBadRequest, "INVALID_SCORING_CONFIG", err.Error())

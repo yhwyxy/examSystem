@@ -128,7 +128,7 @@ def test_admin_editor_writes_canonical_composites_and_language_whitelist():
     assert "multiple" in render_editor
     assert ".selectedOptions" in collect_editor
     assert "item.allowed_languages" in collect_editor
-    assert "item.code_language" not in collect_editor
+    assert "item.code_language = allowedLanguages[0]" in collect_editor
 
 
 def test_admin_editor_preserves_subquestion_scoring_metadata_on_collect():
@@ -288,6 +288,10 @@ def test_admin_settings_panel_has_password_and_scoring():
     # 只回显掩码, 不回明文 key
     assert 'rerank_api_key_masked' in js
     assert 'llm_api_key_masked' in js
+    assert 'embedding_api_key_masked' in js
+    assert 'id="settingsEmbeddingUrl"' in html
+    assert 'id="settingsEmbeddingModel"' in html
+    assert '会发送到此 embedding 服务' in html
 
 def test_admin_shell_is_fixed_two_pane_layout():
     css = read_frontend_file("frontend/css/style.css")
@@ -374,6 +378,18 @@ def test_admin_submissions_table_has_round_column():
     assert "admin_closed" in js
 
 
+def test_question_bank_ai_scoring_candidates_require_teacher_action():
+    html = read_frontend_file("frontend/admin.html")
+    source = read_frontend_file("frontend/js/question-bank.js")
+    assert 'id="questionBankExtractPointsBtn"' in html
+    assert 'id="questionBankApplyCandidatesBtn"' in html
+    assert "/scoring-points/extract" in source
+    assert "currentExtraction.questionFingerprint" in source
+    assert "source_evidence" in source
+    assert "确认并填入题目 JSON" in html
+    assert "保存后仍是草稿，需人工审核并启用" in source
+
+
 # ---------- Task 11 (plan 1446-1526): draft throttle + grading state 适配 ----------
 
 def test_exam_draft_loop_interval_is_5000ms():
@@ -442,3 +458,92 @@ def test_detail_js_disable_buttons_on_grading():
     # 任意一种"在 grading 状态禁用 / 锁住按钮"的检查
     assert "grading" in src
     assert "disabled" in src
+
+
+def test_answer_similarity_ui_distinguishes_failed_batches_and_audits_review():
+    html = read_frontend_file("frontend/admin.html")
+    admin = read_frontend_file("frontend/js/admin.js")
+    source = read_frontend_file("frontend/js/answer-similarity.js")
+    assert 'data-view="answer-similarity"' in html
+    assert "answer-similarity" in admin
+    assert "检测未完成" in source
+    assert "未发现可核查线索" in source
+    assert "expected_revision" in source
+    assert "review_history" in source
+    assert "不会改动评分或成绩" in html
+    assert "语义接近" in source
+
+
+def test_score_anomaly_ui_loads_versioned_reports_and_distinguishes_failures():
+    html = read_frontend_file("frontend/admin.html")
+    admin = read_frontend_file("frontend/js/admin.js")
+    source = read_frontend_file("frontend/js/score-anomaly.js")
+    assert 'data-view="score-anomalies"' in html
+    assert "score-anomalies" in admin
+    assert "ScoreAnomalyAdmin.load()" in admin
+    assert "检测未完成" in source
+    assert "不构成真实模型质量认证" in source
+    assert "item.severity === 'blocking'" in source
+    assert "expected_revision" in source
+    assert "review_history" in source
+    assert "grading_set_hash" not in html  # implementation fingerprints stay out of operator copy
+    assert "检测报告不修改分数" in html
+
+
+def test_admin_ui_uses_named_accounts_and_role_scoped_navigation():
+    html = read_frontend_file("frontend/admin.html")
+    source = read_frontend_file("frontend/js/admin.js")
+    assert 'id="loginUsername"' in html
+    assert 'body: JSON.stringify({ username, password })' in source
+    assert "question_bank_editor" in source
+    assert "reviewer: ['overview'" in source
+    assert "publisher: ['overview', 'grade-publication']" in source
+    assert "item.hidden = !roleCanView(item.dataset.view)" in source
+    assert "item.hidden = !canReview" in source
+    assert 'id="adminUserCreateForm"' in html
+    assert 'id="adminUsersRows"' in html
+    assert "method: 'PATCH'" in source
+    assert "username === currentAdminUsername" in source
+
+
+def test_grade_publication_has_a_separate_role_gated_view():
+    html = read_frontend_file("frontend/admin.html")
+    source = read_frontend_file("frontend/js/admin.js")
+    assert 'data-view="grade-publication"' in html
+    assert 'data-view="grade-publication"' in html.split('data-view="publish"', 1)[1]
+    assert "'grade-publication'" in source
+    assert "window.PublicationAdmin.load()" in source
+
+
+def test_required_review_queue_unifies_submission_and_blocking_score_tasks():
+    html = read_frontend_file("frontend/admin.html")
+    admin = read_frontend_file("frontend/js/admin.js")
+    queue = read_frontend_file("frontend/js/review-queue.js")
+    anomaly = read_frontend_file("frontend/js/score-anomaly.js")
+    similarity = read_frontend_file("frontend/js/answer-similarity.js")
+    assert 'data-view="review-queue"' in html
+    assert "window.ReviewQueueAdmin.load()" in admin
+    assert "review-queue" in admin
+    assert "/review-queue?limit=500" in queue
+    assert "data-open-anomaly" in queue
+    assert "focusFinding" in anomaly
+    assert "data-open-similarity" in queue
+    assert "focusFinding" in similarity
+    assert "待复核任务" in html
+
+
+def test_execution_configuration_is_editable_and_records_are_visible():
+    papers = read_frontend_file("frontend/js/papers.js")
+    detail = read_frontend_file("frontend/js/detail.js")
+    fields = papers.split("const ADVANCED_SCORING_FIELDS =", 1)[1].split(";", 1)[0]
+    for field in ("sql_dialect", "sql_test_datasets", "sql_execution", "code_test_cases"):
+        assert field in fields
+    assert "execution_record" in detail
+    assert "验证通过" in detail
+
+
+def test_historical_grades_are_not_presented_as_new_process_publications():
+    for path in ("frontend/js/admin.js", "frontend/js/detail.js"):
+        source = read_frontend_file(path)
+        assert "historical_grade" in source
+        assert "历史成绩（未按新流程发布）" in source

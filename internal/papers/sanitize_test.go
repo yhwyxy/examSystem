@@ -92,6 +92,36 @@ func TestSanitize_MatchesGoldenShape(t *testing.T) {
 	}
 }
 
+func TestSanitizeKeepsPublicExecutionFixturesAndRemovesHiddenCases(t *testing.T) {
+	question := Question{
+		"id": "code-q", "type": "short_answer", "question": "读入并输出", "score": 10.0,
+		"scoring_mode": "code", "code_language": "python", "answer": "print(input())",
+		"code_test_cases": []any{
+			map[string]any{"name": "sample", "visibility": "public", "input": "1", "expected_output": "1"},
+			map[string]any{"name": "secret", "visibility": "hidden", "input": "7", "expected_output": "7"},
+		},
+		"sql_test_datasets": []any{
+			map[string]any{"name": "sample-data", "visibility": "public", "tables": []any{}},
+			map[string]any{"name": "secret-data", "visibility": "hidden", "tables": []any{}},
+		},
+	}
+	public := SanitizeForStudent([]Question{question})[0]
+	if _, exists := public["answer"]; exists {
+		t.Fatal("reference answer leaked to the student")
+	}
+	codeCases := public["code_test_cases"].([]any)
+	if len(codeCases) != 1 || codeCases[0].(map[string]any)["name"] != "sample" {
+		t.Fatalf("public/hidden code cases = %#v", codeCases)
+	}
+	sqlDatasets := public["sql_test_datasets"].([]any)
+	if len(sqlDatasets) != 1 || sqlDatasets[0].(map[string]any)["name"] != "sample-data" {
+		t.Fatalf("public/hidden SQL datasets = %#v", sqlDatasets)
+	}
+	if len(question["code_test_cases"].([]any)) != 2 || len(question["sql_test_datasets"].([]any)) != 2 {
+		t.Fatal("sanitization mutated the source question")
+	}
+}
+
 // keySet / equalSet / sortedStrings 等测试 helpers.
 func keySet(m map[string]any) map[string]bool {
 	out := make(map[string]bool, len(m))

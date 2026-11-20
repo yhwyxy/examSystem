@@ -17,13 +17,22 @@
   let papersCache = [];
   let editing = null; // { slug, name, exam_info, questions, status, editable }
   let editingQuestionIndex = -1; // -1 = new
+  let bankPickerPage = 0;
+  let bankPickerTotal = 0;
+  let bankPickerItems = new Map();
+  const bankPickerSelected = new Map();
+  const ADVANCED_SCORING_FIELDS = ['calculation', 'scoring_config', 'code_scoring_profile',
+    'allowed_languages', 'answers_by_language', 'scoring_points_by_language',
+    'scoring_config_by_language', 'code_scoring_profile_by_language', 'extra_equivalences', 'course_type',
+    'sql_dialect', 'sql_test_datasets', 'sql_execution', 'code_test_cases'];
+  let pointEditorValues = [];
 
   function $(id) { return document.getElementById(id); }
   function esc(s) {
     if (s == null) return '';
     const d = document.createElement('div');
     d.textContent = String(s);
-    return d.innerHTML;
+    return d.innerHTML.replaceAll('"', '&quot;').replaceAll("'", '&#39;');
   }
 
   async function authFetch(url, options) {
@@ -205,7 +214,7 @@
   }
 
   function setEditorEnabled(on) {
-    ['editPaperName', 'editExamTitle', 'editExamDesc', 'editPassingScore', 'savePaperBtn', 'addQuestionBtn']
+    ['editPaperName', 'editExamTitle', 'editExamDesc', 'editPassingScore', 'savePaperBtn', 'addQuestionBtn', 'pickFromBankBtn']
       .forEach(id => { const el = $(id); if (el) el.disabled = !on; });
   }
 
@@ -245,10 +254,12 @@
       const mode = q.scoring_mode || (q.code_language ? (String(q.code_language).toLowerCase() === 'sql' ? 'sql' : 'code') : '');
       const subN = Array.isArray(q.subquestions) ? q.subquestions.length : 0;
       const subLabel = subN ? ` · 复合题 · ${subN} 子题` : '';
+      const bankRef = q.question_bank_ref;
+      const bankLabel = bankRef ? ` · 题库 ${bankRef.id} v${bankRef.version}` : '';
       return `<div class="question-editor-item">
         <div>
           <strong>${i + 1}. [${esc(TYPE_LABEL[q.type] || q.type)}] ${esc((q.question || '').slice(0, 80))}</strong>
-          <div class="muted">${esc(q.id)} · ${esc(q.score)} 分${mode ? ' · ' + esc(mode) : ''}${subLabel}</div>
+          <div class="muted">${esc(q.id)} · ${esc(q.score)} 分${mode ? ' · ' + esc(mode) : ''}${subLabel}${bankLabel ? esc(bankLabel) : ''}</div>
         </div>
         <div class="toolbar">
           <button class="btn secondary q-up" type="button" data-i="${i}" ${!editing.editable ? 'disabled' : ''}>上移</button>
@@ -301,6 +312,9 @@
     $('qScoringMode').value = q.scoring_mode || 'text';
     $('qCodeLang').value = q.code_language || '';
     $('qRubric').value = q.scoring_rubric || '';
+    $('qAdvancedScoring').value = JSON.stringify(Object.fromEntries(
+      ADVANCED_SCORING_FIELDS.filter(k => q[k] !== undefined).map(k => [k, q[k]])
+    ), null, 2);
     renderPointsEditor(q.scoring_points || []);
     renderSubQuestionsEditor(q.subquestions || []);
     onTypeChange();
@@ -363,22 +377,35 @@
   }
 
   function renderPointsEditor(points) {
+    pointEditorValues = points;
     const list = $('qPointsList');
     list.innerHTML = (points.length ? points : []).map((p, i) => `
       <div class="option-row point-row">
+        <input class="pt-id" type="text" value="${esc(p.id || `p${i + 1}`)}" aria-label="评分点 ID" style="width:5rem">
         <input class="pt-text" type="text" data-i="${i}" value="${esc(p.text || '')}" placeholder="评分点" style="flex:1">
         <input class="pt-score" data-i="${i}" type="number" min="0" step="0.5" value="${esc(p.score ?? 0)}" style="width:5rem">
         <label><input class="pt-req" type="checkbox" data-i="${i}" ${p.required ? 'checked' : ''}> 必答</label>
+        <label><input class="pt-critical" type="checkbox" ${p.critical ? 'checked' : ''}> 关键</label>
+        <select class="pt-policy" aria-label="冲突策略">
+          <option value="point_zero" ${!p.conflict_policy || p.conflict_policy === 'point_zero' ? 'selected' : ''}>冲突时该点归零</option>
+          <option value="cap_total" ${p.conflict_policy === 'cap_total' ? 'selected' : ''}>冲突时整题封顶</option>
+          <option value="zero_total" ${p.conflict_policy === 'zero_total' ? 'selected' : ''}>冲突时整题归零</option>
+        </select>
+        <input class="pt-cap" type="number" min="0" max="1" step="0.05" value="${esc(p.conflict_score_cap_ratio ?? 0.4)}" aria-label="冲突封顶比例" style="width:5rem">
         <button class="btn danger pt-del" type="button" data-i="${i}">删</button>
       </div>`).join('') || '<p class="muted">可为空；文本题建议填写评分点。</p>';
   }
 
   function collectPointsFromUI() {
     return [...document.querySelectorAll('#qPointsList .point-row')].map((row, i) => ({
-      id: `p${i + 1}`,
+      ...pointEditorValues[i],
+      id: row.querySelector('.pt-id').value.trim() || `p${i + 1}`,
       text: row.querySelector('.pt-text').value.trim(),
       score: Number(row.querySelector('.pt-score').value) || 0,
       required: row.querySelector('.pt-req').checked,
+      critical: row.querySelector('.pt-critical').checked,
+      conflict_policy: row.querySelector('.pt-policy').value,
+      conflict_score_cap_ratio: Number(row.querySelector('.pt-cap').value),
     })).filter(p => p.text);
   }
 
@@ -413,6 +440,11 @@
         </div>
         <label class="full-label">子题题干 <textarea class="sq-stem" rows="2">${esc(s.question || '')}</textarea></label>
         <label class="full-label">子题参考答案 <textarea class="sq-answer code-answer" rows="3">${esc(s.answer || '')}</textarea></label>
+        <label class="full-label">子题评分配置（JSON，含评分点、计算、SQL、运行测试及多语言标准）
+          <textarea class="sq-config code-answer" rows="3">${esc(JSON.stringify(Object.fromEntries(
+            ['scoring_points', 'scoring_rubric', ...ADVANCED_SCORING_FIELDS].filter(k => s[k] !== undefined).map(k => [k, s[k]])
+          ), null, 2))}</textarea>
+        </label>
         <button class="btn danger sq-del" type="button" data-i="${i}">删除子题</button>
       </div>
     `;
@@ -427,8 +459,11 @@
       const mode = row.querySelector('.sq-mode').value || 'text';
       const id = row.querySelector('.sq-id').value.trim() || `s${i+1}`;
       const previous = previousById.get(String(id)) || previousSubs[i] || {};
+      const config = JSON.parse(row.querySelector('.sq-config').value || '{}');
+      if (!config || Array.isArray(config) || typeof config !== 'object') throw new Error('子题评分配置须为 JSON 对象');
       const item = {
         ...previous,
+        ...config,
         id,
         question: row.querySelector('.sq-stem').value.trim(),
         answer: row.querySelector('.sq-answer').value,
@@ -443,6 +478,7 @@
         .map(option => option.value);
       if (mode === 'code') {
         item.allowed_languages = allowedLanguages;
+        if (!allowedLanguages.includes(item.code_language)) item.code_language = allowedLanguages[0];
       } else {
         delete item.allowed_languages;
       }
@@ -458,7 +494,9 @@
     if (!stem) { toast('请填写题干'); return; }
     if (!(score > 0)) { toast('分值须大于 0'); return; }
 
+    const previous = editingQuestionIndex >= 0 ? editing.questions[editingQuestionIndex] : {};
     const q = {
+      ...previous,
       id: editingQuestionIndex >= 0 ? editing.questions[editingQuestionIndex].id : ($('qId').value.trim() || undefined),
       type,
       question: stem,
@@ -476,11 +514,12 @@
     } else if (type === 'true_false') {
       q.answer = $('qTrueFalseAnswer').value === 'true';
     } else {
-      const subs = collectSubQuestionsFromUI();
+      let subs;
+      try { subs = collectSubQuestionsFromUI(); } catch (e) { toast(e.message); return; }
       if (subs.length) {
         const ids = new Set();
         for (const s of subs) {
-          if (!s.answer || !String(s.answer).trim()) { toast(`子题 ${s.id} 需要参考答案`); return; }
+          if ((!s.answer || !String(s.answer).trim()) && !(Array.isArray(s.scoring_points) && !s.scoring_points.length)) { toast(`子题 ${s.id} 需要参考答案或配置为空评分点以人工复核`); return; }
           if (!(s.score > 0)) { toast(`子题 ${s.id} 分值须 > 0`); return; }
           if (ids.has(s.id)) { toast(`子题 ID 重复: ${s.id}`); return; }
           ids.add(s.id);
@@ -496,7 +535,6 @@
       } else {
         delete q.subquestions;
         const ans = $('qAnswer').value;
-        if (!ans || !ans.trim()) { toast('请填写参考答案'); return; }
         q.answer = ans;
         q.scoring_mode = $('qScoringMode').value || 'text';
         if (q.scoring_mode === 'code' && !$('qCodeLang').value.trim()) {
@@ -504,10 +542,22 @@
         }
         const lang = $('qCodeLang').value.trim();
         if (lang) q.code_language = lang;
+        else delete q.code_language;
         const rubric = $('qRubric').value.trim();
         if (rubric) q.scoring_rubric = rubric;
+        else delete q.scoring_rubric;
         const points = collectPointsFromUI();
+        if (new Set(points.map(p => p.id)).size !== points.length) { toast('评分点 ID 不能重复'); return; }
         if (points.length) q.scoring_points = points;
+        else if (Array.isArray(previous.scoring_points) || !ans.trim()) q.scoring_points = [];
+        else delete q.scoring_points;
+        let advanced;
+        try { advanced = JSON.parse($('qAdvancedScoring').value || '{}'); } catch (e) { toast('评分配置 JSON 格式错误'); return; }
+        if (!advanced || Array.isArray(advanced) || typeof advanced !== 'object') { toast('评分配置须为 JSON 对象'); return; }
+        for (const key of ADVANCED_SCORING_FIELDS) {
+          if (advanced[key] !== undefined) q[key] = advanced[key];
+          else delete q[key];
+        }
       }
     }
 
@@ -870,6 +920,142 @@
     }
   }
 
+  async function openBankPicker() {
+    if (!editing?.editable) return;
+    bankPickerPage = 0;
+    bankPickerSelected.clear();
+    $('bankPickDiscipline').value = '';
+    $('bankPickKnowledgePoint').value = '';
+    $('bankPickDifficulty').value = '';
+    $('bankPickType').value = '';
+    $('bankPickSearch').value = '';
+    $('questionBankPickerModal').classList.remove('is-hidden');
+    updateBankPickerSelection();
+    await loadBankPickerPage();
+  }
+
+  function bankPickerFilter() {
+    const params = new URLSearchParams({ status: 'enabled', limit: '50', offset: String(bankPickerPage * 50) });
+    const fields = {
+      discipline: $('bankPickDiscipline').value.trim(),
+      knowledge_point: $('bankPickKnowledgePoint').value.trim(),
+      difficulty: $('bankPickDifficulty').value,
+      type: $('bankPickType').value,
+      q: $('bankPickSearch').value.trim(),
+    };
+    Object.entries(fields).forEach(([key, value]) => { if (value) params.set(key, value); });
+    return params;
+  }
+
+  async function loadBankPickerPage() {
+    const state = $('questionBankPickerState');
+    if (state) state.textContent = '正在检索已启用题目…';
+    const resp = await authFetch(`${API}/question-bank?${bankPickerFilter()}`);
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiError(data, '读取题库失败'));
+    bankPickerTotal = Number(data.total) || 0;
+    renderBankPickerItems(data.items || []);
+    const pages = Math.max(1, Math.ceil(bankPickerTotal / 50));
+    if ($('questionBankPickerPage')) $('questionBankPickerPage').textContent = `${bankPickerTotal} 道命中 · 第 ${bankPickerPage + 1} / ${pages} 页`;
+    if ($('bankPickPrev')) $('bankPickPrev').disabled = bankPickerPage <= 0;
+    if ($('bankPickNext')) $('bankPickNext').disabled = (bankPickerPage + 1) * 50 >= bankPickerTotal;
+    if (state) state.textContent = '';
+    updateBankPickerSelection();
+  }
+
+  function renderBankPickerItems(items) {
+    const body = $('questionBankPickerRows');
+    bankPickerItems = new Map(items.map(item => [`${item.id}/${item.version}`, item]));
+    if (body) {
+      body.innerHTML = items.map(item => {
+        const key = `${item.id}/${item.version}`;
+        const checked = bankPickerSelected.has(key) ? 'checked' : '';
+        const type = TYPE_LABEL[item.question?.type] || item.question?.type || '未知题型';
+        const stem = String(item.question?.question || '').slice(0, 180);
+        const points = (item.knowledge_points || []).map(p => esc(p)).join(' · ');
+        return `<label class="qbank-picker-item">
+          <input type="checkbox" class="bank-pick-check" data-key="${esc(key)}" ${checked}>
+          <span class="qbank-picker-copy"><strong>${esc(stem)}</strong><small>${esc(item.discipline)} · ${esc(points)} · ${esc(type)} · ${esc(item.question?.score)} 分</small></span>
+          <span class="qbank-version">v${esc(item.version)}</span>
+        </label>`;
+      }).join('') || '<p class="muted qbank-picker-empty">当前条件下没有已启用的题目。</p>';
+    }
+  }
+
+  async function sampleBankQuestions() {
+    if (!editing?.editable) return;
+    const count = Number($('bankPickSampleCount').value);
+    if (!Number.isInteger(count) || count < 1 || count > 200 || count + bankPickerSelected.size > 200) throw new Error('抽题数量须为 1–200，累计待选题不超过 200 道');
+    const excludeIDs = new Set([...bankPickerSelected.values()].map(item => item.id));
+    editing.questions.forEach(question => { if (question.question_bank_ref?.id) excludeIDs.add(question.question_bank_ref.id); });
+    const criteria = Object.fromEntries(bankPickerFilter());
+    delete criteria.limit; delete criteria.offset; delete criteria.status;
+    const button = $('bankPickSampleBtn');
+    button.disabled = true;
+    try {
+      const resp = await authFetch(`${API}/question-bank/sample`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...criteria, count, exclude_ids: [...excludeIDs] }),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(apiError(data, '满足条件的可用题目不足，请调整条件或数量'));
+      for (const item of data.items || []) bankPickerSelected.set(`${item.id}/${item.version}`, item);
+      renderBankPickerItems(data.items || []);
+      $('questionBankPickerPage').textContent = `本次随机抽取 ${data.count} 道；可取消勾选后再加入试卷`;
+      $('bankPickPrev').disabled = true; $('bankPickNext').disabled = true;
+      updateBankPickerSelection();
+    } finally { button.disabled = false; }
+  }
+
+  function updateBankPickerSelection() {
+    const button = $('questionBankAssembleBtn');
+    if (button) {
+      button.textContent = `加入试卷（${bankPickerSelected.size}）`;
+      button.disabled = bankPickerSelected.size === 0;
+    }
+    const state = $('questionBankPickerState');
+    if (state) state.textContent = bankPickerSelected.size ? `已选 ${bankPickerSelected.size} 道；当前试卷 ${editing?.questions.length || 0} 道` : `当前试卷 ${editing?.questions.length || 0} 道`;
+  }
+
+  async function assembleSelectedBankQuestions() {
+    if (!editing?.editable || bankPickerSelected.size === 0) return;
+    const refs = [...bankPickerSelected.values()].map(item => ({ id: item.id, version: item.version }));
+    const resp = await authFetch(`${API}/question-bank/assembly-snapshot`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: refs }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(apiError(data, '题目状态已变化，请重新筛选后组卷'));
+    const ids = new Set(editing.questions.map(q => String(q.id)));
+    const existingRefs = new Set(editing.questions.map(q => {
+      const ref = q.question_bank_ref;
+      return ref ? `${ref.id}/${ref.version}` : '';
+    }).filter(Boolean));
+    let added = 0;
+    let skipped = 0;
+    for (const item of data.items || []) {
+      const ref = item.question?.question_bank_ref;
+      const key = ref ? `${ref.id}/${ref.version}` : `${item.id}/${item.version}`;
+      if (existingRefs.has(key)) { skipped++; continue; }
+      const q = structuredClone(item.question || {});
+      const base = String(q.id || item.id);
+      let candidate = base;
+      let suffix = 2;
+      while (ids.has(candidate)) candidate = `${base}_${suffix++}`;
+      q.id = candidate;
+      ids.add(candidate);
+      editing.questions.push(q);
+      existingRefs.add(key);
+      added++;
+    }
+    recomputeTotalUI();
+    renderQuestionList();
+    $('questionBankPickerModal').classList.add('is-hidden');
+    bankPickerSelected.clear();
+    toast(`已加入 ${added} 道题${skipped ? `，跳过已组入的 ${skipped} 道` : ''}。保存试卷后固定题目版本。`);
+  }
+
   function bind() {
     const createBtn = $('createPaperBtn');
     if (createBtn) createBtn.addEventListener('click', () => createPaper().catch(e => toast(e.message)));
@@ -879,6 +1065,33 @@
     if (save) save.addEventListener('click', () => savePaper().catch(e => toast(e.message)));
     const addQ = $('addQuestionBtn');
     if (addQ) addQ.addEventListener('click', () => showQuestionForm(-1));
+    const pickFromBank = $('pickFromBankBtn');
+    if (pickFromBank) pickFromBank.addEventListener('click', () => openBankPicker().catch(e => toast(e.message)));
+    $('questionBankPickerClose')?.addEventListener('click', () => $('questionBankPickerModal').classList.add('is-hidden'));
+    $('bankPickSearchBtn')?.addEventListener('click', () => { bankPickerPage = 0; loadBankPickerPage().catch(e => toast(e.message)); });
+    ['bankPickDiscipline', 'bankPickKnowledgePoint', 'bankPickSearch'].forEach(id => $(id)?.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { bankPickerPage = 0; loadBankPickerPage().catch(err => toast(err.message)); }
+    }));
+    ['bankPickDifficulty', 'bankPickType'].forEach(id => $(id)?.addEventListener('change', () => {
+      bankPickerPage = 0; loadBankPickerPage().catch(err => toast(err.message));
+    }));
+    $('bankPickPrev')?.addEventListener('click', () => { if (bankPickerPage > 0) { bankPickerPage--; loadBankPickerPage().catch(e => toast(e.message)); } });
+    $('bankPickNext')?.addEventListener('click', () => { if ((bankPickerPage + 1) * 50 < bankPickerTotal) { bankPickerPage++; loadBankPickerPage().catch(e => toast(e.message)); } });
+    $('bankPickSampleBtn')?.addEventListener('click', () => sampleBankQuestions().catch(e => toast(e.message)));
+    $('bankPickSelectPageBtn')?.addEventListener('click', () => {
+      for (const [key, item] of bankPickerItems) bankPickerSelected.set(key, item);
+      $('questionBankPickerRows')?.querySelectorAll('.bank-pick-check').forEach(cb => { cb.checked = true; });
+      updateBankPickerSelection();
+    });
+    $('questionBankPickerRows')?.addEventListener('change', e => {
+      const checkbox = e.target.closest('.bank-pick-check');
+      if (!checkbox) return;
+      const item = bankPickerItems.get(checkbox.dataset.key);
+      if (checkbox.checked && item) bankPickerSelected.set(checkbox.dataset.key, item);
+      else bankPickerSelected.delete(checkbox.dataset.key);
+      updateBankPickerSelection();
+    });
+    $('questionBankAssembleBtn')?.addEventListener('click', () => assembleSelectedBankQuestions().catch(e => toast(e.message)));
     const cancelQ = $('cancelQuestionBtn');
     if (cancelQ) cancelQ.addEventListener('click', hideQuestionForm);
     const applyQ = $('applyQuestionBtn');
